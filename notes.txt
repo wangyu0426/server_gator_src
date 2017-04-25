@@ -1,0 +1,95 @@
+wget -c http://download.oracle.com/otn-pub/java/jdk/8u11-b12/jdk-8u11-linux-i586.tar.gz
+第二步
+
+
+sudo add-apt-repository ppa:plushuang-tw/uget-stable 
+sudo apt-get update 
+sudo apt-get install uget
+
+sudo add-apt-repository ppa:t-tujikawa/ppa 
+sudo apt-get update; sudo apt-get install aria2
+
+sudo yarn config set registry https://registry.npm.taobao.org --global
+sudo yarn config set disturl https://npm.taobao.org/dist --global
+
+Create the file /etc/apt/sources.list.d/pgdg.list, and add a line for the repository
+deb http://apt.postgresql.org/pub/repos/apt/ xenial-pgdg main
+
+wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc |  sudo apt-key add -
+sudo apt-get update
+touch ~/.gradle/gradle.properties && echo "org.gradle.daemon=true" >> ~/.gradle/gradle.properties
+
+deb格式的搜狗输入法，搜狗拼音官网可以下载到
+方法/步骤
+如果你的系统已经装过fctix请先完全卸载
+sudo apt-get purge fcitx*
+sudo purge autoremove
+2
+使用deb安装工具gdebi，这个工具能解决所有依赖问题
+sudo apt-get install gdebi
+3
+直接安装
+gdebi ~/sogou_pinyin_linux_1.0.0.0033_amd64.deb
+然后注销，如果没有出现搜狗请在
+系统设置->语言支持->键盘输入方式系统->选择fcitx
+注销
+
+java SE install:
+sudo add-apt-repository ppa:webupd8team/java
+
+sudo apt-get update
+
+sudo apt-get install java-common oracle-java8-installer
+
+
+go path:
+
+export GOROOT=/usr/local/go
+export PATH=$PATH:/usr/local/go/bin
+
+
+export ANDROID_HOME=~/Android/Sdk
+PATH="~/Android/Sdk/tools:~/Android/Sdk/platform-tools:${PATH}"
+export PATH
+
+
+l2tp client install:
+sudo add-apt-repository ppa:nm-l2tp/network-manager-l2tp  
+sudo apt-get update  
+sudo apt-get install network-manager-l2tp  
+To install the network manager l2tp that supports L2TP for ubuntu 16.04
+
+Walkthrough for building from source: http://blog.z-proj.com/enabling-l2tp-over-ipsec-on-ubuntu-16-04/
+
+shareimprove this answer
+answered Mar 29 at 12:08
+
+zed
+16117
+  	 	
+You also need to sudo apt-get install network-manager-l2tp-gnome before you can use the GUI in Network Manager. – BenFreke Mar 29 at 23:37
+
+
+npm config set registry https://registry.npm.taobao.org --global;  npm config set disturl https://npm.taobao.org/dist --global
+
+go build -ldflags "-s -w" 
+
+go build -gcflags  "-N -l"
+
+gdb -d $GOROOT 
+
+sudo tar cvpzf backup.tgz --exclude=/proc --exclude=/lost+found --exclude=/media/work/data/backup.tgz --exclude=/mnt  --exclude=/media --exclude=/sys  /
+
+env WINEPREFIX="/home/work/.wine" wine C:\\windows\\command\\start.exe /Unix /home/work/.wine/dosdevices/c:/users/Public/Desktop/Beyond\ Compare\ 4.lnk
+
+  nginx path prefix: "/usr/local/openresty/nginx"
+  nginx binary file: "/usr/local/openresty/nginx/sbin/nginx"
+  nginx modules path: "/usr/local/openresty/nginx/modules"
+  nginx configuration prefix: "/usr/local/openresty/nginx/conf"
+  nginx configuration file: "/usr/local/openresty/nginx/conf/nginx.conf"
+  nginx pid file: "/usr/local/openresty/nginx/logs/nginx.pid"
+  nginx error log file: "/usr/local/openresty/nginx/logs/error.log"
+  nginx http access log file: "/usr/local/openresty/nginx/logs/access.log"
+
+  git config --global user.email "liuwenkui_ccnu@hotmail.com"
+  git config --global user.name "lwk"
