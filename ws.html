@@ -1,0 +1,37 @@
+<html>
+<head>
+<script type="text/javascript">
+
+	var url = "ws://localhost:8015/wsapi"
+	var ws = new WebSocket(url);
+
+	ws.onclose = function () {
+	    //something
+	    console.log("onclose")
+	};
+	ws.onerror = function () {
+	   //something
+	   console.log("onerror")
+	};
+	        
+	ws.onopen = function () {
+	   //something
+	   console.log("onopen")
+	   ws.send("Hello, I'm javascript!")
+	};
+	ws.onmessage = function (event) {
+	   //something
+	   console.log("onmessage: ", event.data)
+	   ws.close()
+	   ws = new WebSocket(url)
+	   ws.onopen = function () {
+		   //something
+		   console.log("onopen")
+		   ws.send("Hello, I'm javascript -- 2!")
+		};
+	}
+
+</script>
+</head>
+<body/>
+</html>

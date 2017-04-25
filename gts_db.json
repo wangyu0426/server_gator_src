@@ -1,0 +1,125 @@
+{
+    "DBHost":"127.0.0.1",
+    "DBPort":3306,
+    "DBName":"CubeDB_",
+    "DBUser":"root",
+    "DBPasswd":"1234",
+    "DBShards":4,
+
+    "Tables": 
+    [
+        {
+            "TableId":1701, 
+            "TableShards":128,
+            "KeyNum":1, 
+            "Fields":
+            [
+                {"FieldType":"int64", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0}
+            ]
+        }, 
+        
+        {
+            "TableId":1702, 
+            "TableShards":32,
+            "KeyNum":1, 
+            "Fields":
+            [
+                {"FieldType":"int64", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"char", "FieldLen":16}
+            ]
+        },
+        
+        {
+            "TableId":1800, 
+            "TableShards":1,
+            "KeyNum":1, 
+            "Fields":
+            [
+                {"FieldType":"int64", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0}
+            ]
+        },
+        
+        {
+            "TableId":1801, 
+            "TableShards":1,
+            "KeyNum":2, 
+            "Fields":
+            [
+                {"FieldType":"int64", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"smallint", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0}
+            ]              
+        },
+        
+        {
+            "TableId":1901, 
+            "TableShards":1,
+            "KeyNum":1, 
+            "Fields":
+            [
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0}
+            ]            
+        },
+        
+        {
+            "TableId":1902, 
+            "TableShards":1,
+            "KeyNum":1, 
+            "Fields":
+            [
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0},
+                {"FieldType":"int", "FieldLen":0}
+            ]         
+        }        
+    ]
+}
