@@ -9,8 +9,8 @@ import (
 	"os"
 	"crypto/md5"
 	"crypto/sha1"
+	"../proto"
 )
-
 
 type FieldConfig struct {
 	FieldType string
@@ -35,21 +35,23 @@ type  DBConfig struct {
 }
 
 type ServerContext struct {
-	WaitLock *sync.WaitGroup
-	ProcessName string
-	LogDir string
-	BindAddr string
-	Port uint16
-	WSPort uint16
+	WaitLock      *sync.WaitGroup
+	ProcessName   string
+	BindAddr      string
+	Port          uint16
+	WSPort        uint16
 	AcceptTimeout time.Duration
-	RecvTimeout time.Duration
-	RedisAddr string
-	RedisPort uint16
+	RecvTimeout   time.Duration
+	RedisAddr     string
+	RedisPort     uint16
 
-	PasswordSalt string
+	PasswordSalt  string
 	SessionSecret string
 
-	Dbconfig DBConfig
+	Dbconfig      DBConfig
+
+	AppServerChan chan *proto.MsgData
+	TcpServerChan chan *proto.MsgData
 }
 
 var serverCtx ServerContext
@@ -57,7 +59,6 @@ var serverCtx ServerContext
 func init()  {
 	fmt.Println("server contextinit...")
 	serverCtx.ProcessName = "go-server"
-	serverCtx.LogDir = "/home/work/logs"
 	serverCtx.BindAddr = "0.0.0.0"
 	serverCtx.Port = 7015
 	serverCtx.WSPort = 8015
@@ -87,6 +88,9 @@ func init()  {
 		fmt.Println("parse gts_db.json content failed", err)
 		os.Exit(1)
 	}
+
+	serverCtx.AppServerChan = make(chan *proto.MsgData, 1024)
+	serverCtx.TcpServerChan = make(chan *proto.MsgData, 1024)
 
 	serverCtx.WaitLock = &sync.WaitGroup{}
 	serverCtx.WaitLock.Add(2)

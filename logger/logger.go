@@ -1,7 +1,6 @@
 package logger
 
 import (
-	"../svrctx"
 	"fmt"
 	"runtime"
 	"os"
@@ -11,14 +10,18 @@ import (
 var logFile *os.File
 
 func init()  {
-	fmt.Println("log dir: ", svrctx.Get().LogDir)
+	fmt.Println("log dir: ", GetLogDir())
 
 	var err error
-	logFile, err = os.OpenFile(svrctx.Get().LogDir + "/go-server.log", os.O_WRONLY | os.O_CREATE | os.O_APPEND, 0666)
+	logFile, err = os.OpenFile(GetLogDir() + "/go-server.log", os.O_WRONLY | os.O_CREATE | os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Println("create log file failed, ", err)
 		os.Exit(1)
 	}
+}
+
+func GetLogDir() string {
+	return "/home/work/logs"
 }
 
 func Log(msg string)  {

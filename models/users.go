@@ -69,7 +69,7 @@ func (u *User) Login(db *sql.DB, name, passwordMD5 string) (errcode int) {
 	errcode = u.Find(db, name)
 
 	//未查询到此用户
-	if errcode == RecordNotExist{
+	if errcode == RecordNotExist {
 		return
 	}
 
