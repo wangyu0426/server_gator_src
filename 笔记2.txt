@@ -1,0 +1,1683 @@
+mac os下制作iso U盘刻录
+dd if=/Volumes/Seagate1TUSBHDD/tools/ubuntukylin-17.04-enhanced-amd64.iso  of=/dev/disk1 bs=8192
+
+google-map-ios-key
+AIzaSyDoI0cZMVhyDif3tZdsj2iHmOGlC9wXmPA
+
+/Volumes/Seagate1TUSBHDD/4/rn/rn132-138
+
+valgrind --leak-check=full exefile
+g++ -o BackgroundTask  BackgroundTask.cpp -lpthread
+nohup ./BackgroundTask   >/dev/null 2>&1 &
+
+*/10 * * * * ntpdate time.nist.gov
+*/59 * * * * php /home/work/lwk/low_mem_alarm_mail.php
+0 */2 * * * service ipsec restart; service xl2tpd restart
+0 20 * * * /home/EPO/ftp.sh; /home/EPO/report.sh 
+
+http://120.25.214.188:8012/SendChat?systemno=93060571398&action=delete&from=watch&time=1702241654000100&sender={sender}&recordtime={recordtime}
+//http://service.carefwatch.com/tracker/web/upload/minichat/app/93060128918/150814091309.mp3
+
+http://service.gatorcn.com/tracker/web/app/CarefWatch-arm.apk
+/Users/wenkui/Library/Application Support/MobileSync
+
+https://itunes.apple.com/us/app/gator-./id930564920?mt=8
+http://itunes.apple.com/search?term=gator-group-co.-ltd&entity=software
+http://itunes.apple.com/lookup?id=930564919
+
+https://play.google.com/store/apps/details?id=com.gatorgroup.carefwatch
+
+rm -rf '/Users/wenkui/Library/Application Support/Beyond Compare/registry.dat'
+sudo rm -rf '/Library/Application Support/Tuxera NTFS'
+
+rvictl -s 332c7e8b51a5610cfb3fabe35731af404a9d6475
+rvictl -s 6013a6d8231cd187fad01bafc9beb5e59c57c20c
+
+1398手表的手机号 13799403911
+
+eval `find .. -name '*.h'| grep -i wifiwizard | awk '{print "cat h.h > " $1 ";"  }'`
+eval `find .. -name '*.m'| grep -i wifiwizard | awk '{print "cat m.m > " $1 ";"  }'`
+eval `find .. -name '*.js'| grep -i wifiwizard | awk '{print "cat js.js > " $1 ";"  }'`
+
+echo> ../wa/NXWWifiWizard.h 
+echo> ../wa/NXWWifiWizard.m
+echo> ../wa/NXWWifiWizard.h 
+echo> ../wa/WifiWizard.js 
+echo> ../wa/wifiwizard2.h 
+
+cat 50.log | awk '{print "redis-cli -p 6380  --eval datadel.lua " $1 " ; php del-device-data.php " $1}' > del50.sh
+cat 100com.log | awk '{print "php set-company.php " $1}' > set-100com.sh
+
+redis-cli -p 6380 -a 'AoyQ1935yJaFGGJsnV2Z4O0Zf615A^&v' --eval datadel.lua  93060772400 ; php del-device-data.php  93060772400
+
+lightcp
+
+ngx_resolver_send_tcp_query
+
+ngx_mail_auth_http_write_handler
+
+http://www.gatorcn.com/
+
+sed -i "s/www.carefwatch.com/www.gatorcn.com/g"  grep www.carefwatch.com -rl
+sed -i "s/^.//g" -rl
+
+
+/version=\"2.5.13\"/g" 
+
+
+https://developer.apple.com/programs/
+
+redis-cli -p 6380  --eval printdevices.lua > devices.log
+grep -v '|.*|'  devices.log  | grep  '|'
+
+http://120.55.73.42/command?Action=Webcall&Account=N00000004275&PBX=gz.ali.2.9&Timeout=20&ServiceNo=01011111327&Exten=13352965235
+357593060571398 gn13981 93060571398 Caref Watch Co,.Ltd GTI3    13799403911
+
+拆分大体积的tar.gz文件(每个100MB)，然后合并回去：
+
+split –b 200m /path/to/large/archive /path/to/output/files
+cat files* > archive
+
+http://api.gpsspg.com/convert/coord/?oid=3398&key=A2D9B05FD43BB0FDC05B7B7DD4331361&from=0&to=1&latlng=22.587725,113.913641
+
+centos 6.5添加右键 open in terminal菜单:
+yum -y install nautilus-open-terminal
+
+support@techsixtyfour.com
+gator
+
+服务器 PPTP，
+v.oouka.com
+ 用户名：
+ tvtpai
+  密码：
+  Aa123456  
+
+ UES 密码：
+ 4165qwe4165
+
+git fetch --all
+git reset --hard origin/master
+
+service ipsec restart; service xl2tpd restart
+
+新阿里云服务器
+120.25.214.188
+root账号：root
+密码：
+[Gator#colin#123]
+
+admin
+gator160419
+
+http://api.momingsms.com/?action=send&username=70207026&password=a51df1b4abbba31c5f0c90574cd47afd&phone={phone}&content={content}
+
+#server#120.25.214.188#7014#000000#
+#server#72.55.174.166#7014#000000#
+
+加拿大服务器：
+72.55.174.166
+root
+zQ0!rSt$!QCtLjfZzFfVjh6zQ!4Y9r&N
+
+work
+N*$C3nogeiLS5Lc&nk#GxO6BxwNsfGLU
+
+msite
+AoyQ1935yJaFGGJsnV2Z4O0Zf615A^&v
+
+IP:     72.55.174.166
+类型    PPTP
+用户名  vpn
+密码    gatorwatch123
+
+互联时空
+http://www.comsz.com/
+chenjiaren711
+gator2016fighting
+
+qq邮箱第三方登录授权码
+//tjhluecoiwljbhji
+dumaakzcswglbibe
+
+242171
+xgqjueuwqueldhhi
+
+
+///////////////////////////////////////////////////////
+账号：root
+密码：e^zTaa!Z~V,GATOR,COLIN123
+账号：work
+密码：$qU,LO(d0x!1oL38,Yqd*COL#IN123
+账号：msite
+密码：$qU,LO(d0x!1oL38,Yqd*COL#IN123
+
+google geolocation api key:
+AIzaSyAbvNjmCijnZv9od3cC0MwmTC6HTBG6R60
+
+nginx启动密码是33278850
+
+公司邮箱是wenkuiliu@gatorcn.com密码是ABc123456
+公司wifi密码：carefwatch.com
+
+AIzaSyCvfXc0q37n4SfAGtqJZ_r-385TsZS-9vw
+
+//////////////////////////////////////
+
+Caref 服务器
+
+72.55.174.166
+ROOT Username : root
+ROOT Password : e^zTaa!Z~V,1DSVtWC5I
+Usable secondary addresses: 184.107.50.180-183
+
+work账号密码 //$qULO(d0xoLYqd*L
+$qULO(d0xoLYqd*COLIN123
+msite账号密码 utTvWEgu9*JiLo83p$3s
+
+数据库
+IP 127.0.0.1
+用户名msite
+密码msite
+数据库名称msite
+
+tar -czf code.tar.gz
+
+国内阿里云服务器
+120.25.234.111
+root账号：root
+密码：
+[Gator#colin#123]
+
+bugsward：
+betterchen@gatorcn.com
+gatorwatch
+
+wherebaby
+10.252.19.138
+114.215.84.202
+work
+!Tm&Un&&1Ls$#ADD
+root
+RIXR1o@4q%M9vGgI
+
+http://114.215.84.202/wherebaby/app/wherebaby-arm.apk
+http://114.215.84.202/wherebaby/app/wherebaby-x86.apk
+
+iPhone6 ssh
+root
+Wyyan1314
+
+$2y$13$QzjY93UdxCZMzej6Zmdc2.dd5/u6rr9goexldsGarHp4kSD5IylTu
+
+http://120.25.234.111/www.carefwatch.com
+
+http://120.25.234.111/
+
+https://github.com/google/binnavi
+
+DEVICE=eth0:0
+IPADDR=184.107.50.180
+NETMASK=255.255.255.255
+ONBOOT=YES
+
+
+inet addr:184.107.50.180  Bcast:184.107.50.180  Mask:255.255.255.255
+
+192.168.0.108
+
+mysql -hlocalhost -uroot -p
+
+(357593060150847BP00, MAUI.11C.W13.52.MP.V25.F1,7,46002)
+11:32:15
+
+(357593060571505BP00, MAUI.11C.W13.52.MP.V25.F1,7,46002)
+(357593060571505BP0701)
+
+(357593060571505BP08)
+
+
+php composer.phar global require "fxp/composer-asset-plugin:1.0.0-beta3"
+
+357593060450106
+harbour-+654123
+harbour-+654123
+
+harbour-+654123
+harbou-+654123
+harbour123
+
+stKey.m_i64DeviceID==93060571505
+
+http://git.oschina.net/lwkccnu/caref-server
+
+
+357593060488775
+33633
+
+357593060145680
+50005
+
+93060571505/13829590298
+
+222 880 75AC 6732 10
+
+https://120.25.234.111/tracker/web/index.php?r=site%2Flogin
+
+http://10.10.11.120/Lbs.aspx?args=22288075AC673421-00,22288075AC673210,22288075AC67330D,22288075AC42F20B,22288075AC213105,22288075AC213503,160324,164701
+
+http://10.10.11.120/Lbs.aspx?args=22288075AC673421-00,22288075AC673210,22288075AC213105,22288075AC213503,160324,164701
+
+http://gps.gatorcn.com/Lbs.aspx?args=22288075AC673421-00,22288075AC673210,22288075AC67330D,22288075AC42F20B,22288075AC213105,22288075AC213503,160324,164701
+
+http://tracker.tictoctrack.com/track/LBS/GatorV1/5050300FB9AD493D-01,5050300FB9AD4A1C,5050300FB9AE9315,5050300FB9AD350B,160428,154000
+
+
+
+liuwenkui19841113
+
+mysqladmin -uroot -p12345678 password 123456789
+
+<?php date_default_timezone_set("PRC"); ?>
+
+仅封装TrioPC控件的对象创建过程，并未对其原始API接口进行包装
+
+管理员帐号为admin 密码为ecshop4sae
+http://1.30igo.sinaapp.com/admin
+
+http://www.ecmoban.com/topic/ecshop_jieshao/images/one.png
+
+FFD5E1E8
+
+select FFD8EEFF
+hot FFFAFAFA
+
+_NT_SYMBOL_PATH
+SRV*C:\ms_symbols* http://msdl.microsoft.com/download/symbols
+
+并发队列ConcurrentLinkedQueue
+
+C++并发编程实战
+
+
+时间：2015-12-22
+今日工作内容及进度：
+    1. 讨论产品结构及模块划分
+    2. 讨论工作量和进度划分
+问题反馈与建议：
+明日工作计划：
+    1. 
+    2. 
+    
+    开发SMT贴片机的基于Windows平台的上位机软件，参与项目的整体架构设计、部分核心功能的技术点研究以及部分功能模块的开发。
+
+本人有多年Windows开发经验和一年多扎实的Linux开发经验，目前业余时间主要专注于Linux端服务器后台和分布式技术等方向。
+熟悉Windows上的UI和客户端以及驱动开发，同时熟悉Linux C/C++/Java服务器后台开发，能胜任这两个平台的架构设计和开发工作。
+精通C,C++, 熟悉STL，MFC,DUILIB,熟练使用GDB和VC++进行开发和调试；
+熟悉Linux进程、线程同步与通信，熟悉Linux socket、IO多路复用；
+熟悉Linux高并发和性能优化；
+熟悉TCP/IP各层协议和数据包格式；
+熟悉PostgresQL、Oracle、MySQL等关系型数据库；
+熟练使用NoSQL数据库SequoiaDB​并有一定的性能调优经验；
+了解分布式、数据挖掘和大数据技术。
+自学过PHP和Python。
+熟悉TCP、UDP协议，熟悉Socket及其I/O模型
+熟悉多进程、多线程编程，熟悉进程、线程间同步和通信
+熟悉Windows内核和驱动开发，有一年半的驱动开发经验
+熟悉x86/x64汇编，PE/PE+文件格式和Shellcode编写，有一定的逆向分析基础
+熟悉x86/x64上各种应用层和内核层hook技巧
+熟练使用WinDbg、IDA、OllyDbg等工具
+/////////////////////////////////////////////////////////////////
+
+一、Linux
+重点：
+1.Linux基本操作和shell，工具vi、gdb、gcc和makefile或者其他开发工具
+2.Linux库函数
+3.TCP/IP协议族，网络编程，主要是epoll，类似于Windows的IOCP
+4.多进程、多线程同步和通信，和windows的类似
+
+二、数据库
+1.最重要的数据库MySQL，必须掌握，最好是能精通性能优化和数据维护
+2.NoSQL类，比如mongoDB，可以了解一下，不是必选
+
+三、缓存
+1.Memcached
+2.和redis
+推荐学redis，有时间可以也把Memcached学了
+
+四、分布式和消息队列（例如zeromq）
+1.目前用的多的是netty和RabbitMQ
+2.分布式的概念和原理以及一些一致性或事务算法，最好是能了解
+
+五、负载均衡
+LVS、keepalived、nginx这几个
+
+六、了解一些开源库
+event库，json库，xml库，以及其他工具库，多多益善
+
+	
+http://www.szjs.gov.cn/csml/zzsfglfwzx/xxgk_387/ajfzt_1/lhjgcx/
+刘文奎
+420704198411135056
+BHR00025175
+
+svn checkout svn://svn.code.sf.net/p/gnuwin32/code/trunk gnuwin32-code
+
+VK9FBK-P2YJ-798HYX-2K7D-XRHDBW
+
+炼数成金账号：aplacenearby 邮箱2421714592@qq.com
+
+刘文奎 aplacenearby
+
+其实这个问题早就解决了，只不过忘了回来解释一下了。。
+微信杀不掉的原因并不是它本身用了什么特殊的技术，只是因为和小米系统签订了合同，所以不会被杀掉，有兴趣的人可以做个试验，做个工程和微信一样的主包名，然后服务名也一样的话，看看是否会被杀掉。
+想解决这方式，两种方法
+第一，引导用户赋予应用自启动的权限，并且修改
+service方法中
+onStartCommand的flags=1，这样即使被杀掉，也会在被杀掉后重新自启动的。
+第二，把应用刷成系统级的应用。 
+
+netsh wlan set hostednetwork mode=allow ssid=lwk-ap key=12345678
+
+netsh wlan start hostednetwork c
+
+机器码：6138050893253514364834804103550043151906
+注册教程：Linux运维
+用户名：aplacenearby
+系统版本：win7 64位
+
+1816265295
+        1334760105
+        5856377756
+        6817790399
+        1243591230
+        6761100473
+        9230918360
+        0397615105
+        2354688325
+        1312410131
+        5703824859
+        6176135825
+        6495932090
+        7709316446
+        8957937003
+        9042047074
+        6801636871
+        5863
+        1301009196
+        1260491182
+        4408609506
+        1004145073
+        0470670461
+        5802605501
+        3077006246
+        0850410561
+        1814707309
+        3071092148
+        1100650080
+        6300613503
+        2032073010
+        1510600810
+        6904115510
+        7049127063
+        0131330340
+        4705211322
+        6073091075
+        0951551070
+        58
+        18462571
+        
+        1816265295
+        1334760105
+        5856377756
+        6817790399
+        1243591230
+        6761100473
+        9230918360
+        0397615105
+        2354688325
+        1312410131
+        5703824859
+        6176135825
+        6495932090
+        7709316446
+        8957937003
+        9042047074
+        6801636871
+        5863
+        1301009196
+        1260491182
+        4408609506
+        1004145073
+        0470670461
+        5802605501
+        3077006246
+        0850410561
+        1814707309
+        3071092148
+        1100650080
+        6300613503
+        2032073010
+        1510600810
+        6904115510
+        7049127063
+        0131330340
+        4705211322
+        6073091075
+        0951551070
+        58
+        18462571
+        
+83359716a656b0008234e26da557b6078332e116a656b4008434966da750b00780309111a753c60487319210a755b605f7309411a453b70789319010a755c1788033e117a150b60785349017a655b37980309316a356b6008134946da150b67982359216a756b6008234946da455b479d1669b        
+
+
+http://120.25.214.188:8012/GetWatchData?systemno=93060571398&datatype=1
+http://184.107.50.180:8012/GetWatchData?systemno=93060679084&datatype=1
+http://192.168.0.121:8012/GetWatchData?systemno=93060034769&datatype=1
+
+357593060034769
+
+{"result":1,"resultstr":"","systemno":93060034769,"data":[140733727963324,32748,1182750480,4348368,0,0,0,0,""]}
+{"result":0,"resultstr":"","systemno":93060034769,"data":[160416192754,55705435,37632600,0,0,0,1,2,""]}
+
+-0.096975,-78.479581
+
+$root.locatetypes[$root.$storage.devices[$root.infoWindowDIdx].status[7]]
+
+阿里云服务器账号：失去的醉心 
+
+密码：luolinkb0602.. 
+
+可能需要手机验证码  到时候发给你
+
+node -e "require('react-native/local-cli/cli').init('.','sampleappmovies')"
+
+npm config set registry https://registry.npm.taobao.org --global
+npm config set disturl https://npm.taobao.org/dist --global
+
+
+
+ssl on;
+ssl_certificate /usr/share/nginx/html/gatorcn.crt;
+ssl_certificate_key /usr/share/nginx/html/gatorcn.key;
+
+# Force HTTPS
+if ($scheme = http) {
+    return 301 https://$server_name$request_uri;
+}
+
+http://service.gatorcn.com/tracker/web/
+https://service.gatorcn.com
+
+
+/home/work/ssl/gatorcn.crt
+/home/work/ssl/gatorcn.key
+
+location /GetWatchData/{
+        proxy_next_upstream         http_502 http_504 error timeout invalid_header;        proxy_pass                  http://localhost:8012;
+        proxy_set_header            Host $host;
+        proxy_set_header            X-Real-IP $remote_addr;
+        proxy_set_header            X-Forwarded-For $proxy_add_x_forwarded_for;
+        client_max_body_size        100m;
+    }
+这段粘贴到nginx的443里面
+张鑫达-中手游  11:24:55
+然后把js那里改成   /GetWatchData?systemno={systemno}&datatype=1&callback={callback}
+粘贴好发给我看一下
+
+
+ --sbin-path= /usr/share/nginx/sbin/nginx --conf-path=/usr/share/nginx/conf/nginx.conf --with-http_ssl_module --with-http_realip_module --with-http_addition_module --with-http_sub_module --with-http_dav_module --with-http_flv_module --with-http_mp4_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_random_index_module --with-http_secure_link_module --with-http_stub_status_module --with-http_auth_request_module --with-mail --with-mail_ssl_module --with-file-aio --with-ipv6 --with-http_spdy_module --with-cc-opt='-O2 -g -pipe -Wp,-D_FORTIFY_SOURCE=2 -fexceptions -fstack-protector --param=ssp-buffer-size=4 -m64 -mtune=generic'
+ 
+ /usr/share/nginx/sbin/nginx -c /usr/share/nginx/conf/nginx.conf
+
+ (gdb) p (const char*)pConnect->m_acRecvBuffer
+$3 = 0x7fc5e3a90100 "GET /GetWatchData?systemno=93060571505&datatype=1&callback=cb85334958&_=1462604244191 HTTP/1.1\r\nHost: 120.25.234.111:8012\r\nConnection: keep-alive\r\nAccept: */*\r\nUser-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.75 Safari/537.36\r\nReferer: http://120.25.234.111/tracker/web/index.php?r=secured%2Fwatch%2Findex&WatchSearch%5BIMEI%5D=357593060571505&WatchSearch%5BOwnerName%5D=&WatchSearch%5BsystemNo%5D=&WatchSearch%5BmodelName%5D=&WatchSearch%5BcompanyName%5D=&WatchSearch%5BSimID%5D=&WatchSearch%5BbelongsToUser%5D=&WatchSearch%5BCountryCode%5D=\r\nAccept-Encoding: gzip, deflate, sdch\r\nAccept-Language: zh-CN,zh;q=0.8\r\nCookie: _csrf=9d0e572cf56b5d841578a3e7ebed97aa789a68ccf01c1a7de958e45eab62ad47s%3A32%3A%22NYVgiunmal1T6p6eNyjEEeYjOq9vFfAG%22%3B; PHPSESSID=d989o24fgloqnpd6pf5que4ob6\r\n\r\n"
+
+
+(gdb) p (const char*)pConnect->m_acRecvBuffer
+$2 = 0x7fc5e3a90100 "GET /GetWatchData?systemno=93060571505&datatype=1&callback=cb70562631&_=1462605373260 HTTP/1.0\r\nHost: 120.25.234.111\r\nX-Real-IP: 183.38.221.169\r\nX-Forwarded-For: 183.38.221.169\r\nConnection: close\r\nAccept: text/javascript, application/javascript, application/ecmascript, application/x-ecmascript, */*; q=0.01\r\nX-CSRF-Token: NXV5eFVnZk17LC8fPBIIIFQZSCxjF1AoewwTPRACPyd6BEAOEwEnCg==\r\nX-Requested-With: XMLHttpRequest\r\nUser-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.75 Safari/537.36\r\nReferer: https://120.25.234.111/tracker/web/index.php?r=secured%2Fwatch%2Findex&WatchSearch%5BIMEI%5D=357593060571505&WatchSearch%5BOwnerName%5D=&WatchSearch%5BsystemNo%5D=&WatchSearch%5BmodelName%5D=&WatchSearch%5BcompanyName%5D=&WatchSearch%5BSimID%5D=&WatchSearch%5BbelongsToUser%5D=&WatchSearch%5BCountryCode%5D=\r\nAccept-Encoding: gzip, deflate, sdch\r\nAccept-Language: zh-CN,zh;q=0.8\r\nCookie: _csrf=9d0e572cf56b5d841578a3e7ebed97aa789a68ccf01c1a7de958e45eab62ad47s%3A32%3A%22NYVgiunmal1T6p6eNyjEEeYjOq9vFfAG%22%3B; PHPSESSID=d989o24fgloqnpd6pf5que4ob6\r\n\r\n"
+
+mysql> select idx, dictionary.key, value, description  from dictionary where value like '%120.25.234.111%';
++----------------------------+-------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| idx                        | key                                       | value                                                                                                                         | description                                                                                                                        |
++----------------------------+-------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| App                        | WatchSendChatApiUrl                       | http://120.25.234.111:8012/SendChat?systemno={systemno}&time={time}&sender={sender}&recordtime={recordtime}                   | 手表发送微聊语音信息接口                                                                                                           |
+| CompanyAddWatchBusiness_   | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF      | http://120.25.234.111/tracker/web/index.php?r=app/caref/add-watch&orderId={orderId}&access-token={accesstoken}                | 公司特定的手表业务,Key为公司ID,Value为Url                                                                                          |
+| App                        | WatchGetChatApiUrl                        | http://120.25.234.111:8012/GetChatInfo?systemno={systemno}&time={time}&callback={callback}                                    | 获取微聊历史记录，time时间之后                                                                                                     |
+| App                        | TrackDataNumAPI                           | http://120.25.234.111:8012/GetDataNum?systemno={systemno}&datatype={datatype}&start={start}&end={end}                         | 获取车机数据长度接口地址                                                                                                           |
+| App                        | TrackDataAPI                              | http://120.25.234.111:8012/GetTrackData?systemno={systemno}&datatype={datatype}&datavalue={datavalue}&start={start}&end={end} | 获取车机定位数据接口地址                                                                                                           |
+| CompanyRepayWatchBusiness_ | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF      | http://120.25.234.111/tracker/web/index.php?r=app/caref/repay&orderId={orderId}&access-token={accesstoken}                    | 续费页面url                                                                                                                        |
+| App                        | WatchSetPhoneNoApiUrl                     | http://120.25.234.111:8012/SetPhoneNo?systemno={systemno}&phoneno={phoneno}                                                   |  手表设置电话号码接口，多个电话以|分隔                                                                                             |
+| App                        | WatchStatusUpdateApiUrl                   | http://120.25.234.111:8012/UpdateWatchData?systemno={systemno}&time={time}&callback={callback}                                | 手表设置报警已读的接口地址                                                                                                         |
+| SMSApi                     | 34be228a-74a0-11e5-a390-002590c4e092.*    | http://120.25.234.111/tracker/web/index.php?r=app/techsixtyfour/sms&access-token={access-token}&to={to}&text={text}           | Techsixtyfour 公司短信发送接口                                                                                                     |
+| CompanyModelHostPort       | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF.GT03 | 120.25.234.111:7014                                                                                                           | Caref Watch Co,.Ltd 公司GT03型号手表使用72.55.174.166:7014                                                                         |
+| App                        | WatchHistoryStatusApiUrl                  | http://120.25.234.111:8012/GetWatchData?systemno={systemno}&datatype=2&callback={callback}&end={end}&start={start}            | 手表获取历史状态数据的接口地址                                                                                                     |
+| App                        | ServerIP                                  | 120.25.234.111                                                                                                                |                                                                                                                                    |
+| App                        | WatchConfigUrl                            | http://120.25.234.111:8012/SetWatchCfg                                                                                        | 手表更新配置请求url                                                                                                                |
+| App                        | SiteUrl                                   | http://120.25.234.111/tracker/                                                                                                | 用于拼接url                                                                                                                        |
+| App                        | WatchNotificationApiUrl                   | http://120.25.234.111:8012/GetAlarmNotify?systemno={systemno}                                                                 | 及时报警提醒接口。从该接口获取最新的未读报警。只在报警发生2分钟内有效。多个systemno用|隔开                                         |
+| App                        | WatchMultiStatusApiUrl                    | http://120.25.234.111:8012/GetMultiWatchData?systemno={systemno}&callback={callback}                                          | 批量获取手表状态API，|分割                                                                                                         |
+| App                        | WatchUnreadAlarmApiUrl                    | http://120.25.234.111:8012/GetWatchData?systemno={systemno}&datatype=4&callback={callback}&start={start}&end={end}            | 手表拉取未读报警接口地址                                                                                                           |
++----------------------------+-------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+17 rows in set (0.00 sec)
+
+mysql>
+
+mysql> select idx, dictionary.key, value, description  from dictionary where value like '%.com%' or value like '%120.25.234.111%' or value like '%http%' or value like '%.php%';
++----------------------------+-------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| idx                        | key                                       | value                                                                                                                         | description                                                                                                                        |
++----------------------------+-------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| App                        | WatchSendChatApiUrl                       | http://120.25.234.111:8012/SendChat?systemno={systemno}&time={time}&sender={sender}&recordtime={recordtime}                   | 手表发送微聊语音信息接口                                                                                                           |
+| CompanyAddWatchBusiness_   | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF      | http://120.25.234.111/tracker/web/index.php?r=app/caref/add-watch&orderId={orderId}&access-token={accesstoken}                | 公司特定的手表业务,Key为公司ID,Value为Url                                                                                          |
+| App                        | WatchGetChatApiUrl                        | http://120.25.234.111:8012/GetChatInfo?systemno={systemno}&time={time}&callback={callback}                                    | 获取微聊历史记录，time时间之后                                                                                                     |
+| App                        | TrackDataNumAPI                           | http://120.25.234.111:8012/GetDataNum?systemno={systemno}&datatype={datatype}&start={start}&end={end}                         | 获取车机数据长度接口地址                                                                                                           |
+| SMSApi_                    | *.86                                      | http://www.baidu.com                                                                                                          | 短信发送接口，匹配中国的所有客户公司                                                                                               |
+| App                        | TrackDataAPI                              | http://120.25.234.111:8012/GetTrackData?systemno={systemno}&datatype={datatype}&datavalue={datavalue}&start={start}&end={end} | 获取车机定位数据接口地址                                                                                                           |
+| CompanyRepayWatchBusiness_ | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF      | http://120.25.234.111/tracker/web/index.php?r=app/caref/repay&orderId={orderId}&access-token={accesstoken}                    | 续费页面url                                                                                                                        |
+| App                        | WatchSetPhoneNoApiUrl                     | http://120.25.234.111:8012/SetPhoneNo?systemno={systemno}&phoneno={phoneno}                                                   |  手表设置电话号码接口，多个电话以|分隔                                                                                             |
+| App                        | WatchStatusUpdateApiUrl                   | http://120.25.234.111:8012/UpdateWatchData?systemno={systemno}&time={time}&callback={callback}                                | 手表设置报警已读的接口地址                                                                                                         |
+| SMSApi                     | 34be228a-74a0-11e5-a390-002590c4e092.*    | http://120.25.234.111/tracker/web/index.php?r=app/techsixtyfour/sms&access-token={access-token}&to={to}&text={text}           | Techsixtyfour 公司短信发送接口                                                                                                     |
+| CompanyModelHostPort       | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF.GT03 | 120.25.234.111:7014                                                                                                           | Caref Watch Co,.Ltd 公司GT03型号手表使用72.55.174.166:7014                                                                         |
+| App                        | WatchHistoryStatusApiUrl                  | http://120.25.234.111:8012/GetWatchData?systemno={systemno}&datatype=2&callback={callback}&end={end}&start={start}            | 手表获取历史状态数据的接口地址                                                                                                     |
+| App                        | ServerIP                                  | 120.25.234.111                                                                                                                |                                                                                                                                    |
+| App                        | WatchConfigUrl                            | http://120.25.234.111:8012/SetWatchCfg                                                                                        | 手表更新配置请求url                                                                                                                |
+| App                        | SiteUrl                                   | http://120.25.234.111/tracker/                                                                                                | 用于拼接url                                                                                                                        |
+| App                        | WatchNotificationApiUrl                   | http://120.25.234.111:8012/GetAlarmNotify?systemno={systemno}                                                                 | 及时报警提醒接口。从该接口获取最新的未读报警。只在报警发生2分钟内有效。多个systemno用|隔开                                         |
+| SMSApi_                    | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF.86   | http://10.10.10.105:8100/#/sms?SimID={to}&text={text}                                                                         | 短信发送接口，匹配carefwatch公司的中国用户                                                                                         |
+| App                        | WatchMultiStatusApiUrl                    | http://120.25.234.111:8012/GetMultiWatchData?systemno={systemno}&callback={callback}                                          | 批量获取手表状态API，|分割                                                                                                         |
+| App                        | WatchUnreadAlarmApiUrl                    | http://120.25.234.111:8012/GetWatchData?systemno={systemno}&datatype=4&callback={callback}&start={start}&end={end}            | 手表拉取未读报警接口地址                                                                                                           |
++----------------------------+-------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+19 rows in set (0.00 sec)
+
+mysql>
+
+curl "http://184.107.50.180:8012/GetMultiWatchData?systemno=93060571505&callback=angular.callbacks._m" -H "Accept: */*" -H "Connection: keep-alive" -H "Accept-Encoding: gzip, deflate, sdch" -H "Referer: http://localhost/" -H "Accept-Language: zh-CN,zh;q=0.8" -H "User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.75 Safari/537.36" --compressed
+
+select idx, dictionary.key, value, description  from dictionary where value like '%.com%' or value like '%72.55.174.166%' or value like '%http%' or value like '%.php%';
+
+mysql> select idx, dictionary.key, value, description  from dictionary where value like '%.com%' or value like '%72.55.174.166%' or value like '%http%' or value like '%.php%';
++----------------------------+-------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| idx                        | key                                       | value                                                                                                                         | description                                                                                                                        |
++----------------------------+-------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| App                        | WatchSendChatApiUrl                       | http://184.107.50.180:8012/SendChat?systemno={systemno}&time={time}&sender={sender}&recordtime={recordtime}                   | 手表发送微聊语音信息接口                                                                                                           |
+| CompanyAddWatchBusiness_   | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF      | http://service.gatorcn.com/tracker/web/index.php?r=app/caref/add-watch&orderId={orderId}&access-token={accesstoken}           | 公司特定的手表业务,Key为公司ID,Value为Url                                                                                          |
+| App                        | WatchGetChatApiUrl                        | http://184.107.50.180:8012/GetChatInfo?systemno={systemno}&time={time}&callback={callback}                                    | 获取微聊历史记录，time时间之后                                                                                                     |
+| App                        | TrackDataNumAPI                           | http://184.107.50.180:8012/GetDataNum?systemno={systemno}&datatype={datatype}&start={start}&end={end}                         | 获取车机数据长度接口地址                                                                                                           |
+| SMSApi_                    | *.86                                      | http://www.baidu.com                                                                                                          | 短信发送接口，匹配中国的所有客户公司                                                                                               |
+| App                        | TrackDataAPI                              | http://184.107.50.180:8012/GetTrackData?systemno={systemno}&datatype={datatype}&datavalue={datavalue}&start={start}&end={end} | 获取车机定位数据接口地址                                                                                                           |
+| CompanyRepayWatchBusiness_ | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF      | http://service.gatorcn.com/tracker/web/index.php?r=app/caref/repay&orderId={orderId}&access-token={accesstoken}               | 续费页面url                                                                                                                        |
+| App                        | WatchSetPhoneNoApiUrl                     | http://184.107.50.180:8012/SetPhoneNo?systemno={systemno}&phoneno={phoneno}                                                   |  手表设置电话号码接口，多个电话以|分隔                                                                                             |
+| App                        | WatchStatusUpdateApiUrl                   | http://184.107.50.180:8012/UpdateWatchData?systemno={systemno}&time={time}&callback={callback}                                | 手表设置报警已读的接口地址                                                                                                         |
+| SMSApi                     | 34be228a-74a0-11e5-a390-002590c4e092.*    | http://service.gatorcn.com/tracker/web/index.php?r=app/techsixtyfour/sms&access-token={access-token}&to={to}&text={text}      | Techsixtyfour 公司短信发送接口                                                                                                     |
+| CompanyModelHostPort       | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF.GT03 | 72.55.174.166:7014                                                                                                            | Caref Watch Co,.Ltd 公司GT03型号手表使用72.55.174.166:7014                                                                         |
+| App                        | WatchHistoryStatusApiUrl                  | http://184.107.50.180:8012/GetWatchData?systemno={systemno}&datatype=2&callback={callback}&end={end}&start={start}            | 手表获取历史状态数据的接口地址                                                                                                     |
+| App                        | WatchStatusApiUrl                         | http://184.107.50.180:8012/GetWatchData?systemno={systemno}&datatype=1&callback={callback}                                    | 手表拉取状态的API地址                                                                                                              |
+| App                        | ServerIP                                  | 72.55.174.166                                                                                                                 |                                                                                                                                    |
+| App                        | WatchConfigUrl                            | http://184.107.50.180:8012/SetWatchCfg                                                                                        | 手表更新配置请求url                                                                                                                |
+| App                        | SiteUrl                                   | http://service.gatorcn.com/tracker/                                                                                           | 用于拼接url                                                                                                                        |
+| App                        | WatchNotificationApiUrl                   | http://184.107.50.180:8012/GetAlarmNotify?systemno={systemno}                                                                 | 及时报警提醒接口。从该接口获取最新的未读报警。只在报警发生2分钟内有效。多个systemno用|隔开                                         |
+| SMSApi_                    | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF.86   | http://10.10.10.105:8100/#/sms?SimID={to}&text={text}                                                                         | 短信发送接口，匹配carefwatch公司的中国用户                                                                                         |
+| App                        | WatchMultiStatusApiUrl                    | http://184.107.50.180:8012/GetMultiWatchData?systemno={systemno}&callback={callback}                                          | 批量获取手表状态API，|分割                                                                                                         |
+| App                        | WatchUnreadAlarmApiUrl                    | http://184.107.50.180:8012/GetWatchData?systemno={systemno}&datatype=4&callback={callback}&start={start}&end={end}            | 手表拉取未读报警接口地址                                                                                                           |
++----------------------------+-------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+20 rows in set (0.00 sec)
+
+mysql>
+
+
+1.[update] - [SMSSvr]: 更新代码中google geolocation api key为李工申请的key
+2.[fix] - [NewWatchService]: 修复timezone "e8000"和英国时区显示为"w0000" 的问题
+3.[update] - [NewWatchService]: 更新ipconfi.ini文件中，英国默认timezone由 +01:00 改为 +00:00
+3582525440	3582533631	+00:00
+4.[update] - [WatchService]: add some log for tracking crash issue
+5.[fix] - [CubeAPI]: 将使用MAX_CUBE_COMMAND_NUM(值为8)替换为MAX_CUBEAPI_CMDNUM(值为4)，解决数组越界导致的crash
+
+
+测试手表 
+357593060571505
+15801354463
+
+BHR00025175
+
+420704198411135056
+
+[root@mail etc]# find . | xargs grep unlimited
+./php-fpm.d/www.conf:; Set listen(2) backlog. A value of '-1' means unlimited.
+./php-fpm.d/www.conf:; Possible Values: 'unlimited' or an integer greater or equ                                                                                                             al to 0
+./redis.conf:# Set it to 0 or a negative value for unlimited execution without w                                                                                                             arnings.
+./httpd/conf/httpd.conf:# during a persistent connection. Set to 0 to allow an u                                                                                                             nlimited amount.
+./wgetrc:# default quota is unlimited.
+./php.ini.OFF:;   On = Enabled and buffer is unlimited. (Use with caution)
+./php.ini.OFF:; Sets the maximum number of open links or -1 for unlimited.
+./abrt/abrt.conf:# Max size for crash storage [MiB] or 0 for unlimited
+./security/limits.d/90-nproc.conf:root       soft    nproc     unlimited
+./profile:ulimit -c unlimited
+
+93060571398
+[root@mail etc]# find . | xargs grep unlimited
+./php-fpm.d/www.conf:; Set listen(2) backlog. A value of '-1' means unlimited.
+./php-fpm.d/www.conf:; Possible Values: 'unlimited' or an integer greater or equal to 0
+./redis.conf:# Set it to 0 or a negative value for unlimited execution without warnings.
+./httpd/conf/httpd.conf:# during a persistent connection. Set to 0 to allow an unlimited amount.
+./wgetrc:# default quota is unlimited.
+./php.ini.OFF:;   On = Enabled and buffer is unlimited. (Use with caution)
+./php.ini.OFF:; Sets the maximum number of open links or -1 for unlimited.
+./abrt/abrt.conf:# Max size for crash storage [MiB] or 0 for unlimited
+./security/limits.d/90-nproc.conf:root       soft    nproc     unlimited
+./profile:ulimit -c unlimited
+
+tcpdump -i any ip host 120.55.73.42 tcp port 80
+
+
+tcpdump -i eth0 -w proxy-configsvr.pcap tcp port 35357
+tcpdump -i eth1 -w lotus.pcap tcp port 7014
+
+tcpdump -i eth0 -w eth0-timezone-7013.cap port 7013
+
+in _int_free () from /lib64/libc.so.6  in closedir () from /lib64/libc.so.6
+
+iptables -t nat -A POSTROUTING -s 192.168.0.1/24 -j SNAT --to-source 72.55.174.166
+iptables -t nat -A POSTROUTING -s 192.168.0.1/24 -o eth0 -j MASQUERADE
+
+ffmpeg version 2.7.2 Copyright (c) 2000-2015 the FFmpeg developers
+  built with gcc 4.4.7 (GCC) 20120313 (Red Hat 4.4.7-16)
+  configuration: --enable-libmp3lame --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-version3 --enable-shared
+  libavutil      54. 27.100 / 54. 27.100
+  libavcodec     56. 41.100 / 56. 41.100
+  libavformat    56. 36.100 / 56. 36.100
+  libavdevice    56.  4.100 / 56.  4.100
+  libavfilter     5. 16.101 /  5. 16.101
+  libswscale      3.  1.101 /  3.  1.101
+  libswresample   1.  2.100 /  1.  2.100
+Hyper fast Audio and Video encoder
+usage: ffmpeg [options] [[infile options] -i infile]... {[outfile options] outfile}...
+
+Use -h to get full help or, even better, run 'man ffmpeg'
+
+
+
+百度云盘下载地址：链接: http://pan.baidu.com/s/1ntDTpGl
+本帖隐藏的内容
+密码: ppcj  解压密码：www.lthack.com
+
+route del -host 72.55.174.166 gw 119.29.60.248
+route del default gw 119.29.60.248
+route del 119.29.60.248/32 dev eth1
+
+在线服务器 72.55.174.166， 服务端口7014 
+测试服务器 120.25.234.111  服务端口7014
+辅助服务器 119.29.60.248 
+
+步骤：
+1.测试服务器 119.29.60.248，添加路由
+route add 119.29.60.248/32 dev eth1
+route add default gw 119.29.60.248
+route add -host 72.55.174.166 gw 119.29.60.248
+
+2.辅助服务器，运行
+./intercept -i eth1 -F 'tcp and src port 7014' -d
+
+3.在线服务器，运行
+./tcpcopy -x 7014-120.25.234.111:7014 -s 119.29.60.248 -d
+
+
+ffmpeg -v
+ ./configure --prefix=/usr  --enable-libmp3lame --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-version3 --enable-shared
+ 
+ timezone和夏令时功能需要修改的点：
+ 1.(done)MySQL数据库watchinfo表增加UseDST字段
+ 2.redis.conf配置中 databases 8或16，开启aof？重启redis服务需要备份和恢复数据
+ 3.PHP端：
+   （1）(done)系统字典增加UseDST对应的SMSSend, WatchSmsCommand	SocketModeOff	#socketmode#{ONOFF}#000000#	是否开启省电模式
+   （2）ServiceController.php， actionSaveDevice方法的修改
+ 4.(done)前端APP的修改3处
+ 5.Linux服务器端的修改
+ 
+重新编译服务---->备份原来的服务程序---->替换并重启Redis服务---->替换并重启SMSSvr和其他Business服务---->替换ServiceController.php
+NewWatchService, RetryService,SetWatchCfg,RedisGateSvr,SMSSvr,
+ 
+ 
+问题: 多个app用户关注一个手表，从手表发微聊，只有第一个关注手表的app用户收到微聊，其他人没有收到
+2016-4-19 国外客户昨天gps定位正常，但定位类型显示为智能定位，LBS和wif定位的数据是正确的，但地图显示仍然是澳大利亚的位置
+
+jsXMLSocket.swf大小写重名的问题
+
+**************************************************2016-05-04，修复国外服务器问题**************************************************
+1.定位漂移的问题。
+    原因：cube的PlayNode缓存和CubeRow缓存之间没有一一对应，导致PlayNode对应的CubeRow被后续的数据请求覆盖
+    修复：使PlayNode与CubeRow之间一一对应，各个设备之间不会造成干扰。同时增加PlayNode和CubeRow缓存的大小(目前改为50000)，
+          满足后续较长一段时间内销售的增长
+    代码：CubeDBSvr
+
+2.新增的功能：夏令时，省电模式，手表设置的延迟队列。
+**********************************************************************************************************************************
+
+App	WatchStatusApiUrl	http://184.107.50.180:8012/GetWatchData?systemno={systemno}&datatype=1&callback={callback}	手表拉取状态的API地址
+
+
+find . \( -name "*.la" -o -name "*.so" \) -type f
+ cp -R chatsvr cube EPO lotus seedsvr proxy service configsvr redisgate smssvr watchdatasvr 
+
+CubeDB_00;
+INSERT INTO `Cube1701_27` VALUES (305260,160421101500,113913733,22587524,0,4,3,0,0,0),(305260,160421102239,113913331,22587550,0,4,1,0,0,0),(305260,160421102240,113913331,22587550,0,4,1,0,0,0);
+305260
+
+ 335238 total
+  39118 total
+ 374356 total
+ 
+*/1 * * * * /home/service/Bussiness/GetWatchDataService/GetWatchData init
+
+184.107.50.180
+
+*/1 * * * * /home/service/Bussiness/GetWatchDataService/GetWatchData
+*/1 * * * * /home/service/Bussiness/GetMultiWatchData/GetMultiWatchData
+
+
+Latitude=54.842625, LongtiTude=83.107208
+
+纬度(9位)ddmm.mmmm
+经度(10位)dddmm.mmmm
+
+
+(357593060572743BP01,G,160530A3749.4869S14457.1935E000.5082117  0.00,6)
+(357593060011775BP01,G,160512A1630.5426S06807.7549W011.2164250  93.67,6)
+(357593060571638BP01,G,160531A2232.6001N11355.1811E001.5174058  324.82,6)
+
+5450.5575
+08306.43248
+
+305262
+93060571505
+CubeDB_02
+Cube1701_27
+
+uiUin==305263
+93060036582
+CubeDB_03
+Cube1701_27
+
+uiUin==20184
+93060153429
+CubeDB_00
+Cube1701_54
+
+305027
+3
+(357593060571505BP00, MAUI.11C.W13.52.MP.V25.F1,7,46002)
+tcpdump -i any tcp and port 9527
+
+[USER] => apache 
+[HOME] => /var/www 
+[FCGI_ROLE] => RESPONDER 
+[SCRIPT_FILENAME] => /usr/share/nginx/html/tracker/web/download36h.php 
+[QUERY_STRING] => action=down36h 
+[REQUEST_METHOD] => POST 
+[CONTENT_TYPE] => application/x-www-form-urlencoded 
+[CONTENT_LENGTH] => 31 
+[SCRIPT_NAME] => /tracker/web/download36h.php 
+[REQUEST_URI] => /tracker/web/download36h.php?action=down36h 
+[DOCUMENT_URI] => /tracker/web/download36h.php 
+[DOCUMENT_ROOT] => /usr/share/nginx/html 
+[SERVER_PROTOCOL] => HTTP/1.1 
+[HTTPS] => on 
+[GATEWAY_INTERFACE] => CGI/1.1 
+[SERVER_SOFTWARE] => nginx/1.8.1 [REMOTE_ADDR] => 183.38.221.169 [REMOTE_PORT] => 55233 [SERVER_ADDR] => 120.25.234.111 
+[SERVER_PORT] => 443 [SERVER_NAME] => 120.25.234.111 [REDIRECT_STATUS] => 200 [HTTP_HOST] => 120.25.234.111 [HTTP_CONNECTION] => keep-alive [HTTP_CONTENT_LENGTH] => 31 [HTTP_CACHE_CONTROL] => max-age=0 [HTTP_ACCEPT] => text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8 [HTTP_ORIGIN] => https://120.25.234.111 [HTTP_UPGRADE_INSECURE_REQUESTS] => 1 [HTTP_USER_AGENT] => Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.75 Safari/537.36 [HTTP_CONTENT_TYPE] => application/x-www-form-urlencoded [HTTP_REFERER] => https://120.25.234.111/tracker/web/getepo.html [HTTP_ACCEPT_ENCODING] => gzip, deflate [HTTP_ACCEPT_LANGUAGE] => zh-CN,zh;q=0.8 [HTTP_COOKIE] => _csrf=9d0e572cf56b5d841578a3e7ebed97aa789a68ccf01c1a7de958e45eab62ad47s%3A32%3A%22NYVgiunmal1T6p6eNyjEEeYjOq9vFfAG%22%3B; PHPSESSID=d989o24fgloqnpd6pf5que4ob6 [PHP_SELF] => /tracker/web/download36h.php [REQUEST_TIME_FLOAT] => 1462608365.3338 [REQUEST_TIME] => 1462608365
+
+file_put_contents("/home/work/php-log/api.txt", serialize($result));
+file_put_contents("/home/work/php-log/api.log", serialize($result));
+file_put_contents("/home/work/phplog/api.log", ($apiUrl));
+
+
+Linux Shell 中的反引号，单引号，双引号  
+
+       反引号位 (`) 位于键盘的Tab键的上方、1键的左方。注意与单引号(')位于Enter键的左方的区别。
+　　在Linux中起着命令替换的作用。命令替换是指shell能够将一个命令的标准输出插在一个命令行中任何位置。
+　　如下，shell会执行反引号中的date命令，把结果插入到echo命令显示的内容中。
+　　[root@localhost sh]# echo The date is `date`
+　　The date is 2011年 03月 14日 星期一 21:15:43 CST
+　　
+　　单引号、双引号用于用户把带有空格的字符串赋值给变量事的分界符。
+　　[root@localhost sh]# str="Today is Monday"
+　　[root@localhost sh]# echo $str
+　　Today is Monday
+　　如果没有单引号或双引号，shell会把空格后的字符串解释为命令。
+　　[root@localhost sh]# str=Today is Monday
+　　bash: is: command not found
+　　单引号和双引号的区别。单引号告诉shell忽略所有特殊字符，而双引号忽略大多数，但不包括$、\、`。
+　　[root@localhost sh]# testvalue=100
+　　[root@localhost sh]# echo 'The testvalue is $testvalue'
+　　The testvalue is $testvalue
+　　[root@localhost sh]# echo "The testvalue is $testvalue"
+　　The testvalue is 100
+
+国外服务器需要重编的服务：
+[root@mail caref-server-oversea]# git pull
+
+ cpp-server/NewLotus_proj/trunk/LotusSvr/ClientConnect.cpp                            |  1 +
+ cpp-server/ServiceFrame-caref/Bussiness/NewWatchService/NewWatchService.cpp          |  4 ++--
+ cpp-server/ServiceFrame-caref/Bussiness/RetrySetWatchCfg/RetrySetWatchCfgService.cpp | 31 +++++++++++++++++++++++++------
+ cpp-server/ServiceFrame-caref/Bussiness/RetrySetWatchCfg/RetrySetWatchCfgService.hpp |  8 ++++++++
+ 4 files changed, 36 insertions(+), 8 deletions(-)
+[root@mail caref-server-oversea]#
+
+ b CubeDBEventModule.cpp:1618  if uiUin==305327
+ 93060006502  305327  CubeDB_03  Cube1701_43
+
+"SELECT * FROM Cube1701_43 WHERE FUin = 305327 and FField0 = (select max(FField0) from Cube1701_43) LIMIT 1"
+SQL逻辑错误,正确SQL语句应为：
+SELECT * FROM Cube1701_43 WHERE FUin = 305327 and FField0 = (select max(FField0) from Cube1701_43 where FUin = 305327) LIMIT 1
+
+客户问题数据：
+ 204757 | 460000086612 | 113916087 | 22586005 |       0 |       0 |       2 |       0 |       0 |       0 |
+ 
+将系统字典中carefwatch替换为gatorcn
+将tracker/web/static/carefapp/js/gator.js 中carefwatch改为gatorcn
+
+将gps.gatorcn.com/Lbs.aspx做rewrite为http://service.gatorcn.com/tracker/web/lbs.php
+
+mysql导出全部数据
+mysqldump -A > all_data.sql
+
+mysql导出全部存储过程
+mysqldump -n -d -t -R -A > all_proc.sql
+mysqldump -uroot -p -hlocalhost -P3306 -n -d -t -R -A > all_proc.sql
+mysqldump -udbc -p -hlocalhost -P3306 -n -d -t -R -A > all_proc.sql
+
+  185  mysqldump  -d daibuche > /home/dbc-data.sql
+  187  history | grep mysqldump
+  188  mysqldump daibuche > /home/dbc-data-2.sql
+  294  mysqldump -A > /home/all-db-latest.sql
+  295  mysqldump -A --events > /home/all-db-latest.sql
+  624  mysqldump -A > all-dbc-2016-08-17_17-43-28.sql
+  628  mysqldump -uroot -p  -A > all-dbc-2016-08-17_17-43-28.sql
+  629  mysqldump -uroot -p  -A --events > all-dbc-2016-08-17_17-43-28.sql
+  630  mysqldump -uroot -p  -A --events --skip-lock-tables > all-dbc-2016-08-17_17-43-28.sql
+  631  mysqldump -uroot -p  -A --skip-lock-tables > all-dbc-2016-08-17_17-43-28.sql
+  632  mysqldump -uroot -p  daibuche --events  --skip-lock-tables > all-dbc-2016-08-17_17-43-28.sql
+  675  mysqldump -A > all_data.sql
+  676  mysqldump -A --events  > all_data.sql
+  677  mysqldump -udbc -p  -A --events  > all_data.sql
+  679  mysqldump -d daibuche  --events  > all_data.sql
+
+mysql导入数据：
+进入mysql客户端命令行，在mysql的命令提示符下输入source xxx.sql
+mysql>source xxx.sql
+
+新增定位命令：
+WIFI定位2(升级协议)：
+(013632782450BPW1,W,150728,152900,3,08,wifi2462,1C:78:57:08:A5:CA,-88, 05,HDB-H,D8:15:0D:5C:4D:74,-87,0D,WWW.CXGPS.COM,D8:15:0D:A8:E8:DE,-86,5,1)
+上行WIFI数据，数据采集时间2015年7月28日，当地时间15:29:00，共3条数据(最多6条)，分别由SSID长度(%02X)，SSID，MAC地址，RSSI组成，后面5表示，当前电池电量等级(0-7)，最后1表示，终端请求服务器下发定位经度、纬度、精确度数据(可选项，否则直接结束)。
+
+李工 2016/6/2 17:22:40
+WIFI、LBS混合定位2(升级协议)：
+(357593060153353BPM1,M,150728,152900,4,4600024820DE127,4600024820DDF1A,4600024820DEB0D,4600024820F160B,3,08,wifi2462,1C:78:57:08:A5:CA,-88, 05,HDB-H,D8:15:0D:5C:4D:74,-87,0D,WWW.CXGPS.COM,D8:15:0D:A8:E8:DE,-86,5,1)
+上行WIFI、LBS混合定位数据，数据采集时间2015年7月28日，当地时间15:29:00，基站数为4个,第一个是主基站,其余3个为辅助基站,WIFI共3条数据(最多6条)，分别由SSID长度(%02X)，SSID，MAC地址，RSSI组成，后面5表示，当前电池电量等级(0-7)，最后1表示，终端请求服务器下发定位经度、纬度、精确度数据(可选项，否则直接结束)。
+
+李工 2016/6/2 17:23:01
+WIFI定位2(升级协议):
+(013632782450BPW2,W,2,150728,152900,3,08,wifi2462,1C:78:57:08:A5:CA,-88, 05,HDB-H,D8:15:0D:5C:4D:74,-87,0D,WWW.CXGPS.COM,D8:15:0D:A8:E8:DE,-86,5,1)
+SOS上行WIFI数据，数据采集时间2015年7月28日，当地时间15:29:00，共3条数据(最多6条)，分别由SSID长度(%02X)，SSID，MAC地址，RSSI组成，后面5表示，当前电池电量等级(0-7)，最后1表示，终端请求服务器下发定位经度、纬度、精确度数据(可选项，否则直接结束)。
+
+李工 2016/6/2 17:23:11
+WIFI、LBS混合定位2(升级协议)：
+(357593060153353BPM2,M,2,150728,152900,4,4600024820DE127,4600024820DDF1A,4600024820DEB0D,4600024820F160B,3,08,wifi2462,1C:78:57:08:A5:CA,-88, 05,HDB-H,D8:15:0D:5C:4D:74,-87,0D,WWW.CXGPS.COM,D8:15:0D:A8:E8:DE,-86,5,1)
+上行WIFI、LBS混合定位数据，数据采集时间2015年7月28日，当地时间15:29:00，基站数为4个,第一个是主基站,其余3个为辅助基站,WIFI共3条数据(最多6条)，分别由SSID长度(%02X)，SSID，MAC地址，RSSI组成，后面5表示，当前电池电量等级(0-7)，最后1表示，终端请求服务器下发定位经度、纬度、精确度数据(可选项，否则直接结束)。
+
+working-1. https页面的管理后台点“我的caref手表” 在谷歌浏览器中正常，其他浏览器请求被阻止，因为发送的是http请求
+fixed - 2. WatchService去掉corecrash的捕获
+fixed - 3. 对目前的手表wifi定位的数据中，热点名字包含括弧的过滤检测
+half fixed - 4. gtserver中更新EPO的问题（接口已实现，目前还尚未部署到国外服务器）
+fixed - 5. 手表只能一次性接收6个，APP同时发送7个以上，剩下的要在手表听取这个6个后继续接收
+
+之前一直没解决的老问题：(添加手表以后，时区设置也需要更新到手表,$model["PhoneNumbers"]更新到手表)
+1.在APP添加GT3手表，设置的爱娃名字无作用：手表爱娃名字不会修改---------ServiceController.php，在actionAddDevice中validate成功以后，
+在actionAddDevice中validate成功以后，添加如下代码：
+      
+        $sms2send = [];
+        $SystemNo = $IMEI % 100000000000;
+        if(self::configRequest($SystemNo,"1",$OwnerName)==-1){
+            $sms2send[] = ["SimID"=>$SimID,"Text"=> str_replace("{OwnerName}", $OwnerName,  Dictionary::indexKeyValue("WatchSmsCommand","OwnerName"))];
+        }
+     
+        if(self::configRequest($SystemNo,'2',strtr($PhoneNumbers,[','=>'|','|'=>','])) ==-1 ){
+            $url = Dictionary::indexKeyValue("App","WatchSetPhoneNoApiUrl");
+            $url = str_replace("{systemno}", $SystemNo, $url);
+            $url = str_replace("{phoneno}", str_replace(",", "|",$PhoneNumbers), $url);
+            self::request($url);
+
+
+            $arr = explode("," , empty( $PhoneNumbers )?"":$PhoneNumbers );
+            //没有三个号先填充
+            $arr=array_pad($arr, 3, "");
+            //目前短信支持3个号
+            $oldSMSPhoneNumbers = implode("#", array_slice($arr,0,3)); //旧号码中的前三个
+            $smsPhoneNumbers = implode("#",array_slice(explode(",", $PhoneNumbers),0,3));//新号码中的前三个 $PhoneNumbers是13个号
+
+            if($oldSMSPhoneNumbers!=$smsPhoneNumbers){
+                $sms2send[] = ["SimID"=>$SimID,"Text"=>  str_replace("{PhoneNumbers}", $smsPhoneNumbers, Dictionary::indexKeyValue("WatchSmsCommand","PhoneNumbers"))];
+            }            
+        }
+
+        if(count($sms2send)>0){ //尝试用服务器端发送短信
+            $len  = count($sms2send);
+            for ($i=$len-1; $i >=0 ; $i--) { 
+                if($this->sms($SystemNo,$sms2send[$i]["SimID"],$sms2send[$i]["Text"])==0){
+                    array_slice($sms2send, $i);
+                }
+            }
+        }
+            
+        $result["sms2send"] = $sms2send;
+        $result["status"]  =0 ; //0-成功
+
+        $response = Yii::$app->response;
+        $response->format = \yii\web\Response::FORMAT_JSON;
+        $response->data = $result;
+
+
+fixed - 2.在添加界面设置我的号码，会保存在白名单列表，但无实际功能
+3.在APP上把电话薄列表全设置满，其他手机在APP上添加输入验证码后会提示“貌似出了问题”（此问题在国外服务器也出现）
+fixed - 4.在添加界面设置我的号码后，进入APP保存进电话薄，实际上设置不成功，按手表+键不能拨出设置的号码
+fixed - 5.后台---基础数据----用户----添加用户--编辑---确认
+就出现以上截图界面
+
+
+
+微聊文件名秒级覆盖问题PHP端改动：
+    public function actionAlarm($systemno,$data){
+        $result = ["status"=>0,"message"=>"","sentResult"=>[]];
+        $arr = explode(",", $data);
+        $Time =  $arr[0] / 10000;
+        
+
+6. ServiceController.ph - doAddDevice() - 354行开始修改为：
+            if($exists["model"]!="GT03" && $companyInfo!=null && (!empty($companyInfo["Host"])) && (!empty($companyInfo["Port"])) ){
+                //是否发送过Init命令。防止重复发
+                //$modelHostPort = Dictionary::indexKeyValue("CompanyModelHostPort",$model["companyId"].".".$model["model"]);
+                $InitCommand = "";
+/*                 if($modelHostPort!=""){
+                    $modelHostPort  = explode(":",$modelHostPort);
+                    $InitCommand =  str_replace(["{Host}","{Port}"], $modelHostPort,  Dictionary::indexKeyValue("WatchSmsCommand","Init"));
+                }else */
+                {
+                    $InitCommand =  str_replace(["{Host}","{Port}"], [$companyInfo["Host"],$companyInfo["Port"]],  Dictionary::indexKeyValue("WatchSmsCommand","Init"));
+                }
+                $inited = \Yii::$app->db->createCommand("select 1 from message where VehId=:SystemNo and MsgContent=:MsgContent")
+                    ->bindValues([":SystemNo"=>$model["SystemNo"],":MsgContent"=>$InitCommand])->queryOne();
+                if($inited==null)
+                {
+                    $sms2send[] = ["SimID"=>$model["SimID"],"Text"=>$InitCommand];//初始化
+                }
+
+
+
+
+| idx                        | key                                       | value                                                                                                                         | description                                                                                                                        |
++----------------------------+-------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| App                        | WatchSendChatApiUrl                       | http://184.107.50.180:8012/SendChat?systemno={systemno}&time={time}&sender={sender}&recordtime={recordtime}                   | 手表发送微聊语音信息接口                                                                                                           |
+| CompanyAddWatchBusiness_   | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF      | http://service.gatorcn.com/tracker/web/index.php?r=app/caref/add-watch&orderId={orderId}&access-token={accesstoken}           | 公司特定的手表业务,Key为公司ID,Value为Url                                                                                          |
+| App                        | WatchGetChatApiUrl                        | http://184.107.50.180:8012/GetChatInfo?systemno={systemno}&time={time}&callback={callback}                                    | 获取微聊历史记录，time时间之后                                                                                                     |
+| App                        | TrackDataNumAPI                           | http://184.107.50.180:8012/GetDataNum?systemno={systemno}&datatype={datatype}&start={start}&end={end}                         | 获取车机数据长度接口地址                                                                                                           |
+                                                                                                      | 短信发送接口，匹配中国的所有客户公司                                                                                               |
+| App                        | TrackDataAPI                              | http://184.107.50.180:8012/GetTrackData?systemno={systemno}&datatype={datatype}&datavalue={datavalue}&start={start}&end={end} | 获取车机定位数据接口地址                                                                                                           |
+| CompanyRepayWatchBusiness_ | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF      | http://service.gatorcn.com/tracker/web/index.php?r=app/caref/repay&orderId={orderId}&access-token={accesstoken}               | 续费页面url                                                                                                                        |
+| App                        | WatchSetPhoneNoApiUrl                     | http://184.107.50.180:8012/SetPhoneNo?systemno={systemno}&phoneno={phoneno}                                                   |  手表设置电话号码接口，多个电话以|分隔                                                                                             |
+| App                        | WatchStatusUpdateApiUrl                   | http://184.107.50.180:8012/UpdateWatchData?systemno={systemno}&time={time}&callback={callback}                                | 手表设置报警已读的接口地址                                                                                                         |
+| SMSApi                     | 34be228a-74a0-11e5-a390-002590c4e092.*    | http://service.gatorcn.com/tracker/web/index.php?r=app/techsixtyfour/sms&access-token={access-token}&to={to}&text={text}      | Techsixtyfour 公司短信发送接口                                                                                                     |
+| CompanyModelHostPort       | 007BA0BE-7168-43D3-8A41-C502FC3F4DCF.GT03 | 72.55.174.166:7014                                                                                                            | Caref Watch Co,.Ltd 公司GT03型号手表使用72.55.174.166:7014                                                                         |
+| App                        | WatchHistoryStatusApiUrl                  | http://184.107.50.180:8012/GetWatchData?systemno={systemno}&datatype=2&callback={callback}&end={end}&start={start}            | 手表获取历史状态数据的接口地址                                                                                                     |
+| App                        | WatchStatusApiUrl                         | http://184.107.50.180:8012/GetWatchData?systemno={systemno}&datatype=1&callback={callback}                                    | 手表拉取状态的API地址                                                                                                              |
+| App                        | ServerIP                                  | 72.55.174.166                                                                                                                 |                                                                                                                                    |
+| App                        | WatchConfigUrl                            | http://184.107.50.180:8012/SetWatchCfg                                                                                        | 手表更新配置请求url                                                                                                                |
+| App                        | SiteUrl                                   | http://service.gatorcn.com/tracker/                                                                                           | 用于拼接url                                                                                                                        |
+| App                        | WatchNotificationApiUrl                   | http://184.107.50.180:8012/GetAlarmNotify?systemno={systemno}                                                                 | 及时报警提醒接口。从该接口获取最新的未读报警。只在报警发生2分钟内有效。多个systemno用|隔开                                         |
+| App                        | WatchMultiStatusApiUrl                    | http://184.107.50.180:8012/GetMultiWatchData?systemno={systemno}&callback={callback}                                          | 批量获取手表状态API，|分割                                                                                                         |
+| App                        | WatchUnreadAlarmApiUrl                    | http://184.107.50.180:8012/GetWatchData?systemno={systemno}&datatype=4&callback={callback}&start={start}&end={end}            | 手表拉取未读报警接口地址                                                                                                           |
++----------------------------+-------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+
+select idx, dictionary.key, value  from dictionary where dictionary.key='WatchSendChatApiUrl' or dictionary.key='WatchGetChatApiUrl' or dictionary.key='TrackDataNumAPI' or dictionary.key='TrackDataAPI' or dictionary.key='WatchSetPhoneNoApiUrl' or dictionary.key='WatchStatusUpdateApiUrl' or dictionary.key='WatchHistoryStatusApiUrl' or dictionary.key='WatchStatusApiUrl' or dictionary.key='WatchConfigUrl' or dictionary.key='WatchNotificationApiUrl' or dictionary.key='WatchMultiStatusApiUrl' or dictionary.key='WatchUnreadAlarmApiUrl';
+
+
+
+
+            "WatchStatusUpdateApiUrl"=>Dictionary::indexKeyValue("App","WatchStatusUpdateApiUrl"),
+            "WatchHistoryStatusApiUrl"=>Dictionary::indexKeyValue("App","WatchHistoryStatusApiUrl"),
+            "WatchStatusApiUrl"=>Dictionary::indexKeyValue("App","WatchStatusApiUrl"),
+            "WatchUnreadAlarmApiUrl"=>Dictionary::indexKeyValue("App","WatchUnreadAlarmApiUrl"),
+            "WatchNotificationApiUrl"=>Dictionary::indexKeyValue("App","WatchNotificationApiUrl"),
+            "WatchMultiStatusApiUrl"=>Dictionary::indexKeyValue("App","WatchMultiStatusApiUrl"),
+            "WatchGetChatApiUrl"=>Dictionary::indexKeyValue("App","WatchGetChatApiUrl"),
+            "WatchConfigUrl"=>Dictionary::indexKeyValue("App","WatchConfigUrl"),
+            "WatchHistoryAlarmUrl"=>Dictionary::indexKeyValue("App","WatchHistoryAlarmUrl"),
+
+            
++-----+--------------------------+-------------------------------------------------------------------------------------------------------------+
+| idx | key                      | value                                                                                                       |
++-----+--------------------------+-------------------------------------------------------------------------------------------------------------+
+| App | WatchSendChatApiUrl      | http://120.25.234.111:8012/SendChat?systemno={systemno}&time={time}&sender={sender}&recordtime={recordtime} |
+| App | WatchGetChatApiUrl       | /GetChatInfo?systemno={systemno}&time={time}&callback={callback}                                            |
+| App | TrackDataNumAPI          | /GetDataNum?systemno={systemno}&datatype={datatype}&start={start}&end={end}                                 |
+| App | TrackDataAPI             | /GetTrackData?systemno={systemno}&datatype={datatype}&datavalue={datavalue}&start={start}&end={end}         |
+| App | WatchSetPhoneNoApiUrl    | /SetPhoneNo?systemno={systemno}&phoneno={phoneno}                                                           |
+| App | WatchStatusUpdateApiUrl  | /UpdateWatchData?systemno={systemno}&time={time}&callback={callback}                                        |
+| App | WatchHistoryStatusApiUrl | /GetWatchData?systemno={systemno}&datatype=2&callback={callback}&end={end}&start={start}                    |
+| App | WatchStatusApiUrl        | /GetWatchData?systemno={systemno}&datatype=1&callback={callback}                                            |
+| App | WatchConfigUrl           | http://120.25.234.111:8012/SetWatchCfg                                                                      |
+| App | WatchNotificationApiUrl  | /GetAlarmNotify?systemno={systemno}                                                                         |
+| App | WatchMultiStatusApiUrl   | /GetMultiWatchData?systemno={systemno}&callback={callback}                                                  |
+| App | WatchUnreadAlarmApiUrl   | /GetWatchData?systemno={systemno}&datatype=4&callback={callback}&start={start}&end={end}                    |
++-----+--------------------------+-------------------------------------------------------------------------------------------------------------+
+            
+          
+          
+
+total       used       free     shared    buffers     cached
+ free -m | head -2 | tail -1 | awk '{print "total: "$2"M, used: "$3"M, free: "$4"M, cached: "$7"M"}'
+ 
+ free -m | head -2 | tail -1 | awk '{print $2" " $3 " " $4}'
+ 
+ GET / HTTP/1.1\r\n
+ 
+ http://184.107.50.180:8012/GetAlarmNotify?systemno={systemno}
+ 
+
+ 
+ https://tracker.bugcrowd.com/techsixtyfourltd/submissions/65076?filter=unresolved&sort=priority
+ 
+ 
+ 
+ (357593060571505BP01,M,160614,163500,2,23430086DC6150E,2343008D213CD04,1,t2566,04:A1:51:98:2B:E0,-70,7)
+
+(357593060571505BP09,10,2,160614,163500,4)
+
+(357593060571505BP01,G,160614A2354.0007S02928.6279E003.517443040.12,5)
+(357593060571505BP01,G,160614A2235.2479N11354.8084E001.718093011.68,6)
+
+(357593060136713BPM1,M,160602,180417,4,4600002866129B37,460000286612A531,460000286612AF2B,460000286612A323,6,0A,gatorgroup,D8:24:BD:77:4D:6E,-59,0F,360免费WiFi-F,00:36:76:3B:15:F4,-65,0D,WWW.CXGPS.COM,D8:15:0D:A8:E8:DE,-66,10,360免费WiFi-C4,00:36:76:67:B1:C4,-70,06,623623,00:36:76:67:6C:CF,-70,18,上班时间好好工作,00:36:76:54:D5:9B,-74,4,1)
+
+593060542654
+
+
+357593060571620
+
+http://120.25.234.111:8012/GetMultiWatchData?systemno=93060571505
+
+3bd5d5e0652adb1e71e24c6963e20640
+3bd5d5e0652adb1e71e24c6963e20640
+
+字符串	94bushuo
+16位 小写	652adb1e71e24c69
+16位 大写	652ADB1E71E24C69
+32位 小写	3bd5d5e0652adb1e71e24c6963e20640
+32位 大写	3BD5D5E0652ADB1E71E24C6963E20640
+
+1234 56
+123456 / 10000
+
+
+
+<html>
+<body>
+
+<script type="text/javascript">
+
+var str = "http://192.168.0.223/?price_desc=0";
+str.replace(/price_desc=0/,"price_desc=1");
+document.write(str);
+
+</script>
+</body>
+</html>
+ 武汉
+
+copy /B dbc-1+dbc-2  dbc.tar.gz
+
+微信平台登录账号密码：
+luolin0602@sina.com
+luolin0602..
+app密钥：9fe8ab078e47f46ac9aaa1efefce8406
+
+120.25.220.28
+wCo*1DMe
+
+navicat中文版注册码
+NAVH-WK6A-DMVK-DKW3
+
+
+
+357593060646364
+00420608031157|0|Hana,00420731608156|1|Tata,|1|,00420608031157|0|Hana,|1|,|1|,|1|,|1|,|1|,|1|,|1|,|1|,|1|
+
+
+
+http://120.25.234.111:8012/GetChatInfo?systemno=93060437913  
+
+http://184.107.50.180:8012/GetChatInfo?systemno=93060437913   69043277219
+http://184.107.50.180:8012/GetChatInfo?systemno=93060571638
+http://120.25.234.111:8012/GetAlarmNotify?systemno=93060571398
+http://120.25.234.111:8012/GetChatInfo?systemno=93060571398
+http://service.gatorcn.com/tracker/web/index.php?r=app/auth/alarm&systemno=93060571398&data=1608201623338849,0,0,0,0,16,0,0,,
+http://120.25.234.111/tracker/web/index.php?r=app/auth/alarm&systemno=93060571398&data=1608231032338849,0,0,0,0,16,0,0,,
+
+源码安装mysql
+yum install -y cmake  ncurses-devel tcl
+groupadd mysql
+useradd -r -g mysql mysql
+cmake .
+make
+make install
+
+cd /usr/local/mysql
+chown -R mysql .
+chgrp -R mysql .
+scripts/mysql_install_db --user=mysql
+chown -R root .
+chown -R mysql data
+bin/mysqld_safe --user=mysql &
+cp support-files/mysql.server /etc/init.d/mysqld
+
+
+root@CleanServer html]# /home/nginx/sbin/nginx -V
+nginx version: nginx/1.9.2
+built by gcc 4.4.7 20120313 (Red Hat 4.4.7-4) (GCC) 
+built with OpenSSL 1.0.1e-fips 11 Feb 2013
+TLS SNI support enabled
+./configure --conf-path=/home/work/conf/nginx.conf --error-log-path=/home/work/logs/error.log --pid-path=/home/work/run/nginx.pid --lock-path=/home/work/run/nginx.lock --http-log-path=/home/work/logs/access.log --with-http_ssl_module --with-http_realip_module --with-http_addition_module --with-http_sub_module --with-http_dav_module --with-http_flv_module --with-http_mp4_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_random_index_module --with-http_secure_link_module --with-http_stub_status_module --with-http_auth_request_module --with-mail --with-mail_ssl_module --with-file-aio --with-ipv6 --with-http_v2_module --with-cc-opt='-O0 -ggdb3 -pipe -Wp,-D_FORTIFY_SOURCE=2 -fexceptions -fstack-protector --param=ssp-buffer-size=4 -m64 -mtune=generic' --add-module=/path/to/nginx_tcp_proxy_module
+
+
+
+cd /etc/yum.repos.d
+mv CentOS-Base.repo CentOS-Base.repo.backup
+wget http://mirrors.163.com/.help/CentOS6-Base-163.repo
+mv CentOS6-Base-163.repo CentOS-Base.repo
+yum clean all
+
+rpm -Uvh https://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm
+rpm -Uvh https://mirror.webtatic.com/yum/el6/latest.rpm
+
+yum install -y php56w php56w-opcache php56w-fpm php56w-opcache php56w php56w-bcmath php56w-cli php56w-common php56w-dba php56w-devel php56w-embedded php56w-enchant php56w-fpm php56w-gd php56w-imap php56w-interbase php56w-intl php56w-ldap php56w-mbstring php56w-mcrypt php56w-mssql php56w-mysql php56w-odbc php56w-opcache php56w-pdo php56w-pear php56w-pecl-apcu php56w-pecl-gearman php56w-pecl-geoip php56w-pecl-imagick php56w-pecl-memcache php56w-pecl-xdebug php56w-pgsql php56w-phpdbg php56w-process php56w-pspell php56w-recode php56w-snmp php56w-soap php56w-tidy php56w-xml php56w-xmlrpc
+
+参考这里http://blog.csdn.net/sissiyinxi/article/details/7595617解决了上述错误。
+
+a. 打开/etc/yum.repos.d/xxxxx.repo，对于本例来说就是/etc/yum.repost.d/flexbox.repo
+
+b. 将项[flexbox]中的enabled=1改为enabled=0
+
+
+wget http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
+sudo rpm -ivh epel-release-6-8.noarch.rpm
+sudo yum install freetds freetds-devel
+
+
+http://127.0.0.1/tracker/web/index.php?=app/auth/alarm&systemno=93060571505&data=160629140500,0,0,0,0,16,0,0
+
+
+安装memcached
+
+scp "/Users/wenkui/codes/set-company.php" work@72.55.174.166:/home/work/lwk/set-company.php
+
+scp "/Users/wenkui/codes/del-device-data.php" work@72.55.174.166:/home/work/lwk/del-device-data.php
+scp "/Users/wenkui/Downloads/nginx-1.10.1.tar.gz" root@139.199.14.35:/home/tools/nginx-1.10.1.tar.gz
+
+scp /Users/wenkui/Downloads/Python-2.7.12.zip root@139.199.14.35:/home/tools/Python-2.7.12.zip
+scp work@72.55.174.166:/home/work/lwk/nginx_conf/nginx_conf.tar.gz /Users/wenkui/codes/nginx_conf.tar.gz
+scp work@72.55.174.166:/home/work/lwk/depot_tools.tar.gz /Users/wenkui/codes/chrome-codes/depot_tools.tar.gz
+
+scp "/Volumes/Seagate Expansion Drive/tools/office_2007_SP2.zip" root@120.25.234.111:/usr/share/nginx/html/tracker/web/
+#scp root@120.25.234.111:/home/work/ListenPort.tar.gz  /Users/wenkui/codes/ListenPort.tar.gz
+#scp work@72.55.174.166:/home/work/36H.EPO  /Users/wenkui/codes/36H.EPO
+#scp work@72.55.174.166:/home/log/93060571638.log  /Users/wenkui/codes/93060571638.log
+
+scp work@72.55.174.166:/home/store-gtserver.tar.gz  /Users/wenkui/codes/store-gtserver.tar.gz
+
+#yum install libevent-devel
+#wget http://memcached.org/latest
+#tar -zxvf memcached-1.x.x.tar.gz
+#cd memcached-1.x.x
+#./configure && make && make test && make install
+yum install memcached
+
+
+修复TortoiseGit文件夹和文件图标不显示
+
+打开 regedit.exe ，准备修改注册表
+找到 HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Explorer
+新建一个“字符串值”名称为 “Max Cached Icons” 值是 “2000”
+重启一下电脑，图标就显示了。
+
+
+    if(isset($_SERVER['HTTPS']) && ($_SERVER['HTTPS'] === 1 || $_SERVER['HTTPS'] === 'on' || $_SERVER['SERVER_PORT'] == 443))
+}  
+
+Linux系统安装Windows字体步骤如下：
+
+1.复制字体
+
+在“C:\Windows\Fonts”目录下找到所要安装字体，这里以“simsun.ttf”为例。如果安装的字体找不到，就去网上下载。
+
+2.上传字体至CentOS系统
+
+在/usr/share/fonts目录下建立一个子目录，比如/winFonts。上传“simsun.ttf”字体至此目录。
+
+3.进入此目录安装
+
+# cd /usr/share/fonts/winFonts
+1
+运行以下命令建立字体索引信息，更新字体缓存：：
+
+# sudo mkfontscale
+# sudo mkfontdir
+# sudo fc-cache -fv
+1
+2
+3
+执行以下命令让字体生效
+
+# source /etc/profile
+1
+4.问题与解决
+
+如果安装失败可以尝试更改权限：
+
+# cd /usr/share/fonts/winFonts
+# chmod 755 *.ttf
+1
+2
+若提示 “ mkfontscale: command not found”，用yum安装：
+
+# yum install mkfontscale
+1
+提示 “ fc-cache: command not found”
+
+# yum install fontconfig
+1
+若需要重启服务器：
+
+# reboot
+1
+查看已安装的字体：
+
+# fc-list
+
+
+<?php
+
+use app\models\Dictionary;
+?>
+
+<script type="text/javascript">
+window.location.href="<?php
+$site = Dictionary::indexKeyValue("App","SiteUrl");
+if(isset($_SERVER['HTTPS']) && ($_SERVER['HTTPS'] === 1 || $_SERVER['HTTPS'] === 'on' || $_SERVER['SERVER_PORT'] == 443))
+        echo 'https' . $site;
+else
+        echo 'http' . $site;
+?>web/static/carefapp/index.html?access-token=<?= \Yii::$app->user->identity->accessToken ?>&v=<?= exec( "cd ".str_replace("/index.php","/static/carefapp", $_SERVER["SCRIPT_FILENAME"])." && git rev-parse HEAD") ?>";
+</script>
+
+
+(anonymous function) @ ionic.bundle.min.js:117m @ ionic.bundle.min.js:113f @ ionic.bundle.min.js:111(anonymous function) @ ionic.bundle.min.js:143l.$eval @ ionic.bundle.min.js:156l.$digest @ ionic.bundle.min.js:153l.$apply @ ionic.bundle.min.js:157(anonymous function) @ ionic.bundle.min.js:169e @ ionic.bundle.min.js:71(anonymous function) @ ionic.bundle.min.js:75
+ionic.bundle.min.js:117 XMLHttpRequest cannot load http://120.25.234.111/tracker/web/index.php?r=app/service/devices
+
+(anonymous function) @ ionic.bundle.min.js:117m @ ionic.bundle.min.js:113f @ ionic.bundle.min.js:111(anonymous function) @ ionic.bundle.min.js:143l.$eval @ ionic.bundle.min.js:156l.$digest @ ionic.bundle.min.js:153l.$apply @ ionic.bundle.min.js:157l @ ionic.bundle.min.js:112P @ ionic.bundle.min.js:116w.onload @ ionic.bundle.min.js:117
+ionic.bundle.min.js:117 XMLHttpRequest cannot load http://120.25.234.111/tracker/web/index.php?r=app/service/api
+
+sudo /Users/wenkui/nginx/sbin/nginx -s stop
+eval $(ps -ef | grep mysqld | grep -v grep | awk '{print "kill  "$2 ";" }')
+eval $(ps -ef | grep php-fpm | grep -v grep | awk '{print "kill  "$2 ";" }')
+wenkuideMacBook-Pro:Documents wenkui$ ps -ef | grep php-fpm | grep -v grep
+
+
+./configure
+make
+su
+make install
+adduser postgres
+mkdir /usr/local/pgsql/data
+chown postgres /usr/local/pgsql/data
+su - postgres
+/usr/local/pgsql/bin/initdb -D /usr/local/pgsql/data
+/usr/local/pgsql/bin/postgres -D /usr/local/pgsql/data >logfile 2>&1 &
+/usr/local/pgsql/bin/createdb test
+/usr/local/pgsql/bin/psql test
+
+https://github.com/PostgresApp/PostgresApp/releases/download/9.5.3/Postgres-9.5.3.zip
+https://github.com/PostgresApp/PostgresApp/releases/download/9.5.3/Postgres-9.5.3.zip
+
+
+one-on-one alarm 1对1微聊数据库改动：
+1.vehiclesinuser 增加字段FamilyNumber,Name,CountryCode  ---------
+2.productmodel表增加GTI3的model  ---------
+3.系统字典 WatchConfigRequestModels 修改添加GTI3  ---------
+4.增加国家码
+5.解决关注手表以后需要注销重新登录的问题
+6.apppushdevices  增加字段  FamilyNumber  --------
+7.Watchinfo增加CountyCode、volume和lang字段  --------
+
+8.Dictionary中WatchSetPhoneNoApiUrl的值是否正确
+9.系统字典中API配置是否正确：'""'
+      public function actionApi(){
+        $result = [
+            "status"=> 0,
+            "WatchStatusUpdateApiUrl"=>"http://120.25.234.111:8012".Dictionary::indexKeyValue("App","WatchStatusUpdateApiUrl"),
+            "WatchHistoryStatusApiUrl"=>"http://120.25.234.111:8012".Dictionary::indexKeyValue("App","WatchHistoryStatusApiUrl"),
+            "WatchStatusApiUrl"=>"http://120.25.234.111:8012".Dictionary::indexKeyValue("App","WatchStatusApiUrl"),
+            "WatchUnreadAlarmApiUrl"=>"http://120.25.234.111:8012".Dictionary::indexKeyValue("App","WatchUnreadAlarmApiUrl"),
+            "WatchNotificationApiUrl"=>"http://120.25.234.111:8012".Dictionary::indexKeyValue("App","WatchNotificationApiUrl"),
+            "WatchMultiStatusApiUrl"=>"http://120.25.234.111:8012".Dictionary::indexKeyValue("App","WatchMultiStatusApiUrl"),
+            "WatchGetChatApiUrl"=>"http://120.25.234.111:8012".Dictionary::indexKeyValue("App","WatchGetChatApiUrl"),
+            "WatchConfigUrl"=>"http://120.25.234.111:8012".Dictionary::indexKeyValue("App","WatchConfigUrl"),
+            "WatchHistoryAlarmUrl"=>"http://120.25.234.111:8012".Dictionary::indexKeyValue("App","WatchHistoryAlarmUrl"),
+        ];
+
+10.WH01电池状态不更新的问题
+
+p#h#YA_dO_%ge*eCNBxLr6ag
+
+
+alter table vehiclesinuser add FamilyNumber varchar(32) not null default '';
+alter table vehiclesinuser add Name varchar(64) not null default '';
+alter table vehiclesinuser add CountryCode varchar(10) not null default '';
+
+alter table apppushdevices add FamilyNumber varchar(32) not null default '';
+
+alter table watchinfo add Volume  char(1) NOT NULL DEFAULT '7';
+alter table watchinfo add Lang varchar(10) NOT NULL DEFAULT '44';
+
+    7   
+| Lang           | varchar(10)  | NO   |     | 44  
+
+✅ 1. 微聊、设置（推送数据）重复多个
+✅ 2. EPO数据
+    3. APP录音按钮增大
+✅ 4. APP刷新定位数据需要注销重登陆
+✅ 5. 手表发到APP的第一个的微聊顺序到后面
+✅ 6. 看了昨天下午的电话簿设置，3+10都正常显示 今天的设置最后一个白名单，APP不显示  国外APP
+✅ 7. 93060636357今天一整天都是没有SOS报警
+✅ 8. APP release打包
+✅ 9. 更新服务器（修复了心跳模式进入app会电话激活的问题），备份日志
+    10. 谷歌地图不刷新，点击右上角菜单以后马上更新
+✅ 11. 同一个连接两次BP08之间间隔5分钟
+✅ 12.增加延迟来自动重启服务进程
+✅ 13.连续两次报警的问题
+✅ 14.app多语言翻译
+✅ 15. AP15通知加延迟 1分钟
+✅ 16.NewWatchService手表发送的微聊，只保留最近的64个，超过64个的旧的删除
+    17.SOS报警漏掉
+    18.电话激活两次之间增加90秒延迟
+    19.历史报警设为已读，下次还会显示历史报警
+✅ 20.UES用户的页面有时候会出现nginx error
+    21.APP关注手表超过10个以上，有时候滚动条不会显示，导致关注列表显示不完全
+    22.手表factory的时候，会将时间初始化为2015年07月01日
+    23.增加隐身时段设置
+        watchinfo增加新的字段 
+        alter table watchinfo add HideTimer0 varchar(200);
+        alter table watchinfo add HideTimer1 varchar(200);
+        alter table watchinfo add HideTimer2 varchar(200);
+        alter table watchinfo add HideTimer3 varchar(200);
+        alter table watchinfo add HideSelf char(1) not null default 0;
+
+        alter table device add VersionDate int(12) unsigned;
+        alter table watchinfo add VersionDate int(12) unsigned;
+
+        alter table device drop column VersionDate;
+        alter table watchinfo drop column VersionDate;
+
+        http://120.25.234.111/tracker/web/setdate.php?sn=93060571398&date=20160921
+
+    24.增加家庭WiFi设置
+    26.vivo手机添加手表时国家列表乱码
+
+357593060670042
+357593060635847
+
+./configure --sbin-path=/home/nginx/sbin/nginx --conf-path=/home/nginx/conf/nginx.conf --error-log-path=/home/nginx/logs/error.log --pid-path=/home/nginx/logs/nginx.pid --lock-path=/home/nginx/logs/nginx.lock --http-log-path=/home/nginx/logs/access.log --with-http_ssl_module --with-http_realip_module --with-http_addition_module --with-http_sub_module --with-http_dav_module --with-http_flv_module --with-http_mp4_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_random_index_module --with-http_secure_link_module --with-http_stub_status_module --with-http_auth_request_module --with-mail --with-mail_ssl_module --with-file-aio --with-ipv6 --with-http_v2_module --with-cc-opt='-O0 -ggdb3 -pipe -Wp,-D_FORTIFY_SOURCE=2 -fexceptions -fstack-protector --param=ssp-buffer-size=4 -m64 -mtune=generic' --add-module=/media/psf/Home/Documents/workspace/ngx-tcp-server/src/nginx_tcp_proxy_module/
+
+找了很久 网上的mamp注册码基本都是mamp3.0.x的，可我的是mamp3.4根本既不能用啊！不过最终还是被我机智的谷歌到了mamp 3.4的注册码
+
+mamp 3.4注册码
+
+Serial number:
+MP-DED4-0A88-3A11-F9FDE
+
+mamp 3.0.x注册码
+
+MP-CB7E-F665-A199-E2E68
+
+运行程序时可能会报找不到库： 
+这里写图片描述
+
+只要将jemalloc的库被系统找到即可：
+
+echo /usr/local/jemalloc/lib >> /etc/ld.so.conf 
+ldconfig
+
+yumdownloader --source  telnet-0.17-48.el6.x86_64 --destdir /home/codes
+yum groupinstall "Development Tools"
+
+groupadd mysql
+useradd -r -g mysql mysql
+cmake .
+make
+make install
+cd /usr/local/mysql
+chown -R mysql .
+chgrp -R mysql .
+scripts/mysql_install_db --user=mysql
+chown -R root .
+chown -R mysql data
+bin/mysqld_safe --user=mysql &
+cp support-files/mysql.server /etc/init.d/mysqld
+
+git clone https://github.com/letsencrypt/letsencrypt
+cd letsencrypt
+./letsencrypt-auto certonly --standalone --email 38945787@qq.com -d 30igo.com -d www.30igo.com
+
+/etc/letsencrypt/keys/0000_key-certbot.pem                           │  
+Creating CSR: /etc/letsencrypt/csr/0000_csr-certbot.pem 
+
+./letsencrypt-auto certonly --renew-by-default --email 38945787@qq.com -d 30igo.com -d www.30igo.com
+
+https://www.openssl.org/source/openssl-1.1.0c.tar.gz
+
+export https_proxy="http://72.55.174.166:8888/"
+
+AppID: wxd7289bd50b85898d
+AppSecret: c73cfb1e5c2f950a9f0f7548fff1df6e
+
+
+VPN类型： L2TP
+
+服务器IP
+72.55.174.166
+
+用户名
+l2tp-vpn
+
+密码
+gatorwatch123
+
+共享密钥
+gatorwatch123
+
+0 */2 * * * service ipsec restart; service xl2tpd restart
+
+socket默认缓冲区大小：
+Windows XP - 读写 8K
+mac osx 10.12 - 读写 128K
+Linux Centos - sndbuf: 16k, rcvbuf: 87380 字节， 约85k(不是1024整数倍) 
+
+53,205,75
+35CD4B
+
+ELECTRON_MIRROR=http://npm.taobao.org/mirrors/electron/ npm install --save-dev  electron electron-reload electron-packager babel babelify babel-preset-es2015 babel-preset-react babel-plugin-transform-es2015-spread browserify watchify
+
+babel babel-core babel-preset-es2015 babel-preset-react css-loader style-loader less-loader babel-loader webpack copy-webpack-plugin electron react react-dom
+
+echo 'electron electron-reload electron-packager babel babelify babel-preset-es2015 babel-preset-react babel-plugin-transform-es2015-spread browserify watchify' |awk '{print $1 "\n" $2 "\n"  $3 "\n" $4 "\n" $5 "\n" $6 "\n" $7 "\n" $8 "\n" $9 "\n" $10 "\n"}'
+
+echo 'babel babel-core babel-preset-es2015 babel-preset-react css-loader style-loader less-loader babel-loader webpack copy-webpack-plugin electron react react-dom' |awk '{print $1 "\n" $2 "\n"  $3 "\n" $4 "\n" $5 "\n" $6 "\n" $7 "\n" $8 "\n" $9 "\n" $10 "\n" $11 "\n" $12 "\n" $13 "\n" }'
+
+pm2 start app.js -i max
+
+BM-2cVDWLoWHi7An6y3N27DymgsJ1n4XdUHDu
+
+黑马28期Android全套视频无加密完整版
+
+
+非常好的学习资料，本人当时就是看的这套视频开始搞Android开发的
+
+
+从基础到实战项目 边看边敲代码 非常爽的一种体验
+
+
+视频打包下载地址【回复本帖可见】：
+本帖隐藏的内容
+
+链接: https://pan.baidu.com/s/1eSPtr14 密码: u9hq
+
+
+下载后，压缩包的解压密码：www.mfhk8.com
+
+修改hosts文件刷新生效：
+sudo dscacheutil -flushcache
+
+http://blog.kazaff.me/2015/12/21/React-Native-Android%E5%B0%8F%E7%BB%93/
+###关于height
+
+很多时候，这都是一个不折不扣的大坑，比方说当你Image加载一个网络图片时，如果你不给该Image设置width和height，那你将什么都看不到。这还不算，当你使用ListView时如果该组件同时存在一个兄弟元素，那么此时ListView必须设置height，否则你会发现它不再响应用户的滚动操作。。。
+
+###关于Fetch
+
+当你试图提交附件表单数据的时候，请一定要使用FormData对象将数据包裹，这应该算不上什么太古怪的事儿～
+
+如果你只是普通的json提交，就按照官方例子来做：
+
+
+https://github.com/shevawen/react-native-weather-app.git
+https://github.com/fraserxu/shenjs.git
+https://github.com/soliury/noder-react-native.git
+https://github.com/qddegtya/A-ReactNative-TesterHome.git
+https://github.com/7kfpun/FinanceReactNative.git
+https://github.com/kazaff/ZhuiYuanDemo.git
+https://github.com/liuchungui/rn_bycloud.git  #时间线、评星
+https://github.com/ptmt/react-native-macos.git
+https://github.com/decosoftware/deco-ide.git
+
+http://service.gatorcn.com/tracker/web/index.php?r=app/service/voiceng&SystemNo=[SystemNo]&fileName=[filename]&familyno=[familyno]&time=[time]&access-token=[accessToken]
+http://184.107.50.180:8012/GetChatInfo?systemno=[systemno]&time=[time]
+
+http://service.gatorcn.com/tracker/web/upload/minichat/app/[system]/[time].mp3
+
+
+mac XP虚拟机龙天播放注册码：
+机器码：8315001567694222551561232213726676525317
+用户名：uid65169qq2421714592
+注册码：
+    1834976890
+    1760069108
+    8758511480
+    4823505921
+    2131259160
+    4536244702
+    9444756065
+    2298829574
+    3492129638
+    3358547316
+    4840569185
+    9391877301
+    6424684804
+    2057038299
+    6503780966
+    7013698202
+    4732389990
+    9229
+    1300709249
+    2430441311
+    3618214219
+    5171218212
+    2512540731
+    9809416413
+    9092133254
+    1782551971
+    7022021024
+    3251062199
+    0952091420
+    8813225320
+    6133197216
+    2172112502
+    5506219509
+    2215142094
+    1292541972
+    5419722017
+    3162242143
+    0742010432
+    2220214019
+    2046155189
+    239
+    18462111
+
+
+set-coredump.sh
+#!/bin/bash
+
+### Filename: coredumpshell.sh
+### Description: enable coredump and format the name of core file on centos system
+
+# enable coredump whith unlimited file-size for all users
+echo -e "\n# enable coredump whith unlimited file-size for all users\n* soft core unlimited" >> /etc/security/limits.conf
+
+# set the path of core file with permission 777 
+#cd /mydata && mkdir corefile && chmod 777 corefile
+
+# format the name of core file.   
+# %% – 符号%
+# %p – 进程号
+# %u – 进程用户id
+# %g – 进程用户组id
+# %s – 生成core文件时收到的信号
+# %t – 生成core文件的时间戳(seconds since 0:00h, 1 Jan 1970)
+# %h – 主机名
+# %e – 程序文件名
+echo -e "core-%e-%s-%u-%g-%p-%t" > /proc/sys/kernel/core_pattern
+
+# suffix of the core file name
+echo -e "1" > /proc/sys/kernel/core_uses_pid
+
+http://service.gatorcn.com/tracker/web/index.php?r=app/service/test&SystemNo=93060635292&access-token=-tDDHsuXTBiyZTF67ItIXPvNf7Z6Rcx8
+
+
+./configure --with-http_ssl_module --with-http_realip_module --with-http_addition_module --with-http_sub_module --with-http_dav_module --with-http_flv_module --with-http_mp4_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_random_index_module --with-http_secure_link_module --with-http_stub_status_module --with-http_auth_request_module --with-mail --with-mail_ssl_module --with-file-aio --with-ipv6 --with-http_v2_module 
+
+服务器 139.199.14.35
+用户名 upload
+密码  dericxu@2017
+upload
+dericxu@2017
+
+ps -ef | grep redis-server | grep -v grep | awk '{print $2}'
+
+redis-cli -p 6380 -a 'AoyQ1935yJaFGGJsnV2Z4O0Zf615A^&v'  --eval redis-ping.lua 
+
+redis.call('select', 8);
+
+php /home/work/lwk/batch-set-server-device.php 93060743534 GTI3
+
+redis-cli -p 6380 -a 'AoyQ1935yJaFGGJsnV2Z4O0Zf615A^&v' --eval /home/work/lwk/datadel.lua  93060743534 ; php /home/work/lwk/del-device-data.php 93060743534
+
+
+问题列表：
+1. 修改安全区域失败时，不提示出错，并且UI执行删除操作
+2. 智能定位一分钟的位置距离超过1800米的判断错误
+3. 上一次如果是纯LBS定位，则直接显示LBS定位和精确度，而不显示为智能定位
+4. 国外服务器后台脚本添加EPO更新
+
+
+root
+LMyu19^uaHQ#S4IIqnYhoFTf
+
+
+work
+zNPPv6EE6bTMc93z9d@iKzc2
