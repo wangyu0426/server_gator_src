@@ -1,7 +1,7 @@
 package tcpserver
 
 import (
-	"../logger"
+	"../logging"
 	"../svrctx"
 	"../proto"
 	"net"
@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	MsgHeaderSize = 5
+	MsgHeaderSize = 24
 	MsgMinSize = 25
 )
 
@@ -22,7 +22,7 @@ var addConnChan chan *Connection
 var delConnChan chan *Connection
 
 func init()  {
-	logger.Log("tcpserver init")
+	logging.Log("tcpserver init")
 	addConnChan = make(chan *Connection, 1024)
 	delConnChan = make(chan *Connection, 1024)
 }
@@ -31,13 +31,13 @@ func init()  {
 func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	tcpaddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.Port ))
 	if err != nil {
-		logger.Log("resolve tcp address failed, " + err.Error())
+		logging.Log("resolve tcp address failed, " + err.Error())
 		os.Exit(1)
 	}
 
 	listener, err := net.ListenTCP("tcp", tcpaddr)
 	if err != nil {
-		logger.Log("listen tcp address failed, " + err.Error())
+		logging.Log("listen tcp address failed, " + err.Error())
 		os.Exit(1)
 	}
 
@@ -55,44 +55,45 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		for   {
 			select {
 			case connAdd:=<-addConnChan:
-				logger.Log("new connection added")
+				logging.Log("new connection added")
 				TcpClientTable[connAdd.imei] = connAdd
 			case connDel := <-delConnChan:
 				if connDel == nil {
-					logger.Log("main lopp exit, connection manager goroutine exit")
+					logging.Log("main lopp exit, connection manager goroutine exit")
 					return
 				}
 
 				_, ok := TcpClientTable[connDel.imei]
 				if ok {
+					connDel.SetClosed()
 					close(connDel.requestChan)
 					close(connDel.responseChan)
 					close(connDel.closeChan)
 					connDel.conn.Close()
 
 					delete(TcpClientTable, connDel.imei);
-					logger.Log("connection deleted from TcpClientTable")
+					logging.Log("connection deleted from TcpClientTable")
 				}else {
-					logger.Log("will delete connection from TcpClientTable, but connection not found")
+					logging.Log("will delete connection from TcpClientTable, but connection not found")
 				}
 			case msg := <-serverCtx.TcpServerChan:
 				if msg == nil {
-					logger.Log("main lopp exit, connection manager goroutine exit")
+					logging.Log("main lopp exit, connection manager goroutine exit")
 					return
 				}
 
-				if msg.From == proto.MsgFromAppServer{
-					logger.Log("msg from app: " + string(msg.Data))
+				if msg.Header.Header.From == proto.MsgFromAppToAppServer{
+					logging.Log("msg from app: " + string(msg.Data))
 				}else {
-					logger.Log("msg from tcp: " + string(msg.Data))
+					logging.Log("msg from tcp: " + string(msg.Data))
 				}
 
-				c, ok := TcpClientTable[msg.Imei]
+				c, ok := TcpClientTable[msg.Header.Header.Imei]
 				if ok {
 					c.responseChan <- msg
-					logger.Log("send app data to write routine")
+					logging.Log("send app data to write routine")
 				}else {
-					logger.Log("will send app data to tcp connection from TcpClientTable, but connection not found")
+					logging.Log("will send app data to tcp connection from TcpClientTable, but connection not found")
 				}
 			}
 		}
@@ -105,7 +106,7 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		if err != nil {
 			err_ := err.(*net.OpError)
 			if  strings.Contains(err_.Err.Error(), "timeout") == false {
-				logger.Log("accept connection failed, " + err.Error())
+				logging.Log("accept connection failed, " + err.Error())
 				return
 			}else{
 				continue
@@ -118,37 +119,37 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		//for reading
 		go func(c *Connection) {
 			defer c.closeOnce.Do(func() {
-				logger.Log("client connection closed")
+				logging.Log("client connection closed")
 				delConnChan <- c
 			})
 
-			logger.Log("new connection from: " +  c.conn.RemoteAddr().String())
+			logging.Log("new connection from: " +  c.conn.RemoteAddr().String())
 
 			for  {
 				dataSize := uint16(0)
-				recvSizeBuf := make([]byte, MsgHeaderSize)
+				headerBuf := make([]byte, MsgHeaderSize)
 
 				c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
-				if _, err := io.ReadFull(c.conn, recvSizeBuf); err != nil {
-					logger.Log("recv MsgHeaderSize bytes header failed, " + err.Error())
+				if _, err := io.ReadFull(c.conn, headerBuf); err != nil {
+					logging.Log("recv MsgHeaderSize bytes header failed, " + err.Error())
 					break
 				}
 
-				logger.Log("recv: " + string(recvSizeBuf))
+				logging.Log("recv: " + string(headerBuf))
 
-				if recvSizeBuf[0] != '(' {
-					logger.Log("bad format of data packet, it must begin with (")
+				if headerBuf[0] != '(' {
+					logging.Log("bad format of data packet, it must begin with (")
 					break
 				}
 
-				num, _ := strconv.ParseUint("0x" + string(recvSizeBuf[1:]), 0, 0)
+				num, _ := strconv.ParseUint("0x" + string(headerBuf[1:5]), 0, 0)
 				dataSize = uint16(num)
 				if dataSize < MsgMinSize {
-					logger.Log(fmt.Sprintf("data size in header is bad of  %d, less than %d", dataSize, MsgMinSize))
+					logging.Log(fmt.Sprintf("data size in header is bad of  %d, less than %d", dataSize, MsgMinSize))
 					break
 				}
 
-				logger.Log("data size: " + fmt.Sprintf("%d", dataSize))
+				logging.Log("data size: " + fmt.Sprintf("%d", dataSize))
 
 				bufSize := dataSize - MsgHeaderSize
 				dataBuf := make([]byte, bufSize)
@@ -162,19 +163,49 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 							break
 						}
 					}else {
-						logger.Log("recv data failed, " + err.Error())
-						return
+						logging.Log("recv data failed, " + err.Error())
+						break
 					}
 				}
 
-				if dataBuf[bufSize - 1] != ')' {
-					logger.Log("bad format of data packet, it must end with )")
+				//记录收到的是些什么数据
+				logging.Log(fmt.Sprint(dataBuf))
+
+				if recvOffset == bufSize && dataBuf[bufSize - 1] != ')' {
+					logging.Log("bad format of data packet, it must end with )")
 					break
 				}
 
-				//包接收完整，开始进行业务逻辑处理
-				logger.Log(string(dataBuf))
-				c.requestChan<-&proto.MsgData{bufSize, proto.MsgFromTcpServer, 0, 0,  dataBuf}
+				//将IMEI和cmd解析出来
+				imei, _ := strconv.ParseUint(string(headerBuf[5: 20]), 0, 0)
+				cmd := string(headerBuf[20: 24])
+
+				// 消息接收不完整，如果是微聊（BP34）等需要支持续传的请求，
+				// 则将当前不完整的数据加入续传队列，等待下一次连接以后进行续传
+				// 否则，为普通命令请求如BP01，BP09等，直接丢弃并关闭连接
+				if recvOffset != bufSize && cmd != proto.StringCmd(proto.DRT_SEND_MINICHAT) {
+					break  //退出循环和go routine，连接关闭
+				}
+
+				msg := &proto.MsgData{}
+				msg.Header.Header.Version = proto.MSG_HEADER_VER_EX
+				msg.Header.Header.Size = bufSize
+				msg.Header.Header.From = proto.MsgFromDeviceToTcpServer
+				msg.Header.Header.ID = proto.NewMsgID()
+				msg.Header.Header.Imei = imei
+				msg.Header.Header.Cmd = proto.IntCmd(cmd)
+				msg.Data = dataBuf[0: recvOffset] //不包含头部24字节
+				if  msg.Header.Header.Cmd ==  proto.DRT_SEND_MINICHAT {
+					msg.Header.Header.Status = 1
+				}else{
+					msg.Header.Header.Status = 0
+				}
+
+				// 包可能接收未完整，但此时可以开始进行业务逻辑处理
+				// 目前所有头部信息都已准备好，业务处理模块只需处理与断点续传相关逻辑
+				// 以及命令的实际逻辑
+				c.requestChan <- msg
+
 			}
 
 		}(c)
@@ -184,11 +215,11 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			for {
 				select {
 				case <-c.closeChan:
-					logger.Log("business goroutine exit")
+					logging.Log("business goroutine exit")
 					return
 				case data := <-c.requestChan:
 					if data == nil {
-						logger.Log("connection closed, business goroutine exit")
+						logging.Log("connection closed, business goroutine exit")
 						return
 					}
 
@@ -202,16 +233,18 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			for   {
 				select {
 				case <-c.closeChan:
-					logger.Log("write goroutine exit")
+					logging.Log("write goroutine exit")
 					return
 				case data := <-c.responseChan:
-					if data == nil {
-						logger.Log("connection closed, write goroutine exit")
+					if data == nil ||  c.IsClosed() { //连接关闭了，这里需要将响应数据推入续传队列
+						logging.Log("connection closed, write goroutine exit")
+
+						//连接关闭了，这里需要将响应数据推入续传队列
 						return
 					}
 
-					if _, err := c.conn.Write([]byte(data.Data)); err != nil {
-						logger.Log("send data to client failed, " + err.Error())
+					if n, err := c.conn.Write([]byte(data.Data)); err != nil {
+						logging.Log(fmt.Sprintf("send data to client failed: %s,  %d bytes sent" + err.Error(), n))
 					}
 				}
 			}

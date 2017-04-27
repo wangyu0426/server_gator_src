@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
 	"../svrctx"
-	"../logger"
+	"../logging"
 	"fmt"
 	"os"
 )
@@ -28,15 +28,15 @@ func init()  {
 			svrctx.Get().Dbconfig.DBHost,
 			svrctx.Get().Dbconfig.DBPort,
 			svrctx.Get().Dbconfig.DBName, i)
-		logger.Log("connect mysql string: " + strConn)
+		logging.Log("connect mysql string: " + strConn)
 		db, err := sql.Open("mysql", strConn)
 
 		if err != nil {
-			logger.Log(fmt.Sprintf("connect mysql db %s%02d failed", svrctx.Get().Dbconfig.DBName, i) + err.Error())
+			logging.Log(fmt.Sprintf("connect mysql db %s%02d failed", svrctx.Get().Dbconfig.DBName, i) + err.Error())
 			os.Exit(1)
 		}
 
-		logger.Log(fmt.Sprintf("connect mysql db %s%02d OK", svrctx.Get().Dbconfig.DBName, i))
+		logging.Log(fmt.Sprintf("connect mysql db %s%02d OK", svrctx.Get().Dbconfig.DBName, i))
 		defer db.Close()
 
 		createTables(db)
@@ -78,17 +78,17 @@ func createTables(db *sql.DB)  {
 			}
 
 			strSQL += "FUin)) ENGINE=INNODB;"
-			logger.Log(strSQL)
+			//logging.Log(strSQL)
 
-			result, err := db.Exec(strSQL)
+			_, err := db.Exec(strSQL)
 			if err != nil {
-				logger.Log("mysql exec failed, " + err.Error())
+				logging.Log("mysql exec failed, " + err.Error())
 				os.Exit(1)
 			}
 
-			lastId, _ := result.LastInsertId()
-			affectedRows, _ := result.RowsAffected()
-			logger.Log(fmt.Sprintf("last id inserted:  %d, RowsAffected: %d", lastId,  affectedRows))
+			//lastId, _ := result.LastInsertId()
+			//affectedRows, _ := result.RowsAffected()
+			//logging.Log(fmt.Sprintf("last id inserted:  %d, RowsAffected: %d", lastId,  affectedRows))
 		}
 	}
 }

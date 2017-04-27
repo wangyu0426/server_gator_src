@@ -37,6 +37,7 @@ type  DBConfig struct {
 type ServerContext struct {
 	WaitLock      *sync.WaitGroup
 	ProcessName   string
+	MasterListenAddrPort string
 	BindAddr      string
 	Port          uint16
 	WSPort        uint16
@@ -44,6 +45,9 @@ type ServerContext struct {
 	RecvTimeout   time.Duration
 	RedisAddr     string
 	RedisPort     uint16
+	RedisPassword string
+	RedisDeviceMQKeyPrefix string
+	RedisAppMQKeyPrefix string
 
 	PasswordSalt  string
 	SessionSecret string
@@ -59,6 +63,8 @@ var serverCtx ServerContext
 func init()  {
 	fmt.Println("server contextinit...")
 	serverCtx.ProcessName = "go-server"
+	serverCtx.MasterListenAddrPort = "localhost:9015"
+
 	serverCtx.BindAddr = "0.0.0.0"
 	serverCtx.Port = 7015
 	serverCtx.WSPort = 8015
@@ -68,6 +74,9 @@ func init()  {
 
 	serverCtx.RedisAddr = "127.0.0.1"
 	serverCtx.RedisPort = 6379
+	serverCtx.RedisPassword = ""
+	serverCtx.RedisDeviceMQKeyPrefix = "mq:device:"
+	serverCtx.RedisAppMQKeyPrefix = "mq:app:"
 
 	hs := sha1.New()
 	hs.Write([]byte("service.gatorcn.com"))

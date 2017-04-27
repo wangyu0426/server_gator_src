@@ -1,7 +1,7 @@
 package appserver
 
 import (
-	"../logger"
+	"../logging"
 	"../svrctx"
 	"../models"
 
@@ -12,13 +12,13 @@ import (
 )
 
 func init() {
-	logger.Log("appserver init")
+	logging.Log("appserver init")
 	models.PrintSelf()
 }
 
 func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	app := iris.New()
-	app.Adapt(iris.DevLogger())
+	//app.Adapt(iris.DevLogger())
 	app.Adapt(httprouter.New())
 	ws := websocket.New(websocket.Config{Endpoint: "/wsapi"})
 	app.Adapt(ws)
@@ -27,16 +27,16 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 }
 
 func OnClientConnected(c websocket.Connection)  {
-	logger.Log("websocket connected: " + c.Context().RemoteAddr() + "Client ID: " + c.ID())
+	logging.Log("websocket connected: " + c.Context().RemoteAddr() + "Client ID: " + c.ID())
 	c.OnMessage(func(data []byte) {
 		message := string(data)
-		logger.Log("recv from client: " + message)
+		logging.Log("recv from client: " + message)
 		c.EmitMessage([]byte("Message from: " + c.ID() + "-> " + message)) // broadcast to all clients except this
 		//c.EmitMessage([]byte("Me: " + message))                                                    // writes to itself
 	})
 
 	c.OnDisconnect(func() {
-		logger.Log("websocket disconnected: " + c.Context().RemoteAddr() + "Client ID: " + c.ID())
+		logging.Log("websocket disconnected: " + c.Context().RemoteAddr() + "Client ID: " + c.ID())
 	})
 
 }

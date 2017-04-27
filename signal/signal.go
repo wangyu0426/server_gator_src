@@ -2,9 +2,9 @@ package signal
 
 import (
 	"../svrctx"
-	"../logger"
+	"../logging"
 )
 
 func init()  {
-	logger.Log("signal package init for " + svrctx.Get().ProcessName)
+	logging.Log("signal package init for " + svrctx.Get().ProcessName)
 }

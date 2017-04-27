@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/satori/go.uuid"
-	"../logger"
+	"../logging"
 	"fmt"
 )
 
@@ -33,9 +33,9 @@ func (u *User) Update(db *sql.DB, id uint64) (errcode int) {
 }
 
 func (u *User) Register(db *sql.DB, name, passwordMD5 string) ( errcode int) {
-	logger.Log(fmt.Sprint(db, name, passwordMD5))
+	logging.Log(fmt.Sprint(db, name, passwordMD5))
 	if db == nil || name == "" || passwordMD5 == "" {
-		logger.Log("bad params")
+		logging.Log("bad params")
 		errcode = BadParams
 		return
 	}
@@ -59,9 +59,9 @@ func (u *User) Register(db *sql.DB, name, passwordMD5 string) ( errcode int) {
 }
 
 func (u *User) Login(db *sql.DB, name, passwordMD5 string) (errcode int) {
-	logger.Log(fmt.Sprint(db, name, passwordMD5))
+	logging.Log(fmt.Sprint(db, name, passwordMD5))
 	if db == nil || name == "" || passwordMD5 == "" {
-		logger.Log("bad params")
+		logging.Log("bad params")
 		errcode = BadParams
 		return
 	}
