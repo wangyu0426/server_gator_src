@@ -21,7 +21,11 @@ func init()  {
 }
 
 func GetLogDir() string {
-	return "/home/work/logs"
+	if runtime.GOOS == "darwin" {
+		return "/Users/macpc/logs"
+	}else{
+		return "/home/work/logs"
+	}
 }
 
 func Log(msg string)  {
