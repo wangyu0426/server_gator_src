@@ -7,7 +7,7 @@ import (
 	"../logging"
 )
 
-func HandleRequest(tcpserverChan chan *MsgData, msg *MsgData)  {
+func HandleTcpRequest(tcpserverChan chan *MsgData, msg *MsgData)  {
 	imei, _ := strconv.ParseUint(string(msg.Data[0: ImeiLen]), 0, 0)
 	cmd := string(msg.Data[ImeiLen: ImeiLen + CmdLen])
 

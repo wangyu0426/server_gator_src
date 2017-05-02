@@ -16,6 +16,10 @@ type User struct {
 	logined bool
 }
 
+func (u *User) GetAccessToken()  string{
+	return u.accessToken
+}
+
 func (u *User) Add(db *sql.DB, name, passwordMD5 string) (errcode int) {
 	return
 }

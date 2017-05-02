@@ -9,6 +9,7 @@ import (
 
 type Connection struct {
 	closeFlag int32
+	saved bool
 	imei uint64
 	conn *net.TCPConn
 	closeOnce sync.Once

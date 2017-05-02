@@ -71,7 +71,7 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 					close(connDel.closeChan)
 					connDel.conn.Close()
 
-					delete(TcpClientTable, connDel.imei);
+					delete(TcpClientTable, connDel.imei)
 					logging.Log("connection deleted from TcpClientTable")
 				}else {
 					logging.Log("will delete connection from TcpClientTable, but connection not found")
@@ -114,7 +114,6 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		}
 
 		c := newConn(conn)
-		addConnChan <- c
 
 		//for reading
 		go func(c *Connection) {
@@ -187,6 +186,12 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 					break  //退出循环和go routine，连接关闭
 				}
 
+				c.imei = imei
+				if c.saved == false {
+					c.saved = true
+					addConnChan <- c
+				}
+
 				msg := &proto.MsgData{}
 				msg.Header.Header.Version = proto.MSG_HEADER_VER_EX
 				msg.Header.Header.Size = bufSize
@@ -223,7 +228,7 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 						return
 					}
 
-					proto.HandleRequest(serverCtx.TcpServerChan, data)
+					proto.HandleTcpRequest(serverCtx.TcpServerChan, data)
 				}
 			}
 		}(c)

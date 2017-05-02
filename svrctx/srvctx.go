@@ -54,8 +54,9 @@ type ServerContext struct {
 
 	Dbconfig      DBConfig
 
-	AppServerChan chan *proto.MsgData
+	AppServerChan chan *proto.AppMsgData
 	TcpServerChan chan *proto.MsgData
+	ServerExit chan struct{}
 }
 
 var serverCtx ServerContext
@@ -98,8 +99,10 @@ func init()  {
 		os.Exit(1)
 	}
 
-	serverCtx.AppServerChan = make(chan *proto.MsgData, 1024)
+	serverCtx.AppServerChan = make(chan *proto.AppMsgData, 1024)
 	serverCtx.TcpServerChan = make(chan *proto.MsgData, 1024)
+
+	serverCtx.ServerExit = make(chan struct{})
 
 	serverCtx.WaitLock = &sync.WaitGroup{}
 	serverCtx.WaitLock.Add(2)
