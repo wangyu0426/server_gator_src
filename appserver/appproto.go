@@ -77,17 +77,40 @@ func login(c *AppConnection, username, password string) bool {
 		c.user.Name = username
 		c.user.PasswordMD5 = password
 
-		for _, d := range devices.([]interface{}) {
+		devicesLocationURL := "http://184.107.50.180:8012/GetMultiWatchData?systemno="
+		for i, d := range devices.([]interface{}) {
 			device := d.(map[string]interface {})
 			imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
 			logging.Log("device: " + fmt.Sprint(imei))
 			c.imeis = append(c.imeis, imei)
+			devicesLocationURL += device["IMEI"].(string)[4:]
+
+			if i < len(devices.([]interface{})) - 1 {
+				devicesLocationURL += "|"
+			}
 		}
 
 		addConnChan <- c
-	}
 
-	appServerChan <- &proto.AppMsgData{Cmd: "login", Data: body, Conn: c}
+		logging.Log("devicesLocationURL: " + devicesLocationURL)
+
+		respLocation, err := http.Get(devicesLocationURL)
+		if err != nil {
+			logging.Log("get devicesLocationURL failed" + err.Error())
+		}
+
+		defer respLocation.Body.Close()
+
+		bodyLocation, err := ioutil.ReadAll(respLocation.Body)
+		if err != nil {
+			logging.Log("response has err, " + err.Error())
+		}
+
+		logging.Log("bodyLocation: " +  string(bodyLocation))
+
+		appServerChan <- &proto.AppMsgData{Cmd: "login",
+			Data: []byte(fmt.Sprintf("{\"user\": %s, \"location\": %s}", string(body), string(bodyLocation))), Conn: c}
+	}
 
 	return true
 }

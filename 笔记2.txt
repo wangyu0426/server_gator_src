@@ -591,6 +591,8 @@ mysql> select idx, dictionary.key, value, description  from dictionary where val
 
 mysql>
 
+http://184.107.50.180:8012/GetMultiWatchData?systemno=93060571505|93060571398
+
 curl "http://184.107.50.180:8012/GetMultiWatchData?systemno=93060571505&callback=angular.callbacks._m" -H "Accept: */*" -H "Connection: keep-alive" -H "Accept-Encoding: gzip, deflate, sdch" -H "Referer: http://localhost/" -H "Accept-Language: zh-CN,zh;q=0.8" -H "User-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.75 Safari/537.36" --compressed
 
 select idx, dictionary.key, value, description  from dictionary where value like '%.com%' or value like '%72.55.174.166%' or value like '%http%' or value like '%.php%';
