@@ -15,6 +15,7 @@ import (
 
 var addConnChan chan *AppConnection
 var delConnChan chan *AppConnection
+var AppClientTable = map[uint64]map[string]*AppConnection{}
 
 var appServerChan chan *proto.AppMsgData
 
@@ -25,16 +26,6 @@ func init() {
 	addConnChan = make(chan *AppConnection, 1024)
 	delConnChan = make(chan *AppConnection, 1024)
 
-	//resp, err := http.PostForm("http://service.gatorcn.com/tracker/web/index.php?r=app/auth/login",
-	//	url.Values{"username": {"2421714592@qq.com"}, "password": {"81dc9bdb52d04dc20036dbd8313ed055"}})
-	//if err != nil {
-	//	logging.Log("app login failed" + err.Error())
-	//}
-	//
-	//defer resp.Body.Close()
-	//
-	//body, err := ioutil.ReadAll(resp.Body)
-	//fmt.Println(string(body))
 	//a := StructTest2{"test",StructTest{"123", "456", "789", "abc"}}
 	//b, _ := json.Marshal(a)
 	//fmt.Println(string(b))
@@ -75,23 +66,64 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				for _, imei := range c.imeis {
 					subTable, ok := AppClientTable[imei]
 					if ok {
-						appClient, ok := subTable[c.user.GetAccessToken()]
+						_, ok := subTable[c.user.GetAccessToken()]
 						if ok {
-							appClient.SetClosed()
-							close(appClient.requestChan)
-							close(appClient.responseChan)
-							close(appClient.closeChan)
-							(*appClient.conn).Disconnect()
-
+							logging.Log("begin delete connection from AppClientTable")
 							delete(subTable, c.user.GetAccessToken())
 							logging.Log("connection deleted from AppClientTable")
 						} else {
 							logging.Log("will delete connection from appClientTable, but connection not found")
 						}
+
+						if len(subTable) == 0 {
+							delete(AppClientTable, imei)
+						}
 					}
 				}
-			case data := <- appServerChan:  //回发数据到APP
-				fmt.Println(data)
+				logging.Log("after delete conn:" + fmt.Sprint(AppClientTable))
+			case c := <- addConnChan:
+				if c == nil {
+					logging.Log("add a nil app connection, exit")
+					os.Exit(1)
+				}
+
+				for _, imei := range c.imeis {
+					_, ok := AppClientTable[imei]
+					if !ok {   //不存在，则首先创建新表，然后加入
+						AppClientTable[imei] = map[string]*AppConnection{}
+					}
+
+					AppClientTable[imei][c.user.GetAccessToken()] = c
+				}
+
+				logging.Log("after add conn:" + fmt.Sprint(AppClientTable))
+			case msg := <- appServerChan:  //回发数据到APP
+				if msg == nil {
+					logging.Log("send  a nil msg data to app , exit")
+					os.Exit(1)
+				}
+
+				logging.Log("send data to app:" + fmt.Sprint(string(msg.Cmd)))
+				//如果是login请求，则与设备无关,无须查表，直接发送数据到APP客户端
+				if msg.Cmd == "login" {
+					c := msg.Conn.(*AppConnection)
+					err :=(*c.conn).EmitMessage(msg.Data)
+					if err != nil {
+						logging.Log("send msg to app failed, " + err.Error())
+					}
+					break
+				}
+
+				//从表中找出所有跟此IMEI关联的APP客户端，并将数据发送至每一个APP客户端
+				subTable, ok := AppClientTable[msg.Imei]
+				if ok {
+					for _, c := range subTable{
+						err :=(*c.conn).EmitMessage(msg.Data)
+						if err != nil {
+							logging.Log("send msg to app failed, " + err.Error())
+						}
+					}
+				}
 			}
 		}
 	}()
@@ -111,7 +143,7 @@ func OnClientConnected(conn websocket.Connection)  {
 			case <- c.closeChan:
 				return
 			case data := <- c.requestChan:
-				proto.HandleAppRequest(appServerChan, data)
+				HandleAppRequest(c, appServerChan, data)
 			}
 		}
 	}(connection)
@@ -128,6 +160,12 @@ func OnClientConnected(conn websocket.Connection)  {
 	conn.OnDisconnect(func() {
 		logging.Log("websocket disconnected: " + conn.Context().RemoteAddr() + "Client ID: " + conn.ID())
 		c := conn.GetValue("ctx").(*AppConnection)
+		c.SetClosed()
+		close(c.requestChan)
+		close(c.responseChan)
+		close(c.closeChan)
+		(*c.conn).Disconnect()
+
 		delConnChan <- c
 	})
 

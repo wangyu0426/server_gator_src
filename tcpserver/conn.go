@@ -18,8 +18,6 @@ type Connection struct {
 	responseChan chan  *proto.MsgData
 }
 
-var TcpClientTable map[uint64]*Connection
-
 func newConn(conn *net.TCPConn)  *Connection{
 	return &Connection{
 		conn: conn,

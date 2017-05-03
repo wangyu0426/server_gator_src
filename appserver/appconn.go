@@ -1,11 +1,11 @@
 package appserver
 
 import (
-	"sync"
 	"../proto"
 	"../models"
 	"sync/atomic"
 	"gopkg.in/kataras/iris.v6/adaptors/websocket"
+	"sync"
 )
 
 type AppConnection struct {
@@ -19,8 +19,6 @@ type AppConnection struct {
 	requestChan chan  []byte
 	responseChan chan  *proto.AppMsgData
 }
-
-var AppClientTable map[uint64]map[string]*AppConnection
 
 func newAppConn(conn *websocket.Connection)  *AppConnection{
 	return &AppConnection{

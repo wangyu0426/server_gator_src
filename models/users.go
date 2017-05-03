@@ -9,15 +9,15 @@ import (
 )
 
 type User struct {
-	id uint64
-	name string
-	passwordMD5 string
-	accessToken string
-	logined bool
+	ID uint64
+	Name string
+	PasswordMD5 string
+	AccessToken string
+	Logined bool
 }
 
 func (u *User) GetAccessToken()  string{
-	return u.accessToken
+	return u.AccessToken
 }
 
 func (u *User) Add(db *sql.DB, name, passwordMD5 string) (errcode int) {
@@ -79,10 +79,10 @@ func (u *User) Login(db *sql.DB, name, passwordMD5 string) (errcode int) {
 
 	if errcode == ResultOK {
 		//查询到此用户，对比密码的哈希值
-		if passwordMD5 == u.passwordMD5 {
+		if passwordMD5 == u.PasswordMD5 {
 			//密码哈希值匹配，Login成功
 			uuid.NewV4()
-			u.logined =  true
+			u.Logined =  true
 			//u.accessToken =
 		}else {
 

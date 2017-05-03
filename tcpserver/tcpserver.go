@@ -20,6 +20,7 @@ const (
 
 var addConnChan chan *Connection
 var delConnChan chan *Connection
+var TcpClientTable = map[uint64]*Connection{}
 
 func init()  {
 	logging.Log("tcpserver init")

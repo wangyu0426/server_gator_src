@@ -99,6 +99,14 @@ type MsgData struct {
 	Data []byte
 }
 
+type AppMsgData struct {
+	ID uint64
+	Cmd string
+	Imei uint64
+	Data []byte
+	Conn interface{}
+}
+
 var offsets = []uint8{2, 2, 1, 1, 2, 8, 8, 4, 4, 4, 4}
 
 func init()  {
