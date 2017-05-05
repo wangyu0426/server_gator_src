@@ -1676,6 +1676,21 @@ redis-cli -p 6380 -a 'AoyQ1935yJaFGGJsnV2Z4O0Zf615A^&v' --eval /home/work/lwk/da
 3. 上一次如果是纯LBS定位，则直接显示LBS定位和精确度，而不显示为智能定位
 4. 国外服务器后台脚本添加EPO更新
 
+GT06 modified cmds:
+AP03(set time zone):  for BP00, server send data without msgID, and device will not reply ;
+             for setting from app, server send data with msgID , and device need reply an ack with the same msgID
+AP05(voice monitor):  ??
+AP12(device fetch  minichat from app): 
+                (1)should not use index for phone number, because some times the phone numbers may not synced,
+                     the next version app and server will not allow users to add the same famliy number which doesnot make sence.
+                (2)
+
+GT06 not supported cmds:
+AP04(get device version),
+AP07(clear device family numbers)
+AP08(for device reboot controll)
+AP10(for device QingJingMoShi)
+
 
 root
 LMyu19^uaHQ#S4IIqnYhoFTf
