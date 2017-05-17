@@ -12,26 +12,13 @@ import (
 	"../proto"
 )
 
-type FieldConfig struct {
-	FieldType string
-	FieldLen int
-}
-
-type TableConfig struct {
-	TableId uint32
-	TableShards uint32
-	KeyNum uint32
-	Fields []FieldConfig
-}
-
 type  DBConfig struct {
 	DBHost string
 	DBPort uint16
  	DBName string
 	DBUser string
 	DBPasswd string
-	DBShards uint32
-	Tables []TableConfig
+	TableName string
 }
 
 type ServerContext struct {

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"io/ioutil"
 	"../proto"
+	"../controllers"
 	"strconv"
 	"fmt"
 )
@@ -77,18 +78,18 @@ func login(c *AppConnection, username, password string) bool {
 		c.user.Name = username
 		c.user.PasswordMD5 = password
 
-		devicesLocationURL := "http://184.107.50.180:8012/GetMultiWatchData?systemno="
-		for i, d := range devices.([]interface{}) {
-			device := d.(map[string]interface {})
-			imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
-			logging.Log("device: " + fmt.Sprint(imei))
-			c.imeis = append(c.imeis, imei)
-			devicesLocationURL += device["IMEI"].(string)[4:]
-
-			if i < len(devices.([]interface{})) - 1 {
-				devicesLocationURL += "|"
-			}
-		}
+		//devicesLocationURL := "http://184.107.50.180:8012/GetMultiWatchData?systemno="
+		//for i, d := range devices.([]interface{}) {
+		//	device := d.(map[string]interface {})
+		//	imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
+		//	logging.Log("device: " + fmt.Sprint(imei))
+		//	c.imeis = append(c.imeis, imei)
+		//	devicesLocationURL += device["IMEI"].(string)[4:]
+		//
+		//	if i < len(devices.([]interface{})) - 1 {
+		//		devicesLocationURL += "|"
+		//	}
+		//}
 
 		addConnChan <- c
 
