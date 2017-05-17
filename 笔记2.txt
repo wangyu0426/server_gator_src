@@ -1691,6 +1691,7 @@ AP07(clear device family numbers)
 AP08(for device reboot controll)
 AP10(for device QingJingMoShi)
 
+configuration: --enable-libmp3lame --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-version3 --enable-shared
 
 root
 LMyu19^uaHQ#S4IIqnYhoFTf
