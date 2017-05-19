@@ -4,9 +4,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-	"encoding/json"
-	"io/ioutil"
-	"os"
 	"crypto/md5"
 	"crypto/sha1"
 	"../proto"
@@ -18,7 +15,6 @@ type  DBConfig struct {
  	DBName string
 	DBUser string
 	DBPasswd string
-	TableName string
 }
 
 type ServerContext struct {
@@ -39,7 +35,10 @@ type ServerContext struct {
 	PasswordSalt  string
 	SessionSecret string
 
-	Dbconfig      DBConfig
+	DbMysqlConfig      DBConfig
+	DbPgsqlConfig      DBConfig
+
+	UseGoogleMap  bool
 
 	AppServerChan chan *proto.AppMsgData
 	TcpServerChan chan *proto.MsgData
@@ -73,18 +72,35 @@ func init()  {
 	m := md5.New()
 	m.Write([]byte("com.gatorcn.service"))
 	serverCtx.SessionSecret = fmt.Sprintf("%x",m.Sum(nil))
-
-	jsonData, err := ioutil.ReadFile("./gts_db.json")
-	if err != nil {
-		fmt.Println("read gts_db.json failed", err)
-		os.Exit(1)
+	serverCtx.DbMysqlConfig = DBConfig{
+		DBHost:"127.0.0.1",
+		DBPort:3306,
+		DBName:"gpsbaseinfo",
+		DBUser:"root",
+		DBPasswd:"1234",
 	}
 
-	 err = json.Unmarshal(jsonData, &serverCtx.Dbconfig)
-	if err != nil {
-		fmt.Println("parse gts_db.json content failed", err)
-		os.Exit(1)
+	serverCtx.DbPgsqlConfig = DBConfig{
+		DBHost:"127.0.0.1",
+		DBPort:5432,
+		DBName:"gator_db",
+		DBUser:"postgres",
+		DBPasswd:"",
 	}
+
+	serverCtx.UseGoogleMap = true
+
+	//jsonData, err := ioutil.ReadFile("./gts_db.json")
+	//if err != nil {
+	//	fmt.Println("read gts_db.json failed", err)
+	//	os.Exit(1)
+	//}
+	//
+	// err = json.Unmarshal(jsonData, &serverCtx.Dbconfig)
+	//if err != nil {
+	//	fmt.Println("parse gts_db.json content failed", err)
+	//	os.Exit(1)
+	//}
 
 	serverCtx.AppServerChan = make(chan *proto.AppMsgData, 1024)
 	serverCtx.TcpServerChan = make(chan *proto.MsgData, 1024)

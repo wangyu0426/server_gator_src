@@ -7,9 +7,6 @@ import (
 	"net/url"
 	"io/ioutil"
 	"../proto"
-	"../controllers"
-	"strconv"
-	"fmt"
 )
 
 func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, data []byte) bool {
@@ -78,6 +75,8 @@ func login(c *AppConnection, username, password string) bool {
 		c.user.Name = username
 		c.user.PasswordMD5 = password
 
+		addConnChan <- c
+
 		//devicesLocationURL := "http://184.107.50.180:8012/GetMultiWatchData?systemno="
 		//for i, d := range devices.([]interface{}) {
 		//	device := d.(map[string]interface {})
@@ -91,26 +90,25 @@ func login(c *AppConnection, username, password string) bool {
 		//	}
 		//}
 
-		addConnChan <- c
+		//logging.Log("devicesLocationURL: " + devicesLocationURL)
+		//
+		//respLocation, err := http.Get(devicesLocationURL)
+		//if err != nil {
+		//	logging.Log("get devicesLocationURL failed" + err.Error())
+		//}
+		//
+		//defer respLocation.Body.Close()
 
-		logging.Log("devicesLocationURL: " + devicesLocationURL)
+		//bodyLocation, err := ioutil.ReadAll(respLocation.Body)
+		//if err != nil {
+		//	logging.Log("response has err, " + err.Error())
+		//}
+		//
+		//logging.Log("bodyLocation: " +  string(bodyLocation))
 
-		respLocation, err := http.Get(devicesLocationURL)
-		if err != nil {
-			logging.Log("get devicesLocationURL failed" + err.Error())
-		}
 
-		defer respLocation.Body.Close()
-
-		bodyLocation, err := ioutil.ReadAll(respLocation.Body)
-		if err != nil {
-			logging.Log("response has err, " + err.Error())
-		}
-
-		logging.Log("bodyLocation: " +  string(bodyLocation))
-
-		appServerChan <- &proto.AppMsgData{Cmd: "login",
-			Data: []byte(fmt.Sprintf("{\"user\": %s, \"location\": %s}", string(body), string(bodyLocation))), Conn: c}
+		//appServerChan <- &proto.AppMsgData{Cmd: "login",
+		//	Data: []byte(fmt.Sprintf("{\"user\": %s, \"location\": %s}", string(body), string(bodyLocation))), Conn: c}
 	}
 
 	return true

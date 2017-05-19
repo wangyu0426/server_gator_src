@@ -3,11 +3,20 @@ package proto
 import (
 	"encoding/binary"
 	"time"
+	"os"
+	"bufio"
+	"io"
+	"strconv"
+	"sync/atomic"
+	"sync"
 )
 
 const (
 	ImeiLen = 15
 	CmdLen = 4
+	MTKEPO_DATA_ONETIME =12
+	MTKEPO_SV_NUMBER   = 32
+	MTKEPO_RECORD_SIZE    =  72
 )
 
 const (
@@ -30,19 +39,33 @@ const (
 	DRT_MIN = iota
 
 	DRT_SYNC_TIME       // 同BP00，手表请求对时
-	DRT_SEND_LOCATION      // 同BP01，手表上报定位数据
-	DRT_SEND_ALARM         // 同BP02，手表上报报警数据
+	DRT_SEND_LOCATION      // 同BP30，手表上报定位(报警)数据
 	DRT_SEND_MINICHAT      // 同BP34，手表发送语音微聊
 	DRT_FETCH_MINICHAT     // 同BP07，手表获取语音微聊
 	DRT_FETCH_AGPS         // 同BP08，手表获取AGPS数据
 
 	DRT_MAX
 )
+ const (
+	CMD_AP00 = iota
+	CMD_AP01
+	CMD_AP02
+	CMD_AP03
+	CMD_AP04
+	CMD_AP05
+	CMD_AP06
+	CMD_AP07
+	CMD_AP08
+	CMD_AP09
+	 CMD_AP30
+ )
+
+
 
 var commands = []string{
 	"",
 	"BP00",
-	"BP01",
+	"BP30",
 	"BP02",
 	"BP34",
 	"BP07",
@@ -69,6 +92,9 @@ type MsgHeader struct {
                                  -1 - 表示此次请求非正常结束终止，不再进行后续通信*/
 
 	Cmd  uint16  /*消息的请求类型，等同于GT03上的BP01，BP09等命令*/
+
+	SrcIP    uint32   /*消息的源IP地址*/
+	DestIP  uint32  /*消息的目的IP地址*/
 
 	ID  uint64   /*消息ID，精确到4位毫秒的时间戳，用于唯一标识一条完整的消息请求。如果某个请求含有多个分片，
                                那么所有的分片都使用同一个msgId*/
@@ -107,7 +133,94 @@ type AppMsgData struct {
 	Conn interface{}
 }
 
+
+type IPInfo struct {
+	StartIP uint32
+	EndIP uint32
+	TimeZone int32
+}
+
+type EPOInfo struct {
+	EPOBuf[]byte
+}
+
+const (
+	DM_MIN = -1
+
+	DM_WH01 = iota
+	DM_GT03
+	DM_GTI3
+	DM_GT06
+
+	DM_MAX
+)
+
+const (
+	ALARM_INZONE = 1
+	ALARM_SOS = 2
+	ALARM_OUTZONE = 6
+	ALARM_BATTERYLOW = 8
+)
+
+const (
+	LBS_NORMAL = 0
+	LBS_GPS = 1 //gps直接定位
+	LBS_JIZHAN = 2 //基站定位
+	LBS_WIFI = 3  //WIFI 定位
+	LBS_SMARTLOCATION = 4  //智能定位
+	LBS_INVALID_LOCATION //无效定位
+)
+
+type SafeZone struct {
+	ZoneID int32
+	ZoneName string
+	LatiTude float64
+	LongTitude float64
+	Radiu uint32
+	WifiMACID string
+	Flags int32
+}
+
+type DeviceInfo struct {
+	Imei uint64
+	Model uint8
+	Company string
+	SafeZoneList []*SafeZone
+}
+
+type WIFIInfo  struct  {
+	WIFIName string
+	MacID [MAX_MACID_LEN]byte
+	Ratio int16
+}
+
+type LBSINFO struct  {
+	Mcc int32
+	Mnc int32
+	Lac int32
+	CellID int32
+	Signal int32
+}
+
+type WatchStatus struct {
+	i64DeviceID uint64
+	iLocateType int8
+	i64Time uint64
+	Step int32
+}
+
+
 var offsets = []uint8{2, 2, 1, 1, 2, 8, 8, 4, 4, 4, 4}
+var IPInfoList []*IPInfo
+var ipinfoListLock sync.RWMutex
+var StartGPSHour uint32
+var EPOInfoList []*EPOInfo
+var EpoInfoListLock sync.RWMutex
+var DeviceInfoList = map[uint64]*DeviceInfo{}
+var DeviceInfoListLock sync.RWMutex
+var company_blacklist = []string {
+	"UES",
+}
 
 func init()  {
 	//fmt.Println(time.Now().Unix())
@@ -117,6 +230,165 @@ func init()  {
 	//a[0] = '6'
 	//fmt.Println(string(a), string(b))
 	//os.Exit(1)
+
+	LoadIPInfosFromFile()
+	LoadEPOFromFile()
+	LoadDeviceInfoFromDB()
+}
+
+func LoadIPInfosFromFile()  {
+	rw,err := os.Open("./ipconfig.ini")
+	if err != nil {
+		panic(err)
+	}
+	defer rw.Close()
+	tmpIPInfoList := []*IPInfo{}
+	rb := bufio.NewReader(rw)
+	for {
+		line, _, err := rb.ReadLine()
+	 if err == io.EOF { break }
+		ipInfo := &IPInfo{}
+		wordCount, wordStart, ip := 0, -1, 0
+		for i := 0; i < len(line); i++ {
+			if i >= len(line) - 1 || line[i] == ' ' || line[i] == '\t' || line[i] == '\r' || line[i] == '\n' {
+				if wordStart != -1 {
+					if wordCount ==  0 {
+						ip, _ = strconv.Atoi(string(line[wordStart: i]))
+						ipInfo.StartIP = uint32(ip)
+						if ipInfo.StartIP <= 0 {
+							break
+						}
+					} else if wordCount == 1 {
+						ip, _ = strconv.Atoi(string(line[wordStart: i]))
+						ipInfo.EndIP = uint32(ip)
+						if ipInfo.EndIP <= 0 {
+							break
+						}
+					} else if wordCount == 2 {
+						 bSignal := true
+						szTimeZone :=  line[wordStart: i]
+						if i >= len(line) - 1{
+							szTimeZone = line[wordStart: i+1]
+						}
+
+						if (szTimeZone[0] == '-'){
+							bSignal = false
+						}
+
+						ipInfo.TimeZone = (int32(szTimeZone[1]) - '0')*1000 + (int32(szTimeZone[2]) - '0')*100 + (int32(szTimeZone[4]) - '0') * 10
+
+						if (!bSignal) {
+							ipInfo.TimeZone = 0 - ipInfo.TimeZone
+						}
+
+					}
+					wordStart = -1
+					wordCount++
+				}else{
+					continue
+				}
+			}else{
+				if wordStart == -1{
+					wordStart = i
+				}
+			}
+		}
+
+		tmpIPInfoList = append(tmpIPInfoList, ipInfo)
+	}
+
+	ipinfoListLock.Lock()
+	IPInfoList = tmpIPInfoList
+	ipinfoListLock.Unlock()
+}
+
+func GetTimeZone(uiIP uint32) int32 {
+	ipinfoListLock.RLock()
+	defer ipinfoListLock.RUnlock()
+
+	uiStartIP := IPInfoList[0].StartIP
+	uiEndIP := IPInfoList[len(IPInfoList) - 1].EndIP
+	if uiIP <= uiStartIP {
+		return IPInfoList[0].TimeZone
+	}
+
+	if uiIP >= uiEndIP {
+		return IPInfoList[len(IPInfoList) - 1].TimeZone
+	}
+
+	iLowIndex := 1
+	iHighIndex := (len(IPInfoList)) - 2
+	uiMidIndex := uint32(0)
+
+	for iLowIndex < iHighIndex {
+		uiMidIndex = uint32((iLowIndex + iHighIndex ) / 2)
+
+		if uiIP < IPInfoList[uiMidIndex].StartIP {
+			if uiIP >= IPInfoList[uiMidIndex - 1].StartIP {
+				return IPInfoList[uiMidIndex - 1].TimeZone
+			} else {
+				iHighIndex = int(uiMidIndex - 1)
+			}
+		} else {
+			if uiIP < IPInfoList[uiMidIndex + 1].StartIP {
+				return IPInfoList[uiMidIndex].TimeZone
+			} else {
+				iLowIndex = int(uiMidIndex + 1)
+			}
+		}
+	}
+
+	return -100
+}
+
+func LoadEPOFromFile()  {
+
+	mtk30,err := os.Open("./EPO/MTK30.EPO")
+	if err != nil {
+		panic(err)
+	}
+	defer mtk30.Close()
+
+	epo36h, err := os.OpenFile("./EPO/36H.EPO", os.O_APPEND | os.O_CREATE | os.O_WRONLY, 0666)
+	if err != nil {
+		panic(err)
+	}
+	defer epo36h.Close()
+
+	tmpEPOInfoList := []*EPOInfo{}
+	tmpStartGPSHour := uint32(0)
+	hourBuf := make([]byte, 4)
+	mtk30.Read(hourBuf)
+	tmpStartGPSHour = binary.LittleEndian.Uint32(hourBuf)
+	tmpStartGPSHour &= 0x00FFFFFF
+	atomic.StoreUint32(&StartGPSHour, tmpStartGPSHour)
+	mtk30.Seek(0,  os.SEEK_SET)
+
+	for  i := 0; i < MTKEPO_DATA_ONETIME; i++ {
+		epoInfo := &EPOInfo{}
+		epoInfo.EPOBuf = make([]byte, MTKEPO_SV_NUMBER*MTKEPO_RECORD_SIZE)
+		tmpEPOInfoList = append(tmpEPOInfoList, epoInfo)
+		mtk30.Read(tmpEPOInfoList[i].EPOBuf)
+		epo36h.Write(tmpEPOInfoList[i].EPOBuf)
+	}
+
+	EpoInfoListLock.Lock()
+	EPOInfoList = tmpEPOInfoList
+	EpoInfoListLock.Unlock()
+}
+
+func LoadDeviceInfoFromDB()  {
+	deviceInfo := &DeviceInfo{}
+	deviceInfo.Imei = 357593060571398
+	deviceInfo.Model = DM_GT06
+	deviceInfo.Company = "Caref Watch Co,.Ltd"
+
+	tmpDeviceInfoList := map[uint64]*DeviceInfo{}
+	tmpDeviceInfoList[deviceInfo.Imei] = deviceInfo
+
+	DeviceInfoListLock.Lock()
+	DeviceInfoList = tmpDeviceInfoList
+	DeviceInfoListLock.Unlock()
 }
 
 func IntCmd(cmd string) uint16 {
@@ -228,3 +500,29 @@ func Decode(data []byte)  (*MsgData) {
 	copy(msg.Data[0:], data[offset:])
 	return msg
 }
+
+func IsDeviceInCompanyBlacklist(imei uint64) bool{
+	DeviceInfoListLock.RLock()
+	defer DeviceInfoListLock.RUnlock()
+
+	deviceInfo, ok := DeviceInfoList[imei]
+	if ok {
+		for i := 0; i < len(company_blacklist); i++ {
+			if deviceInfo.Company == company_blacklist[i] {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func GetSafeZoneSettings(imei uint64)  []*SafeZone{
+	deviceInfo, ok := DeviceInfoList[imei]
+	if ok {
+		return deviceInfo.SafeZoneList
+	}
+
+	return nil
+}
+

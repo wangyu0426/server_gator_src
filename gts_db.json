@@ -4,5 +4,4 @@
     "DBName":"gator_db",
     "DBUser":"postgres",
     "DBPasswd":"1234",
-    "TableName":"device_location",
 }

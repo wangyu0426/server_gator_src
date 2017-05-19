@@ -1,4 +1,180 @@
+CREATE TABLE device_location
+(
+    imei bigint NOT NULL,
+    location_time  bigint NOT NULL,
+    lat real not null,  
+    lng real not null, 
+    data jsonb
+);
+
+CREATE INDEX idx_location_imei ON device_location(imei);
+CREATE INDEX idx_location_time ON device_location(location_time) ;
+CREATE INDEX idx_lat_lng  ON device_location USING gist(ll_to_earth(lat, lng));  
+
+
+create  table device_location_2017_05(
+  check(location_time>=20170501000000 and location_time<=20170531235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2017_05_imei ON device_location_2017_05(imei);
+CREATE INDEX idx_location_2017_05_time ON device_location_2017_05(location_time) ;
+CREATE INDEX idx_2017_05_lat_lng  ON device_location_2017_05 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2017_06(
+  check(location_time>=20170601000000 and location_time<=20170630235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2017_06_imei ON device_location_2017_06(imei);
+CREATE INDEX idx_location_2017_06_time ON device_location_2017_06(location_time) ;
+CREATE INDEX idx_2017_06_lat_lng  ON device_location_2017_06 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2017_07(
+  check(location_time>=20170701000000 and location_time<=20170731235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2017_07_imei ON device_location_2017_07(imei);
+CREATE INDEX idx_location_2017_07_time ON device_location_2017_07(location_time) ;
+CREATE INDEX idx_2017_07_lat_lng  ON device_location_2017_07 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2017_08(
+  check(location_time>=20170801000000 and location_time<=20170831235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2017_08_imei ON device_location_2017_08(imei);
+CREATE INDEX idx_location_2017_08_time ON device_location_2017_08(location_time) ;
+CREATE INDEX idx_2017_08_lat_lng  ON device_location_2017_08 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2017_09(
+  check(location_time>=20170901000000 and location_time<=20170930235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2017_09_imei ON device_location_2017_09(imei);
+CREATE INDEX idx_location_2017_09_time ON device_location_2017_09(location_time) ;
+CREATE INDEX idx_2017_09_lat_lng  ON device_location_2017_09 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2017_10(
+  check(location_time>=20171001000000 and location_time<=20171031235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2017_10_imei ON device_location_2017_10(imei);
+CREATE INDEX idx_location_2017_10_time ON device_location_2017_10(location_time) ;
+CREATE INDEX idx_2017_10_lat_lng  ON device_location_2017_10 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2017_11(
+  check(location_time>=20171101000000 and location_time<=20171130235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2017_11_imei ON device_location_2017_11(imei);
+CREATE INDEX idx_location_2017_11_time ON device_location_2017_11(location_time) ;
+CREATE INDEX idx_2017_11_lat_lng  ON device_location_2017_11 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2017_12(
+  check(location_time>=20171201000000 and location_time<=20171231235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2017_12_imei ON device_location_2017_12(imei);
+CREATE INDEX idx_location_2017_12_time ON device_location_2017_12(location_time) ;
+CREATE INDEX idx_2017_12_lat_lng  ON device_location_2017_12 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2018_01(
+  check(location_time>=20180101000000 and location_time<=20180131235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2018_01_imei ON device_location_2018_01(imei);
+CREATE INDEX idx_location_2018_01_time ON device_location_2018_01(location_time) ;
+CREATE INDEX idx_2018_01_lat_lng  ON device_location_2018_01 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2018_02(
+  check(location_time>=20180201000000 and location_time<=20180228235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2018_02_imei ON device_location_2018_02(imei);
+CREATE INDEX idx_location_2018_02_time ON device_location_2018_02(location_time) ;
+CREATE INDEX idx_2018_02_lat_lng  ON device_location_2018_02 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2018_03(
+  check(location_time>=20180301000000 and location_time<=20180331235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2018_03_imei ON device_location_2018_03(imei);
+CREATE INDEX idx_location_2018_03_time ON device_location_2018_03(location_time) ;
+CREATE INDEX idx_2018_03_lat_lng  ON device_location_2018_03 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2018_04(
+  check(location_time>=20180401000000 and location_time<=20180430235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2018_04_imei ON device_location_2018_04(imei);
+CREATE INDEX idx_location_2018_04_time ON device_location_2018_04(location_time) ;
+CREATE INDEX idx_2018_04_lat_lng  ON device_location_2018_04 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2018_05(
+  check(location_time>=20180501000000 and location_time<=20180531235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2018_05_imei ON device_location_2018_05(imei);
+CREATE INDEX idx_location_2018_05_time ON device_location_2018_05(location_time) ;
+CREATE INDEX idx_2018_05_lat_lng  ON device_location_2018_05 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2018_06(
+  check(location_time>=20180601000000 and location_time<=20180630235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2018_06_imei ON device_location_2018_06(imei);
+CREATE INDEX idx_location_2018_06_time ON device_location_2018_06(location_time) ;
+CREATE INDEX idx_2018_06_lat_lng  ON device_location_2018_06 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2018_07(
+  check(location_time>=20180701000000 and location_time<=20180731235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2018_07_imei ON device_location_2018_07(imei);
+CREATE INDEX idx_location_2018_07_time ON device_location_2018_07(location_time) ;
+CREATE INDEX idx_2018_07_lat_lng  ON device_location_2018_07 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2018_08(
+  check(location_time>=20180801000000 and location_time<=20180831235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2018_08_imei ON device_location_2018_08(imei);
+CREATE INDEX idx_location_2018_08_time ON device_location_2018_08(location_time) ;
+CREATE INDEX idx_2018_08_lat_lng  ON device_location_2018_08 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2018_09(
+  check(location_time>=20180901000000 and location_time<=20180931235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2018_09_imei ON device_location_2018_09(imei);
+CREATE INDEX idx_location_2018_09_time ON device_location_2018_09(location_time) ;
+CREATE INDEX idx_2018_09_lat_lng  ON device_location_2018_09 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2018_10(
+  check(location_time>=20181001000000 and location_time<=20181031235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2018_10_imei ON device_location_2018_10(imei);
+CREATE INDEX idx_location_2018_10_time ON device_location_2018_10(location_time) ;
+CREATE INDEX idx_2018_10_lat_lng  ON device_location_2018_10 USING gist(ll_to_earth(lat, lng)); 
+
+create  table device_location_2018_11(
+  check(location_time>=20181101000000 and location_time<=20181131235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2018_11_imei ON device_location_2018_11(imei);
+CREATE INDEX idx_location_2018_11_time ON device_location_2018_11(location_time) ;
+CREATE INDEX idx_2018_11_lat_lng  ON device_location_2018_11 USING gist(ll_to_earth(lat, lng));  
+
+create  table device_location_2018_12(
+  check(location_time>=20181201000000 and location_time<=20181231235959)
+)inherits(device_location);
+CREATE INDEX idx_location_2018_12_imei ON device_location_2018_12(imei);
+CREATE INDEX idx_location_2018_12_time ON device_location_2018_12(location_time) ;
+CREATE INDEX idx_2018_12_lat_lng  ON device_location_2018_12 USING gist(ll_to_earth(lat, lng)); 
+
+create table users 
+(
+  _id serial primary key not null,
+  data jsonb
+);
+
+create table devices 
+(
+  _id serial primary key not null,
+  data jsonb
+);
+
+create table companies 
+(
+  _id serial primary key not null,
+  data jsonb
+);
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+
 CREATE DATABASE bifang;
+
 create table users 
 (
 	_id serial primary key not null,
@@ -19,7 +195,7 @@ create unique index idx_username on users using btree ( jsonb_extract_path_text(
 
 
 CREATE INDEX idx_jsonb_mood  ON moods USING gin (data jsonb_path_ops);
-CREATE INDEX idx_jsonb_lat_lng  on moods USING gist(ll_to_earth(lat, lng));  
+CREATE INDEX idx_lat_lng  on moods USING gist(ll_to_earth(lat, lng));  
 
 
 /*插入记录*/  
