@@ -7,6 +7,8 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"../proto"
+	"github.com/jackc/pgx"
+	"os"
 )
 
 type  DBConfig struct {
@@ -15,6 +17,7 @@ type  DBConfig struct {
  	DBName string
 	DBUser string
 	DBPasswd string
+	DBPoolMaxConn int
 }
 
 type ServerContext struct {
@@ -37,6 +40,8 @@ type ServerContext struct {
 
 	DbMysqlConfig      DBConfig
 	DbPgsqlConfig      DBConfig
+
+	DBPool *pgx.ConnPool
 
 	UseGoogleMap  bool
 
@@ -86,9 +91,29 @@ func init()  {
 		DBName:"gator_db",
 		DBUser:"postgres",
 		DBPasswd:"",
+		DBPoolMaxConn: 1024,
 	}
 
 	serverCtx.UseGoogleMap = true
+
+	var err interface{}
+	pgconfig := pgx.ConnConfig{}
+	pgconfig.Host = serverCtx.DbPgsqlConfig.DBHost
+	pgconfig.Port = serverCtx.DbPgsqlConfig.DBPort
+	pgconfig.Database = serverCtx.DbPgsqlConfig.DBName
+	pgconfig.User = serverCtx.DbPgsqlConfig.DBUser
+	pgconfig.Password = serverCtx.DbPgsqlConfig.DBPasswd
+	serverCtx.DBPool, err = pgx.NewConnPool(pgx.ConnPoolConfig{ConnConfig: pgconfig,
+		MaxConnections: serverCtx.DbPgsqlConfig.DBPoolMaxConn,
+		AcquireTimeout: 0,
+	})
+
+	if err != nil {
+		fmt.Println("create pg connection pool failed, ", err)
+		os.Exit(1)
+	}else{
+		fmt.Println("create pg connection pool OK")
+	}
 
 	//jsonData, err := ioutil.ReadFile("./gts_db.json")
 	//if err != nil {

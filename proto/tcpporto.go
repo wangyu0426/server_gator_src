@@ -8,6 +8,8 @@ import (
 	"time"
 	"strings"
 	"unicode"
+	"math"
+	"github.com/jackc/pgx"
 )
 
 type ResponseItem struct {
@@ -20,22 +22,56 @@ type TPoint struct {
 	LongtiTude float64
 }
 
+type timestruct struct{
+	y, m, d, h, mi, s uint64
+}
 
+const (
+	DEVICE_DATA_LOCATION = iota
+	DEVICE_DATA_STATUS
+	DEVICE_DATA_BATTERY
+)
+
+type RequestContext struct {
+	Pgpool *pgx.ConnPool
+	WritebackChan chan *MsgData
+	Msg *MsgData
+	GetDeviceDataFunc  func (imei uint64)  LocationData
+	SetDeviceDataFunc  func (imei uint64, updateType int, deviceData LocationData)
+}
 
 type LocationData struct {
-	dataTime uint64
-	longtiTude float64
-	latitude float64
-	steps uint64
-	readflag uint8
-	locateType uint8
-	battery uint8
-	origBattery uint8
+	DataTime uint64
+	Lat float64
+	Lng float64
+	Steps uint64
+	Battery uint8
+	AlarmType uint8
+	LocateType uint8
+	ReadFlag uint8
+	ZoneAlarm uint8
+	ZoneIndex int32
+ 	ZoneName string
+
+	OrigBattery uint8
 	origBatteryOld uint8
-	alarm uint8
-	zoneAlarm uint8
-	zoneIndex int32
- 	zoneName string
+}
+
+type ChatInfo struct {
+	DateTime uint64
+	SenderType uint8
+	Sender []byte
+	ReceiverType uint8
+	Receiver []byte
+	ContentType uint8
+	Content []byte
+}
+
+type DeviceCache struct {
+	Imei uint64
+	CurrentLocation LocationData
+	AlarmCache []LocationData
+	ChatCache []ChatInfo
 }
 
 type GT06Service struct {
@@ -59,6 +95,7 @@ type GT06Service struct {
 	CELLID int32
 	RXLEVEL int32
 	rspList []*ResponseItem
+	reqCtx RequestContext
 }
 
 const DEVICEID_BIT_NUM = 15
@@ -70,14 +107,18 @@ const MAX_MACID_LEN = 17
 const MAX_WIFI_NUM = 6
 const MAX_LBS_NUM = 8
 
-func HandleTcpRequest(tcpserverChan chan *MsgData, msg *MsgData)  bool{
-	service := &GT06Service{}
+const PI  = 3.1415926
+const BASE_TITUDE  =1000000
+const EARTH_RADIUS = 6378.137
+
+func HandleTcpRequest(reqCtx RequestContext)  bool{
+	service := &GT06Service{reqCtx: reqCtx}
 	ret := service.PreDoRequest()
 	if ret == false {
 		return false
 	}
 
-	ret = service.DoRequest(msg)
+	ret = service.DoRequest(reqCtx.Msg)
 	if ret == false {
 		return false
 	}
@@ -88,7 +129,7 @@ func HandleTcpRequest(tcpserverChan chan *MsgData, msg *MsgData)  bool{
 	msgResp := &MsgData{Data: data}
 	msgResp.Header.Header.Imei = service.imei
 
-	tcpserverChan <- msgResp
+	reqCtx.WritebackChan <- msgResp
 	return true
 }
 
@@ -154,23 +195,23 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		bufOffset++
 		cLocateTag := msg.Data[bufOffset]
 		bufOffset += 2
-		service.cur.alarm = msg.Data[bufOffset] - '0'
+		service.cur.AlarmType = msg.Data[bufOffset] - '0'
 		bufOffset++
 
 		if msg.Data[bufOffset] != ',' {
 			szAlarm := []byte{msg.Data[bufOffset - 1], msg.Data[bufOffset]}
 			alarm, _ := strconv.ParseUint(string(szAlarm), 16, 0)
-			service.cur.alarm = uint8(alarm)
+			service.cur.AlarmType = uint8(alarm)
 			bufOffset++
 		}
 
 		bufOffset++
 		//steps
-		service.cur.steps, _ = strconv.ParseUint(string(msg.Data[bufOffset: bufOffset + 8]), 16, 0)
+		service.cur.Steps, _ = strconv.ParseUint(string(msg.Data[bufOffset: bufOffset + 8]), 16, 0)
 		bufOffset += 9
 
 		//battery
-		service.cur.origBattery = msg.Data[bufOffset]- '0'
+		service.cur.OrigBattery = msg.Data[bufOffset]- '0'
 		bufOffset += 2
 
 		//will need to send location
@@ -194,7 +235,7 @@ func (service *GT06Service)DoResponse() []byte  {
 
 
 func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool {
-	logging.Log(fmt.Sprintf("%d - begin: m_iAlarmStatu=%d", service.imei, service.cur.alarm))
+	logging.Log(fmt.Sprintf("%d - begin: m_iAlarmStatu=%d", service.imei, service.cur.AlarmType))
 	ret := true
 	GetSafeZoneSettings(service.imei)
 
@@ -225,34 +266,34 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 	}
 
 	logging.Log(fmt.Sprintf("%d - middle: m_iAlarmStatu=%d, parsed location:  m_DateTime=%d, m_lng=%f, m_lat=%f",
-		service.imei, service.cur.alarm, service.cur.dataTime, service.cur.longtiTude, service.cur.latitude))
+		service.imei, service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
 
-	if ret == false || service.cur.longtiTude == 0 && service.cur.latitude == 0 {
-		logging.Log(fmt.Sprintf("Error Locate(%d, %d, %d)", service.imei, service.cur.longtiTude, service.cur.latitude))
+	if ret == false || service.cur.Lng == 0 && service.cur.Lat== 0 {
+		logging.Log(fmt.Sprintf("Error Locate(%d, %d, %d)", service.imei, service.cur.Lng, service.cur.Lat))
 		return ret
 	}
 
-	if service.getSameWifi && service.cur.alarm <= 0  {
+	if service.getSameWifi && service.cur.AlarmType <= 0  {
 		logging.Log(fmt.Sprintf("return with: m_bGetSameWifi && m_iAlarmStatu <= 0(%d, %d, %d)",
-			service.imei, service.cur.latitude, service.cur.longtiTude))
+			service.imei, service.cur.Lat, service.cur.Lng))
 		return ret
 	}
 
 	//范围报警
 	ret = service.ProcessZoneAlarm()
-	if 0 == service.cur.alarm {
-		if service.cur.origBatteryOld > 2 && service.cur.origBattery <= 2  {
-			service.cur.alarm = ALARM_BATTERYLOW
+	if 0 == service.cur.AlarmType {
+		if service.cur.origBatteryOld > 2 && service.cur.OrigBattery <= 2  {
+			service.cur.AlarmType = ALARM_BATTERYLOW
 		}
-	} else if ALARM_BATTERYLOW == service.cur.alarm {
-		if service.cur.origBatteryOld <= 2 || service.cur.origBattery > 2  {
-			service.cur.alarm = 0
+	} else if ALARM_BATTERYLOW == service.cur.AlarmType {
+		if service.cur.origBatteryOld <= 2 || service.cur.OrigBattery > 2  {
+			service.cur.AlarmType = 0
 		}
 	}
 
-	logging.Log(fmt.Sprintf("end: m_iAlarmStatu=%d",  service.cur.alarm))
+	logging.Log(fmt.Sprintf("end: m_iAlarmStatu=%d",  service.cur.AlarmType))
 	logging.Log(fmt.Sprintf("Update database: DeviceID=%d, m_DateTime=%d, m_lng=%d, m_lat=%d",
-		service.imei, service.cur.dataTime, service.cur.longtiTude, service.cur.latitude))
+		service.imei, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
 
 	ret = service.WatchDataUpdateDB()
 	if ret == false {
@@ -260,7 +301,7 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 		return false
 	}
 
-	if service.cur.locateType != LBS_INVALID_LOCATION {
+	if service.cur.LocateType != LBS_INVALID_LOCATION {
 		//同时，把数据写入内存服务器
 		ret  = service.UpdateWatchData()
 		if ret == false  {
@@ -271,12 +312,12 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 		//更新电池状态
 		ret = service.UpdateWatchBattery()
 		if ret == false {
-			logging.Log(fmt.Sprintf("UpdateWatchBattery failed, battery=%d", service.cur.battery))
+			logging.Log(fmt.Sprintf("UpdateWatchBattery failed, battery=%d", service.cur.Battery))
 			return false
 		}
 	}
 
-	if service.cur.alarm > 0  {
+	if service.cur.AlarmType > 0  {
 		//推送报警
 		service.NotifyAlarmMsg()
 	}
@@ -365,9 +406,9 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	iTimeSec := service.GetIntValue(pszMsg[bufOffset: ], TIME_LEN)
 	bufOffset += TIME_LEN
 
-	iIOStatu := service.cur.origBattery - 2
+	iIOStatu := service.cur.OrigBattery - 2
 	if iIOStatu < 1 {
-		service.cur.alarm = ALARM_BATTERYLOW
+		service.cur.AlarmType = ALARM_BATTERYLOW
 		iIOStatu = 1
 	}
 
@@ -377,17 +418,18 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	} else {
 		now := time.Now()
 		year,mon,day := now.UTC().Date()
+		year = int(year / 100)
 		hour,min,sec := now.UTC().Clock()
 		i64Time = uint64(year) * uint64(10000000000) +  uint64(mon) * uint64(100000000) + uint64(day) * uint64(1000000) + uint64(hour * 10000 + min * 100 + sec)
 	}
 
-	service.cur.dataTime = i64Time
-	service.cur.longtiTude = float64(iLongtitude / 100000.0)
-	service.cur.latitude = float64(iLatitude / 100000.0)
-	service.cur.steps = uint64(iSpeed)
-	service.cur.readflag = 0
-	service.cur.battery = iIOStatu
-	service.cur.locateType = LBS_GPS
+	service.cur.DataTime = i64Time
+	service.cur.Lng = float64(iLongtitude / 100000.0)
+	service.cur.Lat = float64(iLatitude / 100000.0)
+	service.cur.Steps = uint64(iSpeed)
+	service.cur.ReadFlag = 0
+	service.cur.Battery = iIOStatu
+	service.cur.LocateType = LBS_GPS
 
 	return true
 }
@@ -412,11 +454,11 @@ func (service *GT06Service) ProcessWifiInfo(pszMsgBuf []byte) bool {
 	service.ParseWifiInfo(pszMsgBuf[bufOffset: ], &shBufLen)
 	bufOffset += shBufLen
 
-	service.cur.dataTime = i64Time
-	service.cur.battery = service.cur.origBattery - 2
-	if service.cur.battery < 1  {
-		service.cur.alarm = ALARM_BATTERYLOW
-		service.cur.battery = 1
+	service.cur.DataTime = i64Time
+	service.cur.Battery = service.cur.OrigBattery - 2
+	if service.cur.Battery < 1  {
+		service.cur.AlarmType = ALARM_BATTERYLOW
+		service.cur.Battery = 1
 	}
 
 	service.GetWatchDataInfo(service.imei)
@@ -425,12 +467,12 @@ func (service *GT06Service) ProcessWifiInfo(pszMsgBuf []byte) bool {
 		DeviceInfoListLock.RLock()
 		safeZones := GetSafeZoneSettings(service.imei)
 		if safeZones != nil {
-			service.cur.latitude = safeZones[service.wifiZoneIndex].LatiTude
-			service.cur.longtiTude = safeZones[service.wifiZoneIndex].LongTitude
+			service.cur.Lat = safeZones[service.wifiZoneIndex].LatiTude
+			service.cur.Lng = safeZones[service.wifiZoneIndex].LongTitude
 			service.accracy = 150
 
 			logging.Log(fmt.Sprintf("Get location frome home zone by home wifi: %f, %f",
-				service.cur.latitude, service.cur.longtiTude))
+				service.cur.Lat, service.cur.Lng))
 		}
 		DeviceInfoListLock.RUnlock()
 	} else {
@@ -442,9 +484,9 @@ func (service *GT06Service) ProcessWifiInfo(pszMsgBuf []byte) bool {
 		}
 	}
 
-	service.cur.steps = 0
-	service.cur.readflag = 0
-	service.cur.locateType = LBS_WIFI
+	service.cur.Steps = 0
+	service.cur.ReadFlag = 0
+	service.cur.LocateType = LBS_WIFI
 
 	service.UpdateLocationIntoDBCache()
 	return true
@@ -473,10 +515,10 @@ func (service *GT06Service) ProcessLBSInfo(pszMsgBuf []byte) bool {
 	iSecTime := service.GetIntValue(pszMsgBuf[bufOffset: ], TIME_LEN)
 	i64Time := uint64(iDayTime * 1000000 + iSecTime)
 
-	service.cur.battery = service.cur.origBattery - 2
-	if service.cur.battery < 1 {
-		service.cur.alarm = ALARM_BATTERYLOW
-		service.cur.battery = 1
+	service.cur.Battery = service.cur.OrigBattery - 2
+	if service.cur.Battery < 1 {
+		service.cur.AlarmType = ALARM_BATTERYLOW
+		service.cur.Battery = 1
 	}
 
 	if service.lbsNum <= 1 {
@@ -501,10 +543,10 @@ func (service *GT06Service) ProcessLBSInfo(pszMsgBuf []byte) bool {
 		return false
 	}
 
-	service.cur.dataTime = i64Time
-	service.cur.steps = 0
-	service.cur.readflag  = 0
-	service.cur.locateType = uint8(service.accracy / 10) //LBS_JIZHAN;
+	service.cur.DataTime = i64Time
+	service.cur.Steps = 0
+	service.cur.ReadFlag  = 0
+	service.cur.LocateType = uint8(service.accracy / 10) //LBS_JIZHAN;
 
 	service.UpdateLocationIntoDBCache();
 
@@ -538,11 +580,11 @@ func (service *GT06Service) ProcessMutilLocateInfo(pszMsgBuf []byte) bool {
 	service.ParseWifiInfo(pszMsgBuf[bufOffset: ], &shBufLen)
 	bufOffset += shBufLen
 
-	service.cur.dataTime = i64Time
-	service.cur.battery = service.cur.origBattery - 2
-	if service.cur.battery < 1 {
-		service.cur.alarm = ALARM_BATTERYLOW
-		service.cur.battery = 1
+	service.cur.DataTime = i64Time
+	service.cur.Battery = service.cur.OrigBattery - 2
+	if service.cur.Battery < 1 {
+		service.cur.AlarmType = ALARM_BATTERYLOW
+		service.cur.Battery = 1
 	}
 
 	service.GetWatchDataInfo(service.imei)
@@ -551,12 +593,12 @@ func (service *GT06Service) ProcessMutilLocateInfo(pszMsgBuf []byte) bool {
 		DeviceInfoListLock.RLock()
 		safeZones := GetSafeZoneSettings(service.imei)
 		if safeZones != nil {
-			service.cur.latitude = safeZones[service.wifiZoneIndex].LatiTude
-			service.cur.longtiTude = safeZones[service.wifiZoneIndex].LongTitude
+			service.cur.Lat = safeZones[service.wifiZoneIndex].LatiTude
+			service.cur.Lng= safeZones[service.wifiZoneIndex].LongTitude
 			service.accracy = 150
 
 			logging.Log(fmt.Sprintf("Get location frome home zone by home wifi: %f, %f",
-				service.cur.latitude, service.cur.longtiTude))
+				service.cur.Lat, service.cur.Lng))
 		}
 		DeviceInfoListLock.RUnlock()
 	} else {
@@ -568,16 +610,16 @@ func (service *GT06Service) ProcessMutilLocateInfo(pszMsgBuf []byte) bool {
 		}
 	}
 
-	service.cur.steps = 0
-	service.cur.readflag = 0
-	service.cur.locateType = LBS_WIFI
+	service.cur.Steps = 0
+	service.cur.ReadFlag = 0
+	service.cur.LocateType = LBS_WIFI
 
 	if service.accracy >= 2000 {
-		service.cur.locateType = LBS_INVALID_LOCATION
+		service.cur.LocateType = LBS_INVALID_LOCATION
 	} else if service.wiFiNum >= 3 && service.accracy <= 400 {
-		service.cur.locateType = LBS_WIFI
+		service.cur.LocateType = LBS_WIFI
 	} else {
-		service.cur.locateType = uint8(service.accracy / 10)  //LBS_JIZHAN
+		service.cur.LocateType = uint8(service.accracy / 10)  //LBS_JIZHAN
 	}
 
 	service.UpdateLocationIntoDBCache()
@@ -585,20 +627,20 @@ func (service *GT06Service) ProcessMutilLocateInfo(pszMsgBuf []byte) bool {
 }
 
 func (service *GT06Service) ProcessZoneAlarm() bool {
-	service.GetWatchDataInfo()
-	if service.old.dataTime > 0 {
-		iZoneID := service.old.zoneIndex
-		iAlarmType := service.old.alarm
-		iZoneAlarmType := service.old.zoneAlarm
+	service.GetWatchDataInfo(service.imei)
+	if service.old.DataTime > 0 {
+		iZoneID := service.old.ZoneIndex
+		iAlarmType := service.old.AlarmType
+		iZoneAlarmType := service.old.ZoneAlarm
 
-		if service.cur.battery == 1 && service.old.battery > 1 {
-			service.cur.alarm = ALARM_BATTERYLOW
+		if service.cur.Battery == 1 && service.old.Battery > 1 {
+			service.cur.AlarmType = ALARM_BATTERYLOW
 		}
 
-		if iAlarmType == service.cur.alarm {
-			service.cur.alarm = 0
+		if iAlarmType == service.cur.AlarmType {
+			service.cur.AlarmType = 0
 		} else {
-			iAlarmType = service.cur.alarm;
+			iAlarmType = service.cur.AlarmType;
 		}
 
 		if iZoneID == 0 && iZoneAlarmType == 0 {
@@ -606,42 +648,42 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 		}
 
 		stCurPoint, stDstPoint := TPoint{}, TPoint{}
-		if (service.cur.locateType != LBS_GPS && service.wifiZoneIndex < 0) ||  service.cur.alarm > 0 {
-			if (service.old.locateType != LBS_JIZHAN && service.old.locateType <= 40) && service.old.locateType != LBS_SMARTLOCATION  {
-				stCurPoint.Latitude = service.cur.latitude
-				stCurPoint.LongtiTude = service.cur.longtiTude
-				stDstPoint.Latitude = service.old.latitude
-				stDstPoint.LongtiTude = service.old.longtiTude
+		if (service.cur.LocateType != LBS_GPS && service.wifiZoneIndex < 0) ||  service.cur.AlarmType > 0 {
+			if (service.old.LocateType != LBS_JIZHAN && service.old.LocateType <= 40) && service.old.LocateType != LBS_SMARTLOCATION  {
+				stCurPoint.Latitude = service.cur.Lat
+				stCurPoint.LongtiTude = service.cur.Lng
+				stDstPoint.Latitude = service.old.Lat
+				stDstPoint.LongtiTude = service.old.Lng
 				iDistance := service.GetDisTance(&stCurPoint, &stDstPoint)
 
-				if iDistance <= 200 && (service.cur.locateType == LBS_JIZHAN || (service.cur.locateType > 40 && service.cur.locateType < 200)) {
-					i64Time := service.cur.dataTime
+				if iDistance <= 200 && (service.cur.LocateType == LBS_JIZHAN || (service.cur.LocateType > 40 && service.cur.LocateType < 200)) {
+					i64Time := service.cur.DataTime
 					service.cur = service.old
-					service.cur.dataTime = i64Time
-					service.cur.locateType = LBS_SMARTLOCATION
+					service.cur.DataTime = i64Time
+					service.cur.LocateType = LBS_SMARTLOCATION
 					service.getSameWifi = true
 				}
 
-				if iDistance >= 1800 && service.cur.dataTime >= service.old.dataTime {
-					iTotalMin := deltaMinutes(service.old.dataTime, service.cur.dataTime)
+				if iDistance >= 1800 && service.cur.DataTime >= service.old.DataTime {
+					iTotalMin := deltaMinutes(service.old.DataTime, service.cur.DataTime)
 					if iTotalMin == 0 || (iTotalMin > 0 && iTotalMin * 800 <= iDistance) {
-						i64Time := service.cur.dataTime
+						i64Time := service.cur.DataTime
 						service.cur = service.old
-						service.cur.dataTime = i64Time
-						service.cur.locateType = LBS_SMARTLOCATION
+						service.cur.DataTime = i64Time
+						service.cur.LocateType = LBS_SMARTLOCATION
 						service.getSameWifi = true
 					}
 				}
 			}
 
-			logging.Log(fmt.Sprintf("device %d, m_iAlarmStatu=%d, parsed location:  m_DateTime=%lld, m_lng=%d, m_lat=%d",
-				service.imei,  service.cur.alarm, service.cur.dataTime, service.cur.longtiTude, service.cur.latitude)
+			logging.Log(fmt.Sprintf("device %d, m_iAlarmStatu=%d, parsed location:  m_DateTime=%d, m_lng=%d, m_lat=%d",
+				service.imei,  service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
 
 			return true
 		}
 
-		stCurPoint.Latitude = service.cur.latitude
-		stCurPoint.LongtiTude = service.cur.longtiTude
+		stCurPoint.Latitude = service.cur.Lat
+		stCurPoint.LongtiTude = service.cur.Lng
 
 		DeviceInfoListLock.RLock()
 		safeZones := GetSafeZoneSettings(service.imei)
@@ -657,7 +699,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 				iRadiu := service.GetDisTance(&stCurPoint, &stDstPoint)
 				if iRadiu < stSafeZone.Radiu {
 					if iZoneID != stSafeZone.ZoneID || (iZoneID == stSafeZone.ZoneID && iZoneAlarmType != ALARM_INZONE) {
-						if service.wifiZoneIndex < 0 && service.cur.locateType == LBS_WIFI && service.cur.locateType != LBS_WIFI {
+						if service.wifiZoneIndex < 0 && service.cur.LocateType == LBS_WIFI && service.cur.LocateType != LBS_WIFI {
 							break
 						}
 
@@ -665,67 +707,99 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 							continue
 						}
 
-						iZoneID = stSafeZone.m_iZoneID;
-						iZoneAlarmType = ALARM_INZONE;
-						iAlarmType = 0;
-						m_stDataInfo.m_ucAlarmStatu = iZoneAlarmType;
-						m_iAlarmStatu = iZoneAlarmType;
-						strncpy(m_szZoneName, stSafeZone.m_szZoneName, strlen(stSafeZone.m_szZoneName));
-						strncpy(m_stDataInfo.m_szZoneName, m_szZoneName, sizeof(m_stDataInfo.m_szZoneName) - 1);
-						log_file(INFO, ERR_SUCCESS, "Device[%lld] Make a InZone Alarm[%s][%d,%d][%d,%d]", m_i64SrcDeviceID, stSafeZone.m_szZoneName,
-						iRadiu, stSafeZone.m_iRadiu, GetZoneAlarmType(m_stDataInfo.m_iReserve), iZoneAlarmType, GetZoneID(m_stOldDataInfo.m_iReserve), iZoneID);
-						break;
+						iZoneID = stSafeZone.ZoneID
+						iZoneAlarmType = ALARM_INZONE
+						iAlarmType = 0
+						service.cur.AlarmType = iZoneAlarmType
+						service.cur.ZoneName = stSafeZone.ZoneName
+						logging.Log(fmt.Sprintf("Device[%d] Make a InZone Alarm[%s][%d,%d][%d,%d]",
+							service.imei, stSafeZone.ZoneName, iRadiu, stSafeZone.Radiu , iZoneAlarmType, iZoneID))
+						break
+					}
+				} else {
+					if iZoneID == stSafeZone.ZoneID && iZoneAlarmType != ALARM_OUTZONE {
+						if service.wifiZoneIndex < 0 && service.cur.LocateType == LBS_WIFI && service.old.LocateType != LBS_WIFI  {
+							break
 						}
-				}
-				else
-				{
-				if (iZoneID == stSafeZone.m_iZoneID && iZoneAlarmType != ALARM_OUTZONE) //�������
-				{
-				if (m_iWifiZoneIndex < 0 && m_stDataInfo.m_cStationType == LBS_WIFI && m_stOldDataInfo.m_cStationType != LBS_WIFI)
-				{
-				break;
-				log_file(INFO, ERR_SUCCESS, "device %lld, m_iAlarmStatu=%d, parsed location:  m_DateTime=%lld, m_lng=%d, m_lat=%d",
-				m_i64DeviceID, m_iAlarmStatu, m_stDataInfo.m_uiDataTime, m_stDataInfo.m_iLongtiTude, m_stDataInfo.m_iLatitude);
-				}
 
-				iZoneID = stSafeZone.m_iZoneID;
-				iZoneAlarmType = ALARM_OUTZONE;
-				m_stDataInfo.m_ucAlarmStatu = iZoneAlarmType;
-				m_iAlarmStatu = iZoneAlarmType;
-				iAlarmType = 0;
-				strncpy(m_szZoneName, stSafeZone.m_szZoneName, strlen(stSafeZone.m_szZoneName));
-				strncpy(m_stDataInfo.m_szZoneName, m_szZoneName, sizeof(m_stDataInfo.m_szZoneName) - 1);
-				log_file(INFO, ERR_SUCCESS, "Device[%lld] Make a OutZone Alarm[%s][%d,%d][%d,%d]", m_i64SrcDeviceID, stSafeZone.m_szZoneName, iRadiu,
-				stSafeZone.m_iRadiu, GetZoneAlarmType(m_stDataInfo.m_iReserve), iZoneAlarmType, GetZoneID(m_stOldDataInfo.m_iReserve), iZoneID);
-				break;
+						iZoneID = stSafeZone.ZoneID
+						iZoneAlarmType = ALARM_OUTZONE
+						service.cur.AlarmType = iZoneAlarmType
+						iAlarmType = 0
+						service.cur.ZoneName = stSafeZone.ZoneName
+						logging.Log(fmt.Sprintf("Device[%d] Make a OutZone Alarm[%s][%d,%d][%d,%d]",
+							service.imei, stSafeZone.ZoneName, iRadiu, stSafeZone.Radiu,  iZoneAlarmType,  iZoneID))
+						break
+					}
 				}
-				}
-				}
+			}
 		}
-		DeviceInfoListLock.RUnlock()
 
-m_stDataInfo.m_iReserve = GetReverseValue(iAlarmType, iZoneID, iZoneAlarmType);
-}
-else
-log_file(INFO, ERR_SUCCESS, "device %lld, m_iAlarmStatu=%d, parsed location:  m_DateTime=%lld, m_lng=%d, m_lat=%d",
-m_i64DeviceID, m_iAlarmStatu, m_stDataInfo.m_uiDataTime, m_stDataInfo.m_iLongtiTude, m_stDataInfo.m_iLatitude);
+		DeviceInfoListLock.RUnlock()
+	} else{
+		logging.Log(fmt.Sprintf("device %d, m_iAlarmStatu=%d, parsed location:  m_DateTime=%d, m_lng=%d, m_lat=%d",
+			service.imei, service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
+	}
+
 	return true
 }
 
+func (service *GT06Service) makeJson(data *LocationData) string  {
+	return fmt.Sprintf("{\"steps\": %d,  \"readflag\": %d,  \"locateType\": %d, \"battery\": %d,   \"alarm\": %d,  \"zoneAlarm\": %d, \"zoneIndex\": %d,  \"zoneName\": \"%s\"}",
+	data.Steps, data.ReadFlag, data.LocateType, data.Battery, data.AlarmType, data.ZoneAlarm, data.ZoneIndex, data.ZoneName)
+}
+
 func (service *GT06Service) WatchDataUpdateDB() bool {
+	strTime := fmt.Sprintf("20%d", service.cur.DataTime) //20170520114920
+	strTableaName := fmt.Sprintf("device_location_%s_%s", string(strTime[0:4]), string(strTime[4: 6]))
+	strSQL := fmt.Sprintf("INSERT INTO %s VALUES(%d, %d, %f, %f, '%s'::jsonb)",
+		strTableaName, service.imei, service.cur.DataTime, service.cur.Lat, service.cur.Lng, service.makeJson(&service.cur))
+
+	logging.Log(fmt.Sprintf("SQL: %s", strSQL))
+
+	_, err := service.reqCtx.Pgpool.Exec(strSQL)
+	if err != nil {
+		logging.Log("pg pool exec sql failed, " + err.Error())
+		return false
+	}
+
 	return true
 }
 
 func (service *GT06Service) UpdateWatchData() bool {
-	return true
+	if service.reqCtx.SetDeviceDataFunc != nil {
+		service.reqCtx.SetDeviceDataFunc(service.imei, DEVICE_DATA_LOCATION, service.cur)
+		return true
+	}else{
+		return false
+	}
 }
 
 func (service *GT06Service) UpdateWatchStatus(watchStatus *WatchStatus) bool {
-	return true
+	deviceData := LocationData{LocateType: watchStatus.iLocateType,
+		Steps: watchStatus.Step,
+		DataTime: watchStatus.i64Time,
+	}
+
+	if service.reqCtx.SetDeviceDataFunc != nil  {
+		service.reqCtx.SetDeviceDataFunc(service.imei, DEVICE_DATA_STATUS, deviceData)
+		return true
+	}else{
+		return false
+	}
 }
 
 func (service *GT06Service) UpdateWatchBattery() bool {
-	return true
+	deviceData := LocationData{Battery: service.cur.Battery,
+		OrigBattery: service.cur.OrigBattery,
+	}
+
+	if service.reqCtx.SetDeviceDataFunc  != nil {
+		service.reqCtx.SetDeviceDataFunc(service.imei, DEVICE_DATA_BATTERY, deviceData)
+		return true
+	}else{
+		return false
+	}
 }
 
 func (service *GT06Service) NotifyAlarmMsg() bool {
@@ -734,6 +808,87 @@ func (service *GT06Service) NotifyAlarmMsg() bool {
 
 func (service *GT06Service) UpdateLocationIntoDBCache() bool {
 	return true
+}
+
+func (service *GT06Service) rad(d float64) float64 {
+	return d * PI / 180.0
+}
+
+func getTimeStruct(time uint64) *timestruct {
+	t := &timestruct{}
+	t.y = uint64(time / 10000000000)
+	t.m = uint64((time - t.y * 10000000000) / 100000000)
+	t.d = uint64((time - t.y * 10000000000 - t.m * 100000000) / 1000000)
+	t.h = uint64((time - t.y * 10000000000 - t.m * 100000000 - t.d * 1000000) / 10000)
+	t.mi = uint64((time - t.y * 10000000000 - t.m * 100000000 - t.d * 1000000 - t.h * 10000) / 100)
+	t.s = uint64(0)
+	return t
+}
+
+var daysForMonth = []uint16{
+	//1  2   3   4   5   6   7   8   9  10  11  12
+	31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+}
+
+func isLeapYear(year uint64) bool {
+	return (year % 4 == 0 && year % 100 != 0 || year % 400 == 0)
+}
+
+func deltaMinutes(time1, time2 uint64) uint32 {
+	t1 := getTimeStruct(time1)
+	t2 := getTimeStruct(time2)
+	days1, days2 := uint32(0), uint32(0)
+
+	for i := 0; i < int(t1.m - 1); i++ {
+		leapYear := uint32(0)
+		if i == 1 && isLeapYear(2000 + t1.y) {
+			leapYear = 1
+		}
+		days1 += uint32(daysForMonth[i]) + leapYear
+	}
+
+	days1 += uint32(t1.d)
+
+	for i := 0; i < int(t2.y - t1.y); i++ {
+		for j := 0; j < 12; j++ {
+			leapYear := uint32(0)
+			if j == 1 && isLeapYear(2000 + t1.y + uint64(i)) {
+				leapYear = 1
+			}
+			days2 += uint32(daysForMonth[j]) + leapYear
+		}
+	}
+
+	for i := 0; i < int(t2.m - 1); i++ {
+		leapYear := uint32(0)
+		if i == 1 && isLeapYear(2000 + t2.y) {
+			leapYear = 1
+		}
+		days2 += uint32(daysForMonth[i]) + leapYear
+	}
+
+	days2 += uint32(t2.d)
+
+	return (days2 - days1) * 24 * 60 + uint32(t2.h - t1.h) * 60 + uint32(t2.mi - t1.mi)
+}
+
+func (service *GT06Service) GetDisTance(stPoint1, stPoint2 *TPoint) uint32 {
+	lng1 := stPoint1.LongtiTude / BASE_TITUDE
+	lat1  := stPoint1.Latitude / BASE_TITUDE
+	lng2 := stPoint2.LongtiTude / BASE_TITUDE
+	lat2 := stPoint2.Latitude / BASE_TITUDE
+
+	radLat1 := service.rad(lat1)
+	radLat2 := service.rad(lat2)
+	a := radLat1 - radLat2
+	b := service.rad(lng1) - service.rad(lng2)
+	dDistance := 2 * math.Sin(math.Sqrt(math.Pow(math.Sin(a / 2), 2) + math.Cos(radLat1) * math.Cos(radLat2) * math.Pow(math.Sin(b / 2), 2)))
+	//2 * math.Sin((math.Sqrt(math.Pow(math.Sin(a / 2), 2) + math.Cos(radLat1) * math.Cos(radLat2) * math.Pow(math.Sin(b / 2), 2)))
+
+	dDistance = dDistance * EARTH_RADIUS
+	dDistance = dDistance * 1000
+
+	return uint32(dDistance)
 }
 
 func (service *GT06Service) GetIntValue(pszMsgBuf []byte,  shLen uint32) uint32{
@@ -779,7 +934,9 @@ func (service *GT06Service) GetFloatValue(pszMsgBuf []byte, shLen uint16) float6
 }
 
 func  (service *GT06Service) GetWatchDataInfo(imei uint64)  {
-
+	if service.reqCtx.GetDeviceDataFunc != nil {
+		service.old = service.reqCtx.GetDeviceDataFunc(imei)
+	}
 }
 func  (service *GT06Service) GetLocation()  bool{
 	return true

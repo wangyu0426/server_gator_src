@@ -6,8 +6,7 @@ import (
 	"./tcpserver"
 	"./appserver"
 	"./cache"
-	"fmt"
-	"github.com/bsm/redeo"
+	"./admin"
 )
 
 func main() {
@@ -31,22 +30,13 @@ func main() {
 	go appserver.AppServerRunLoop(svrctx.Get())
 
 	//svrctx.Get().WaitLock.Wait()
-	srv := redeo.NewServer(&redeo.Config{Addr:  svrctx.Get().MasterListenAddrPort})
-	srv.HandleFunc("ping", func(out *redeo.Responder, _ *redeo.Request) error {
-		out.WriteInlineString("PONG")
-		return nil
-	})
-
-	srv.HandleFunc("shutdown", func(out *redeo.Responder, _ *redeo.Request) error {
-		logging.Log("Server shutdown by redis command line")
-		srv.Close()
-		return nil
-	})
-
-	logging.Log(fmt.Sprintf("Listening on tcp://%s", srv.Addr()))
-	srv.ListenAndServe()
-
 	//svrctx.Get().WaitLock.Wait()
 
+	admin.AdminServerLoop(ExitServer)
+
 	logging.Log("go-tcp-server exit")
+}
+
+func ExitServer()  {
+
 }

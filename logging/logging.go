@@ -15,13 +15,7 @@ var closeLogOnce *sync.Once
 
 func init()  {
 	fmt.Println("log dir: ", GetLogDir())
-
-	var err error
-	logFile, err = os.OpenFile(GetLogDir() + "/go-server.log", os.O_WRONLY | os.O_CREATE | os.O_APPEND, 0666)
-	if err != nil {
-		fmt.Println("create log file failed, ", err)
-		os.Exit(1)
-	}
+	createLogFile()
 
 	logInputChan = make(chan []byte, 2048)
 	closeLogOnce = &sync.Once{}
@@ -37,6 +31,24 @@ func init()  {
 			}
 		}
 	}()
+}
+
+func createLogFile()  {
+	var err error
+	realDir := GetLogDir() + "/" + time.Now().Format("2006-01-02")
+	err = os.MkdirAll(realDir, 0755)
+	if err != nil {
+		fmt.Println("mkdir -p faled, ", realDir, err)
+		realDir = GetLogDir()
+	}
+
+	logFile, err = os.OpenFile(realDir +  "/go-server.log", os.O_WRONLY | os.O_CREATE | os.O_APPEND,  0666)
+	if err != nil {
+		fmt.Println("create log file failed, ", err)
+		os.Exit(1)
+	}
+
+	logFile.WriteString(time.Now().String() + "Open Log File!!!\n")
 }
 
 func GetLogDir() string {
@@ -60,7 +72,22 @@ func Log(msg string)  {
 }
 
 func writeLog(msg string)  {
-	logFile.WriteString(msg)
+	dir, err := os.Stat(GetLogDir() + "/" + time.Now().Format("2006-01-02") + "/go-server.log")
+	if err == nil {  //路径存在
+		if dir.IsDir() {  //路径存在并且是一个目录，错误
+			fmt.Println("create log file failed, the file name is a dir")
+			return
+		}else {  //路径存在，是一个文件，继续写
+			logFile.WriteString(msg)
+			return
+		}
+	}else {  //路径不存在
+		if logFile != nil {
+			logFile.Close()
+		}
+		createLogFile()
+		logFile.WriteString(msg)
+	}
 }
 
 func Close()  {

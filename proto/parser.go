@@ -181,11 +181,25 @@ type SafeZone struct {
 	Flags int32
 }
 
+type FamilyMember struct {
+	Phone string
+	Name string
+	Avatar string
+	Type int
+	Index int
+}
+
 type DeviceInfo struct {
 	Imei uint64
 	Model uint8
+	TimeZone int
+	Name string
 	Company string
+	Lang string
+	Volume int
+	CanTurnOff bool
 	SafeZoneList []*SafeZone
+	Family []*FamilyMember
 }
 
 type WIFIInfo  struct  {
@@ -204,9 +218,9 @@ type LBSINFO struct  {
 
 type WatchStatus struct {
 	i64DeviceID uint64
-	iLocateType int8
+	iLocateType uint8
 	i64Time uint64
-	Step int32
+	Step uint64
 }
 
 
