@@ -9,6 +9,11 @@ import (
 	"strconv"
 	"sync/atomic"
 	"sync"
+	"database/sql"
+	_ "github.com/go-sql-driver/mysql"
+	"fmt"
+	"strings"
+	"encoding/json"
 )
 
 const (
@@ -171,14 +176,29 @@ const (
 	LBS_INVALID_LOCATION //无效定位
 )
 
+const (
+	MAX_SAFE_ZONE_NUM = 10
+	MAX_WATCH_ALARM_NUM = 5
+	MAX_HIDE_TIMER_NUM = 4
+	MAX_FAMILY_MEMBER_NUM = 13
+)
+
 type SafeZone struct {
 	ZoneID int32
 	ZoneName string
-	LatiTude float64
-	LongTitude float64
-	Radiu uint32
-	WifiMACID string
-	Flags int32
+	//LatiTude float64
+	//LongTitude float64
+	//Radiu uint32
+	//WifiMACID string
+	//Flags int32
+	Radius int `json:"Radius"`
+	Name string `json:"Name"`
+	Center string `json:"Center"`
+	On string `json:"On"`
+	Wifi struct {
+		       SSID string `json:"SSID"`
+		       BSSID string `json:"BSSID"`
+	     } `json:"Wifi"`
 }
 
 type FamilyMember struct {
@@ -189,17 +209,39 @@ type FamilyMember struct {
 	Index int
 }
 
+type HideiTimer struct {
+	Idx string `json:"Idx"`
+	Date string `json:"Date"`
+	Days int `json:"Days"`
+	Begin string `json:"Begin"`
+	End string `json:"End"`
+	Enabled int `json:"Enabled"`
+}
+
+type WatchAlarm struct {
+	Idx string `json:"Idx"`
+	Date string `json:"Date"`
+	Days int `json:"Days"`
+	Time string `json:"Time"`
+}
+
 type DeviceInfo struct {
 	Imei uint64
-	Model uint8
+	Model int
 	TimeZone int
 	Name string
 	Company string
+	CountryCode string
 	Lang string
-	Volume int
+	Volume uint8
 	CanTurnOff bool
-	SafeZoneList []*SafeZone
-	Family []*FamilyMember
+	UseDST bool
+	SocketModeOff bool
+	WatchAlarmList [MAX_WATCH_ALARM_NUM]WatchAlarm
+	SafeZoneList [MAX_SAFE_ZONE_NUM]SafeZone
+	Family [MAX_FAMILY_MEMBER_NUM]FamilyMember
+	HideTimerOn bool
+	HideTimerList [MAX_HIDE_TIMER_NUM]HideiTimer
 }
 
 type WIFIInfo  struct  {
@@ -230,7 +272,7 @@ var ipinfoListLock sync.RWMutex
 var StartGPSHour uint32
 var EPOInfoList []*EPOInfo
 var EpoInfoListLock sync.RWMutex
-var DeviceInfoList = map[uint64]*DeviceInfo{}
+var DeviceInfoList = &map[uint64]*DeviceInfo{}
 var DeviceInfoListLock sync.RWMutex
 var company_blacklist = []string {
 	"UES",
@@ -243,11 +285,14 @@ func init()  {
 	//b := a[0: 3]
 	//a[0] = '6'
 	//fmt.Println(string(a), string(b))
+	//test := LocationData{}
+	//data, _ := json.Marshal(&test)
+	//fmt.Println(string(data))
 	//os.Exit(1)
+
 
 	LoadIPInfosFromFile()
 	LoadEPOFromFile()
-	LoadDeviceInfoFromDB()
 }
 
 func LoadIPInfosFromFile()  {
@@ -391,18 +436,231 @@ func LoadEPOFromFile()  {
 	EpoInfoListLock.Unlock()
 }
 
-func LoadDeviceInfoFromDB()  {
-	deviceInfo := &DeviceInfo{}
-	deviceInfo.Imei = 357593060571398
-	deviceInfo.Model = DM_GT06
-	deviceInfo.Company = "Caref Watch Co,.Ltd"
+func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
+	rows, err := dbpool.Query("select w.IMEI, w.OwnerName, w.PhoneNumbers, w.TimeZone, w.CountryCode, w.ChildPowerOff, w.UseDST, w.SocketModeOff, w.Volume, w.Lang, w.Fence1,w.Fence2, w.Fence3,w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2,w.HideTimer3, pm.model, c.name from watchinfo w join device d on w.recid=d.recid join productmodel pm  on d.modelid=pm.recid join companies c on d.companyid=c.recid ")
+	if err != nil {
+		fmt.Println("LoadDeviceInfoFromDB failed,", err.Error())
+		os.Exit(1)
+	}
 
-	tmpDeviceInfoList := map[uint64]*DeviceInfo{}
-	tmpDeviceInfoList[deviceInfo.Imei] = deviceInfo
+	var(
+		IMEI      		string
+		OwnerName  		string
+		PhoneNumbers   	string
+		TimeZone		string
+		CountryCode 		string
+		ChildPowerOff		uint8
+		UseDST		uint8
+		SocketModeOff	uint8
+		Volume		uint8
+		Lang			string
+
+		Fences		=	[MAX_SAFE_ZONE_NUM]string{}
+		WatchAlarms = [MAX_WATCH_ALARM_NUM]string{}
+
+		HideSelf		uint8
+		HideTimers = [MAX_HIDE_TIMER_NUM]string{}
+
+		Model 			string
+		Company 		 string
+	)
+
+	tmpDeviceInfoList := &map[uint64]*DeviceInfo{}
+	for rows.Next() {
+		deviceInfo := &DeviceInfo{}
+		rows.Scan(&IMEI, &OwnerName, &PhoneNumbers, &TimeZone, &CountryCode, &ChildPowerOff, &UseDST, &SocketModeOff, &Volume, &Lang,&Fences[0], &Fences[1], &Fences[2], &Fences[3], &Fences[4], &Fences[5], &Fences[6], &Fences[7], &Fences[8], &Fences[9], &WatchAlarms[0], &WatchAlarms[1],&WatchAlarms[2], &WatchAlarms[3], &WatchAlarms[4], &HideSelf, &HideTimers[0], &HideTimers[1], &HideTimers[2], &HideTimers[3], &Model, &Company)
+		deviceInfo.Imei = Str2Num(IMEI, 10)
+		deviceInfo.Name = OwnerName
+		ParseFamilyMembers(PhoneNumbers, &deviceInfo.Family)
+		deviceInfo.TimeZone  = ParseTimeZone(TimeZone)
+		deviceInfo.CountryCode = CountryCode
+		deviceInfo.CanTurnOff = ChildPowerOff != 0
+		deviceInfo.UseDST = UseDST != 0
+		deviceInfo.SocketModeOff = SocketModeOff != 0
+		deviceInfo.Volume = Volume
+		deviceInfo.Lang = Lang
+		ParseSafeZones(Fences, &deviceInfo.SafeZoneList)
+		ParseWatchAlarms(WatchAlarms, &deviceInfo.WatchAlarmList)
+		deviceInfo.HideTimerOn = HideSelf != 0
+		ParseHideTimers(HideTimers, &deviceInfo.HideTimerList)
+		deviceInfo.Model = ParseDeviceModel(Model)
+		deviceInfo.Company = Company
+
+		(*tmpDeviceInfoList)[deviceInfo.Imei] = deviceInfo
+		//fmt.Println("deviceInfo: ", *deviceInfo)
+	}
 
 	DeviceInfoListLock.Lock()
 	DeviceInfoList = tmpDeviceInfoList
 	DeviceInfoListLock.Unlock()
+	return true
+}
+
+func ParseDeviceModel(model string) int {
+	switch model {
+	case "WH01":
+		return DM_WH01
+	case "GT03":
+		return DM_GT03
+	case "GTI3":
+		return DM_GTI3
+	case "GT06":
+		return DM_GT06
+	default:
+		return -1
+	}
+
+	return -1
+}
+
+func ParseSafeZones(zones [MAX_SAFE_ZONE_NUM]string, safeZoneList *[MAX_SAFE_ZONE_NUM]SafeZone)  {
+//	{"Radius":200,"Name":"home","Center":"22.588015574341,113.91333157419001","On":"1","Wifi":{"SSID":"gatorgroup","BSSID":"d8:24:bd:77:4d:6e"}}
+	for i, zone := range zones  {
+		err:=json.Unmarshal([]byte(zone), &safeZoneList[i])
+		if err != nil {
+			continue
+		}
+	}
+}
+
+func ParseWatchAlarms(alarms [MAX_WATCH_ALARM_NUM]string, alarmList *[MAX_WATCH_ALARM_NUM]WatchAlarm)  {
+	for i, alarm := range alarms  {
+		err:=json.Unmarshal([]byte(alarm), &alarmList[i])
+		if err != nil {
+			continue
+		}
+	}
+}
+
+func ParseHideTimers(timers [MAX_HIDE_TIMER_NUM]string, hidetimerList *[MAX_HIDE_TIMER_NUM]HideiTimer)  {
+	for i, timer := range timers  {
+		err:=json.Unmarshal([]byte(timer), &hidetimerList[i])
+		if err != nil {
+			continue
+		}
+	}
+}
+
+
+func ParseFamilyMembers(PhoneNumbers string, familyMemberList *[MAX_FAMILY_MEMBER_NUM]FamilyMember)  {
+	members := strings.Split(PhoneNumbers, ",")
+	for i, m := range members {
+		if i >= MAX_FAMILY_MEMBER_NUM {
+			break
+		}
+
+		if len(m) == 0 {
+			continue
+		}
+
+		fields := strings.SplitAfter(m, "|")
+		//fmt.Println(m, len(fields), fields)
+		if len(fields) >= 1 && len(fields[0]) > 0 && fields[0] != "|"{
+			if fields[0][len(fields[0]) - 1] == '|' {
+				familyMemberList[i].Phone = string(fields[0][0: len(fields[0]) - 2])
+			}else {
+				familyMemberList[i].Phone = fields[0]
+			}
+		}
+
+		if len(fields) >= 2 && len(fields[1]) > 0 && fields[1] != "|" {
+			if fields[1][len(fields[1]) - 1] == '|' {
+				familyMemberList[i].Type = int(Str2Num(string(fields[1][0: len(fields[1]) - 2]), 10))
+			}else {
+				familyMemberList[i].Type = int(Str2Num(fields[1], 10))
+			}
+		}
+
+		if len(fields) >= 3 && len(fields[2]) > 0 && fields[2] != "|" {
+			//fmt.Println("fields2: ", fields, fields[2], len(fields[2]))
+			if fields[2][len(fields[2]) - 1] == '|' {
+				familyMemberList[i].Name = string(fields[2][0: len(fields[2]) - 2])
+			}else {
+				familyMemberList[i].Name = fields[2]
+			}
+		}
+
+		familyMemberList[i].Index = i + 1
+	}
+}
+
+func CheckStrIsNumber(szInput string) bool {
+	if len(szInput) == 0 {
+		return false
+	}
+
+	for i := 0; i < len(szInput); i++ {
+		if szInput[i] < '0' || szInput[i] > '9' {
+			return false
+		}
+	}
+
+	return true
+}
+
+func checkTimeZoneOffset(tz string) bool {
+	if len(tz) == 5 {
+		return (tz =="00:00")
+	} else if len(tz) == 6 {
+		sub := string(tz[1: 1 + 2])
+		num, _ := strconv.Atoi(sub)
+
+		if (tz[0] != '+' && tz[0] != '-') || (tz[3] != ':') ||  (tz[4] != '3' && tz[4] != '0') ||  (tz[5] != '0')  {
+			return false
+		}
+
+		if !CheckStrIsNumber(sub)  || num > 11 {
+			return false
+		}
+
+		return true
+	} else {
+		return false
+	}
+}
+
+
+func ParseTimeZone(timezone string)  int {
+	if checkTimeZoneOffset(timezone) == false {
+		return 0
+	}
+
+	bSignal := true
+	if (timezone[0] == '-'){
+		bSignal = false
+	}
+
+	TimeZone := (int32(timezone[1]) - '0')*1000 + (int32(timezone[2]) - '0')*100 + (int32(timezone[4]) - '0') * 10
+
+	if (!bSignal) {
+		TimeZone = 0 - TimeZone
+	}
+
+	return int(TimeZone)
+}
+
+func Str2Float(str string)  float64 {
+	value, _ :=strconv.ParseFloat(str, 0)
+	return value
+}
+
+func Str2Num(str string, base int)  uint64 {
+	if len(str) == 0 {
+		return uint64(0)
+	}
+
+	value, _ :=strconv.ParseUint(str, base, 0)
+	return value
+}
+
+func Num2Str(num uint64, base int)  string {
+	if base == 10 {
+		return fmt.Sprintf("%d", num)
+	}else if base == 16{
+		return fmt.Sprintf("%X", num)
+	}else {
+		return ""
+	}
 }
 
 func IntCmd(cmd string) uint16 {
@@ -519,7 +777,7 @@ func IsDeviceInCompanyBlacklist(imei uint64) bool{
 	DeviceInfoListLock.RLock()
 	defer DeviceInfoListLock.RUnlock()
 
-	deviceInfo, ok := DeviceInfoList[imei]
+	deviceInfo, ok := (*DeviceInfoList)[imei]
 	if ok {
 		for i := 0; i < len(company_blacklist); i++ {
 			if deviceInfo.Company == company_blacklist[i] {
@@ -531,10 +789,10 @@ func IsDeviceInCompanyBlacklist(imei uint64) bool{
 	return false
 }
 
-func GetSafeZoneSettings(imei uint64)  []*SafeZone{
-	deviceInfo, ok := DeviceInfoList[imei]
+func GetSafeZoneSettings(imei uint64)  *[MAX_SAFE_ZONE_NUM]SafeZone{
+	deviceInfo, ok := (*DeviceInfoList)[imei]
 	if ok {
-		return deviceInfo.SafeZoneList
+		return &deviceInfo.SafeZoneList
 	}
 
 	return nil

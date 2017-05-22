@@ -219,7 +219,8 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				return
 			}
 
-			proto.HandleTcpRequest(proto.RequestContext{Pgpool: serverCtx.DBPool,
+			proto.HandleTcpRequest(proto.RequestContext{Pgpool: serverCtx.PGPool,
+				MysqlPool: serverCtx.MySQLPool,
 				WritebackChan: serverCtx.TcpServerChan,
 				Msg: data,
 				GetDeviceDataFunc: GetDeviceData,
@@ -282,14 +283,23 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 }
 
 func GetDeviceData(imei uint64)  proto.LocationData {
+	isQueryDB := false
 	deviceData := proto.LocationData{}
 	DeviceTableLock.RLock()
 	device, ok := DeviceTable[imei]
 	if ok {
 		deviceData = device.CurrentLocation
+	}else {
+		isQueryDB = true
 	}
 	DeviceTableLock.RUnlock()
-	return deviceData
+
+	if isQueryDB == false {
+		return deviceData
+	}else {
+		//缓存中没有数据，将从数据库中查询
+		return deviceData
+	}
 }
 
 func SetDeviceData(imei uint64, updateType int, deviceData proto.LocationData) {

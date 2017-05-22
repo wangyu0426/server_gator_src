@@ -1,3 +1,5 @@
+select w.IMEI, w.OwnerName, w.PhoneNumbers, w.TimeZone, w.CountryCode, w.ChildPowerOff, w.UseDST, w.SocketModeOff, w.Volume, w.Lang, w.Fence1,w.Fence2, w.Fence3,w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2,w.HideTimer3, pm.model, c.name from watchinfo w join device d on w.recid=d.recid join productmodel pm  on d.modelid=pm.recid join companies c on d.companyid=c.recid where w.imei like '%571398%';
+
 CREATE TABLE device_location
 (
     imei bigint NOT NULL,

@@ -8,6 +8,8 @@ import (
 	"crypto/sha1"
 	"../proto"
 	"github.com/jackc/pgx"
+	"database/sql"
+	_ "github.com/go-sql-driver/mysql"
 	"os"
 )
 
@@ -41,8 +43,8 @@ type ServerContext struct {
 	DbMysqlConfig      DBConfig
 	DbPgsqlConfig      DBConfig
 
-	DBPool *pgx.ConnPool
-
+	PGPool *pgx.ConnPool
+	MySQLPool *sql.DB
 	UseGoogleMap  bool
 
 	AppServerChan chan *proto.AppMsgData
@@ -83,6 +85,7 @@ func init()  {
 		DBName:"gpsbaseinfo",
 		DBUser:"root",
 		DBPasswd:"1234",
+		DBPoolMaxConn: 1024,
 	}
 
 	serverCtx.DbPgsqlConfig = DBConfig{
@@ -96,14 +99,15 @@ func init()  {
 
 	serverCtx.UseGoogleMap = true
 
-	var err interface{}
+	//创建postgresql连接池
+	var err error
 	pgconfig := pgx.ConnConfig{}
 	pgconfig.Host = serverCtx.DbPgsqlConfig.DBHost
 	pgconfig.Port = serverCtx.DbPgsqlConfig.DBPort
 	pgconfig.Database = serverCtx.DbPgsqlConfig.DBName
 	pgconfig.User = serverCtx.DbPgsqlConfig.DBUser
 	pgconfig.Password = serverCtx.DbPgsqlConfig.DBPasswd
-	serverCtx.DBPool, err = pgx.NewConnPool(pgx.ConnPoolConfig{ConnConfig: pgconfig,
+	serverCtx.PGPool, err = pgx.NewConnPool(pgx.ConnPoolConfig{ConnConfig: pgconfig,
 		MaxConnections: serverCtx.DbPgsqlConfig.DBPoolMaxConn,
 		AcquireTimeout: 0,
 	})
@@ -114,6 +118,25 @@ func init()  {
 	}else{
 		fmt.Println("create pg connection pool OK")
 	}
+
+	//创建MySQL连接池
+	strConn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
+		serverCtx.DbMysqlConfig.DBUser,
+		serverCtx.DbMysqlConfig.DBPasswd,
+		serverCtx.DbMysqlConfig.DBHost,
+		serverCtx.DbMysqlConfig.DBPort,
+		serverCtx.DbMysqlConfig.DBName)
+
+	serverCtx.MySQLPool, err = sql.Open("mysql", strConn)
+
+	if err != nil {
+		fmt.Println(fmt.Sprintf("connect mysql (%s) failed, %s", strConn, err.Error()))
+		os.Exit(1)
+	}
+	serverCtx.MySQLPool.SetMaxOpenConns(serverCtx.DbMysqlConfig.DBPoolMaxConn)
+	fmt.Println(fmt.Sprintf("connect mysql db %s OK", serverCtx.DbMysqlConfig.DBName))
+
+	proto.LoadDeviceInfoFromDB(serverCtx.MySQLPool)
 
 	//jsonData, err := ioutil.ReadFile("./gts_db.json")
 	//if err != nil {
