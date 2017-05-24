@@ -290,6 +290,10 @@ func init()  {
 	//fmt.Println(string(data))
 	//os.Exit(1)
 
+	//a := int32(133)
+	//c := float64(float64(a) / 60.0)
+	//fmt.Println("c: ", c * 100)
+	//os.Exit(0)
 
 	LoadIPInfosFromFile()
 	LoadEPOFromFile()

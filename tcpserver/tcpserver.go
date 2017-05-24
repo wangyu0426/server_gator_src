@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"time"
 	"strings"
 	"os"
 	"sync"
+	"github.com/jackc/pgx"
 )
 
 const (
@@ -96,7 +96,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		dataSize := uint16(0)
 		headerBuf := make([]byte, MsgHeaderSize)
 
-		c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
+		//c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
 		if _, err := io.ReadFull(c.conn, headerBuf); err != nil {
 			logging.Log("recv MsgHeaderSize bytes header failed, " + err.Error())
 			break
@@ -122,7 +122,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		dataBuf := make([]byte, bufSize)
 		recvOffset := uint16(0)
 		for {
-			c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
+			//c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
 			n, err := c.conn.Read(dataBuf[recvOffset: ])
 			if n > 0 {
 				recvOffset += uint16(n)
@@ -256,7 +256,7 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	go ConnManagerLoop(serverCtx)
 
 	for  {
-		listener.SetDeadline(time.Now().Add(time.Second * serverCtx.AcceptTimeout))
+		//listener.SetDeadline(time.Now().Add(time.Second * serverCtx.AcceptTimeout))
 		conn, err := listener.AcceptTCP()
 		if err != nil {
 			err_ := err.(*net.OpError)
@@ -282,7 +282,7 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 }
 
-func GetDeviceData(imei uint64)  proto.LocationData {
+func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 	isQueryDB := false
 	deviceData := proto.LocationData{}
 	DeviceTableLock.RLock()
@@ -298,6 +298,18 @@ func GetDeviceData(imei uint64)  proto.LocationData {
 		return deviceData
 	}else {
 		//缓存中没有数据，将从数据库中查询
+		strSQL := fmt.Sprintf("select * from from device_location where imei=%d", imei)
+		logging.Log("sql: " + strSQL)
+		rows, err := pgpool.Query(strSQL)
+		if err != nil {
+			logging.Log(fmt.Sprintf("[%d] pg query failed, %s",  imei, err.Error()))
+			return deviceData
+		}
+
+		for rows.Next() {
+
+		}
+
 		return deviceData
 	}
 }
@@ -306,6 +318,10 @@ func SetDeviceData(imei uint64, updateType int, deviceData proto.LocationData) {
 	DeviceTableLock.Lock()
 	switch updateType {
 	case proto.DEVICE_DATA_LOCATION:
+		_, ok := DeviceTable[imei]
+		if ok == false {
+			DeviceTable[imei] = &proto.DeviceCache{Imei: imei}
+		}
 		DeviceTable[imei].CurrentLocation = deviceData
 	case proto.DEVICE_DATA_STATUS:
 		device, ok := DeviceTable[imei]

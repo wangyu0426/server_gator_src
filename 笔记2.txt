@@ -12,6 +12,7 @@ nohup ./BackgroundTask   >/dev/null 2>&1 &
 
 */10 * * * * ntpdate time.nist.gov
 */59 * * * * php /home/work/lwk/low_mem_alarm_mail.php
+*/1 * * * * sync; echo 3 > /proc/sys/vm/drop_caches
 0 */2 * * * service ipsec restart; service xl2tpd restart
 0 20 * * * /home/EPO/ftp.sh; /home/EPO/report.sh 
 
@@ -106,6 +107,10 @@ service ipsec restart; service xl2tpd restart
 root账号：root
 密码：
 [Gator#colin#123]
+
+(357593060571398BPM1,M,170524,163100,4,4600002490131035,460000249010572A,4600002490105F24,46000024900FE824,6,05,Gator,48:3C:0C:F5:56:48,-46,0D,ChinaNet-kWqN,FC:37:2B:50:A7:49,-55,0D,ChinaNet-qi67,14:B8:37:23:71:57,-57,0A,gatorgroup,D8:24:BD:77:4D:6E,-61,0D,ChinaNet-z6QU,FC:37:2B:4B:06:11,-69,0B,cfbb.com.cn,82:89:17:78:E2:21,-74,5)
+
+(00F4357593060153353BP30,M,2,000000FF,5,1,150728,152900,4,46000024820000DE127,46000024820000DDF1A,46000024820000DEB0D,46000024820000F160B,3,08,wifi2462,1C:78:57:08:A5:CA,-88,05,HDB-H,D8:15:0D:5C:4D:74,-87,0D,WWW.CXGPS.COM,D8:15:0D:A8:E8:DE,-86)
 
 admin
 gator160419

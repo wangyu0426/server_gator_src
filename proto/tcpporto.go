@@ -7,12 +7,13 @@ import (
 	"../logging"
 	"time"
 	"strings"
-	"unicode"
 	"math"
 	"github.com/jackc/pgx"
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
 	"encoding/json"
+	"net/http"
+	"io/ioutil"
 )
 
 type ResponseItem struct {
@@ -41,9 +42,58 @@ type RequestContext struct {
 
 	WritebackChan chan *MsgData
 	Msg *MsgData
-	GetDeviceDataFunc  func (imei uint64)  LocationData
+	GetDeviceDataFunc  func (imei uint64, pgpool *pgx.ConnPool)  LocationData
 	SetDeviceDataFunc  func (imei uint64, updateType int, deviceData LocationData)
 }
+
+type GmapWifi struct {
+	MacAddress string `json:"macAddress"`
+	SignalToNoiseRatio int `json:"signalToNoiseRatio"`
+}
+
+type GmapLBS struct {
+	CellID int `json:"cellId"`
+	LocationAreaCode int `json:"locationAreaCode"`
+	MobileCountryCode int `json:"mobileCountryCode"`
+	MobileNetworkCode int `json:"mobileNetworkCode"`
+	SignalStrength int `json:"signalStrength"`
+}
+
+type GooglemapParams struct {
+	RadioType string `json:"radioType"`
+	ConsiderIP bool `json:"considerIP"`
+	WifiAccessPoints []GmapWifi `json:"wifiAccessPoints"`
+	CellTowers []GmapLBS `json:"cellTowers"`
+}
+
+type GooglemapResult struct {
+	Location struct {
+			 Lat float64 `json:"lat"`
+			 Lng float64 `json:"lng"`
+		 } `json:"location"`
+	Accuracy int `json:"accuracy"`
+}
+
+type AmapResult struct {
+	Status string `json:"status"`
+	Info string `json:"info"`
+	Infocode string `json:"infocode"`
+	Result struct {
+		       Type string `json:"type"`
+		       Location string `json:"location"`
+		       Radius string `json:"radius"`
+		       Desc string `json:"desc"`
+		       Country string `json:"country"`
+		       Province string `json:"province"`
+		       City string `json:"city"`
+		       Citycode string `json:"citycode"`
+		       Adcode string `json:"adcode"`
+		       Road string `json:"road"`
+		       Street string `json:"street"`
+		       Poi string `json:"poi"`
+	       } `json:"result"`
+}
+
 
 type LocationData struct {
 	DataTime uint64 	`json:"datatime,omitempty"`
@@ -234,11 +284,16 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 
 		//battery
 		service.cur.OrigBattery = msg.Data[bufOffset]- '0'
-		bufOffset += 2
+		bufOffset += 1
 
 		//will need to send location
-		service.needSendLocation = (msg.Data[bufOffset] - '0') == 1
-		bufOffset += 1
+		if cLocateTag == 'G' || cLocateTag == 'g'  {
+			service.needSendLocation = false
+		}else {
+			bufOffset++
+			service.needSendLocation = (msg.Data[bufOffset] - '0') == 1
+			bufOffset += 1
+		}
 
 		ret := service.ProcessLocate(msg.Data[bufOffset: ], cLocateTag)
 		if ret == false {
@@ -354,7 +409,7 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 		service.imei, service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
 
 	if ret == false || service.cur.Lng == 0 && service.cur.Lat== 0 {
-		logging.Log(fmt.Sprintf("Error Locate(%d, %d, %d)", service.imei, service.cur.Lng, service.cur.Lat))
+		logging.Log(fmt.Sprintf("Error Locate(%d, %06f, %06f)", service.imei, service.cur.Lng, service.cur.Lat))
 		return ret
 	}
 
@@ -377,7 +432,7 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 	}
 
 	logging.Log(fmt.Sprintf("end: m_iAlarmStatu=%d",  service.cur.AlarmType))
-	logging.Log(fmt.Sprintf("Update database: DeviceID=%d, m_DateTime=%d, m_lng=%d, m_lat=%d",
+	logging.Log(fmt.Sprintf("Update database: DeviceID=%d, m_DateTime=%d, m_lng=%f, m_lat=%f",
 		service.imei, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
 
 	ret = service.WatchDataUpdateDB()
@@ -423,6 +478,7 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	for pszMsg[bufOffset] != ',' {
 		szMainLBS[i] = pszMsg[bufOffset]
 		bufOffset++
+		i++
 	}
 	fmt.Sscanf(string(szMainLBS), "%03d%03d%04X%07X%02X",
 		&service.MCC, &service.MNC, &service.LACID, &service.CELLID, &service.RXLEVEL)
@@ -433,7 +489,7 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	bufOffset++
 
 	bTrueTime := true
-	iTimeDay := uint32(0)
+	iTimeDay := uint64(0)
 	if pszMsg[bufOffset] == '-' {
 		bufOffset++
 		bTrueTime = false
@@ -457,7 +513,7 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	iTemp := iLatitude % 1000000
         iLatitude = iLatitude - iTemp
 
-	dLatitude := float64(iTemp / 60.0)
+	dLatitude := float64(float64(iTemp) / 60.0)
         iSubLatitude := int32(dLatitude * 100);
 	iLatitude += iSubLatitude
 
@@ -473,7 +529,7 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	iTemp = iLongtitude % 1000000
 	iLongtitude = iLongtitude - iTemp
 
-	dLontitude := float64(iTemp / 60.0)
+	dLontitude := float64(float64(iTemp) / 60.0)
 	iSubLontitude := int32(dLontitude * 100)
 
 	iLongtitude += iSubLontitude
@@ -509,8 +565,8 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	}
 
 	service.cur.DataTime = i64Time
-	service.cur.Lng = float64(iLongtitude / 100000.0)
-	service.cur.Lat = float64(iLatitude / 100000.0)
+	service.cur.Lng = float64(float64(iLongtitude) / 1000000.0)
+	service.cur.Lat = float64(float64(iLatitude) / 1000000.0)
 	service.cur.Steps = uint64(iSpeed)
 	service.cur.ReadFlag = 0
 	service.cur.Battery = iIOStatu
@@ -591,10 +647,6 @@ func (service *GT06Service) ProcessLBSInfo(pszMsgBuf []byte) bool {
 	service.ParseLBSInfo(pszMsgBuf[bufOffset: ],  &shLBSLen)
 	bufOffset += shLBSLen
 
-	if unicode.IsDigit(rune(pszMsgBuf[bufOffset])) {
-		bufOffset++
-	}
-
 	iDayTime := service.GetIntValue(pszMsgBuf[bufOffset: ], TIME_LEN)
 	iDayTime = iDayTime % 1000000
 	bufOffset += TIME_LEN + 1
@@ -659,11 +711,6 @@ func (service *GT06Service) ProcessMutilLocateInfo(pszMsgBuf []byte) bool {
 	shBufLen := uint32(0)
 	service.ParseLBSInfo(pszMsgBuf[bufOffset: ], &shBufLen)
 	bufOffset += shBufLen
-
-	shBufLen = 0
-	if unicode.IsDigit(rune(pszMsgBuf[bufOffset])) {
-		bufOffset++
-	}
 
 	service.ParseWifiInfo(pszMsgBuf[bufOffset: ], &shBufLen)
 	bufOffset += shBufLen
@@ -831,7 +878,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 
 		DeviceInfoListLock.RUnlock()
 	} else{
-		logging.Log(fmt.Sprintf("device %d, m_iAlarmStatu=%d, parsed location:  m_DateTime=%d, m_lng=%d, m_lat=%d",
+		logging.Log(fmt.Sprintf("device %d, m_iAlarmStatu=%d, parsed location:  m_DateTime=%d, m_lng=%f, m_lat=%f",
 			service.imei, service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
 	}
 
@@ -852,8 +899,8 @@ func (service *GT06Service) makeJson(data *LocationData) string  {
 func (service *GT06Service) WatchDataUpdateDB() bool {
 	strTime := fmt.Sprintf("20%d", service.cur.DataTime) //20170520114920
 	strTableaName := fmt.Sprintf("device_location_%s_%s", string(strTime[0:4]), string(strTime[4: 6]))
-	strSQL := fmt.Sprintf("INSERT INTO %s VALUES(%d, %d, %f, %f, '%s'::jsonb)",
-		strTableaName, service.imei, service.cur.DataTime, service.cur.Lat, service.cur.Lng, service.makeJson(&service.cur))
+	strSQL := fmt.Sprintf("INSERT INTO %s VALUES(%d, %d, %06f, %06f, '%s'::jsonb)",
+		strTableaName, service.imei, 20000000000000 + service.cur.DataTime, service.cur.Lat, service.cur.Lng, service.makeJson(&service.cur))
 
 	logging.Log(fmt.Sprintf("SQL: %s", strSQL))
 
@@ -991,9 +1038,9 @@ func (service *GT06Service) GetDisTance(stPoint1, stPoint2 *TPoint) uint32 {
 	return uint32(dDistance)
 }
 
-func (service *GT06Service) GetIntValue(pszMsgBuf []byte,  shLen uint32) uint32{
+func (service *GT06Service) GetIntValue(pszMsgBuf []byte,  shLen uint32) uint64{
 	value, _ := strconv.Atoi(string(pszMsgBuf[0: shLen]))
-	return uint32(value)
+	return uint64(value)
 }
 
 
@@ -1035,11 +1082,11 @@ func (service *GT06Service) GetFloatValue(pszMsgBuf []byte, shLen uint16) float6
 
 func  (service *GT06Service) GetWatchDataInfo(imei uint64)  {
 	if service.reqCtx.GetDeviceDataFunc != nil {
-		service.old = service.reqCtx.GetDeviceDataFunc(imei)
+		service.old = service.reqCtx.GetDeviceDataFunc(imei, service.reqCtx.Pgpool)
 	}
 }
 func  (service *GT06Service) GetLocation()  bool{
-	return true
+	return service.GetLocationByAmap()
 }
 
 
@@ -1089,7 +1136,7 @@ func  (service *GT06Service) ParseWifiInfo(pszMsgBuf []byte, shBufLen *uint32)  
 
 		if pszMsgBuf[bufOffset] == ',' {
 			shIndex++
-			if shIndex == 3 {
+			if shIndex == 3 || shIndex == 2 && shWifiNum == 1 {
 				if strings.Contains(stWifiInfo.WIFIName, "iPhone") || strings.Contains(stWifiInfo.WIFIName, "Android") {
 					//DONOTING
 				}else {
@@ -1193,4 +1240,189 @@ func  (service *GT06Service) ParseLBSInfo(pszMsgBuf []byte, shBufLen *uint32)  b
 	*shBufLen = uint32(bufOffset)
 
 	return true
+}
+
+//for google api
+func  (service *GT06Service) GetLocationByGoogle() bool  {
+	params := &GooglemapParams{}
+	params.RadioType = "gsm"
+	params.ConsiderIP = true
+
+	for  i := 0; i < int(service.wiFiNum); i++ {
+		params.WifiAccessPoints = append(params.WifiAccessPoints, GmapWifi{string(service.wifiInfoList[i].MacID[0:]),
+			int(service.wifiInfoList[i].Ratio),
+		})
+	}
+
+	for  i := 0; i < int(service.lbsNum); i++ {
+		params.CellTowers = append(params.CellTowers, GmapLBS{int(service.lbsInfoList[i].CellID),
+			int(service.lbsInfoList[i].Lac),
+			int(service.lbsInfoList[i].Mcc),
+			int(service.lbsInfoList[i].Mnc),
+			int(service.lbsInfoList[i].Signal),
+		})
+	}
+
+	jsonStr, err := json.Marshal(params)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] make json failed, %s", service.imei, err.Error()))
+		return false
+	}
+
+	resp, err := http.NewRequest("POST",
+		"https://www.googleapis.com/geolocation/v1/geolocate?key=AIzaSyAbvNjmCijnZv9od3cC0MwmTC6HTBG6R60",
+		strings.NewReader(string(jsonStr)))
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] call google map api  failed,  %s", service.imei, err.Error()))
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] google map response has err, %s", service.imei, err.Error()))
+		return false
+	}
+
+	result := GooglemapResult{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] parse google map response failed, %s", service.imei, err.Error()))
+		return false
+	}
+
+	service.cur.Accracy = uint32(result.Accuracy)
+	service.cur.Lat = result.Location.Lat
+	service.cur.Lng = result.Location.Lng
+
+	return true
+}
+
+//for amap(高德) api
+func  (service *GT06Service) GetLocationByAmap() bool  {
+	strReqURL := "http://apilocate.amap.com/position"
+	strRequestBody, strWifiReqParam, strLBSReqParam := "", "", ""
+
+	for i := 0; i < int(service.wiFiNum); i++ {
+		if i==0 {
+			strWifiReqParam += fmt.Sprintf("mmac=%s,%d,%s", string(service.wifiInfoList[i].MacID[0:]),
+				0 - service.wifiInfoList[i].Ratio, service.wifiInfoList[i].WIFIName)
+		} else if i == 1 {
+			strWifiReqParam += fmt.Sprintf("&macs=%s,%d,%s", string(service.wifiInfoList[i].MacID[0:]),
+				0 - service.wifiInfoList[i].Ratio, service.wifiInfoList[i].WIFIName)
+		} else {
+			strWifiReqParam += fmt.Sprintf("|%s,%d,%s", string(service.wifiInfoList[i].MacID[0:]),
+				0 - service.wifiInfoList[i].Ratio, service.wifiInfoList[i].WIFIName)
+		}
+	}
+
+	for i := 0; i < int(service.lbsNum); i++ {
+		if i == 0 {
+			strLBSReqParam += fmt.Sprintf("bts=%d,%02d,%d,%d,%d&nearbts=", service.lbsInfoList[i].Mcc,
+				service.lbsInfoList[i].Mnc, service.lbsInfoList[i].Lac, service.lbsInfoList[i].CellID, service.lbsInfoList[i].Signal)
+		} else if i == 1 {
+			strLBSReqParam += fmt.Sprintf("%d,%02d,%d,%d,%d", service.lbsInfoList[i].Mcc,
+				service.lbsInfoList[i].Mnc, service.lbsInfoList[i].Lac, service.lbsInfoList[i].CellID, service.lbsInfoList[i].Signal)
+		} else {
+			strLBSReqParam += fmt.Sprintf("|%d,%02d,%d,%d,%d", service.lbsInfoList[i].Mcc,
+				service.lbsInfoList[i].Mnc, service.lbsInfoList[i].Lac, service.lbsInfoList[i].CellID, service.lbsInfoList[i].Signal)
+		}
+	}
+
+	if service.lbsNum == 0 {
+		strRequestBody = fmt.Sprintf("accesstype=1&imei=%d&cdma=0&", service.imei) + strWifiReqParam
+	} else {
+		strRequestBody = fmt.Sprintf("accesstype=0&imei=%d&cdma=0&", service.imei) +  strLBSReqParam
+		if service.wiFiNum > 0 {
+			strRequestBody += "&" +  strWifiReqParam
+		}
+	}
+
+	strRequestBody += "&key=7fdbbeb16c30e7660f8588afee2bf9ba"
+
+	//http://apilocate.amap.com/position?accesstype=1&imei=357593060571398&cdma=0&mmac=1C:78:57:08:A5:CA,-88,wifi2462&macs=D8:15:0D:5C:4D:74,-87,HDB-H&key=7fdbbeb16c30e7660f8588afee2bf9ba
+	//http://apilocate.amap.com/position?accesstype=0&imei=357593060571398&cdma=0&bts=460,00,9360,4880,-7&nearbts=460,00,9360,4183,-29|460,00,9360,4191,-41|460,00,9360,4072,-41&mmac=48:3C:0C:F5:56:48,-46,Gator&macs=FC:37:2B:50:A7:49,-55,ChinaNet-kWqN|14:B8:37:23:71:57,-57,ChinaNet-qi67|D8:24:BD:77:4D:6E,-61,gatorgroup|FC:37:2B:4B:06:11,-69,ChinaNet-z6QU|82:89:17:78:E2:21,-74,cfbb.com.cn&key=7fdbbeb16c30e7660f8588afee2bf9ba
+	//http://apilocate.amap.com/position?accesstype=0&imei=357593060571398&cdma=0&mmac=48:3C:0C:F5:56:48,-46,Gator&macs=FC:37:2B:50:A7:49,-55,ChinaNet-kWqN|14:B8:37:23:71:57,-57,ChinaNet-qi67|D8:24:BD:77:4D:6E,-61,gatorgroup|FC:37:2B:4B:06:11,-69,ChinaNet-z6QU|82:89:17:78:E2:21,-74,cfbb.com.cn&key=7fdbbeb16c30e7660f8588afee2bf9ba
+	strReqURL += "?" +  strRequestBody
+	logging.Log(strReqURL)
+	resp, err := http.Get(strReqURL)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] call amap api  failed,  %s", service.imei, err.Error()))
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] amap response has err, %s", service.imei, err.Error()))
+		return false
+	}
+
+	logging.Log(fmt.Sprintf("[%d] parse amap response:, %s", service.imei, body))
+
+	result := AmapResult{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] parse amap response failed, %s", service.imei, err.Error()))
+		return false
+	}
+
+	//解析返回参数
+	latlng := strings.Split(result.Result.Location, ",")
+	if len(latlng) < 2 {
+		logging.Log(fmt.Sprintf("[%d] location from amap does not have lat and lng", service.imei))
+		return false
+	}
+
+	 dLontiTude := Str2Float(latlng[0]) //经度
+	dLatitude := Str2Float(latlng[1]) //纬度
+	gcj_To_Gps84(dLatitude, dLontiTude, &service.cur.Lat, &service.cur.Lng)
+	service.cur.LocateType = uint8(Str2Num(result.Result.Type, 10))
+	service.cur.Accracy = uint32(Str2Num(result.Result.Radius, 10))
+
+	logging.Log(fmt.Sprintf("amap TransForm location Is:%06f, %06f", service.cur.Lat, service.cur.Lng))
+
+	return true
+}
+
+
+const pi = float64(3.1415926535897932384626)
+const a = float64(6378245.0)
+const ee = float64(0.00669342162296594323)
+func transformLat(x, y float64) float64 {
+	ret := -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * math.Sqrt(math.Abs(x))
+	ret += (20.0 * math.Sin(6.0 * x * pi) + 20.0 * math.Sin(2.0 * x * pi)) * 2.0 / 3.0
+	ret += (20.0 * math.Sin(y * pi) + 40.0 * math.Sin(y / 3.0 * pi)) * 2.0 / 3.0
+	ret += (160.0 * math.Sin(y / 12.0 * pi) + 320 * math.Sin(y * pi / 30.0)) * 2.0 / 3.0
+	return ret
+}
+
+func  transformLon(x, y float64) float64 {
+	ret := 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * math.Sqrt(math.Abs(x))
+	ret += (20.0 * math.Sin(6.0 * x * pi) + 20.0 * math.Sin(2.0 * x * pi)) * 2.0 / 3.0
+	ret += (20.0 * math.Sin(x * pi) + 40.0 * math.Sin(x / 3.0 * pi)) * 2.0 / 3.0
+	ret += (150.0 * math.Sin(x / 12.0 * pi) + 300.0 * math.Sin(x / 30.0 * pi)) * 2.0 / 3.0
+	return ret
+}
+
+func transform(lat, lon float64, mgLat, mgLon *float64) {
+	dLat := transformLat(lon - 105.0, lat - 35.0)
+	dLon := transformLon(lon - 105.0, lat - 35.0)
+	radLat := lat / 180.0 * pi
+	magic := math.Sin(radLat)
+	magic = 1 - ee * magic * magic
+	sqrtMagic := (magic)
+	dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * pi)
+	dLon = (dLon * 180.0) / (a / sqrtMagic * math.Cos(radLat) * pi)
+	*mgLat = lat + dLat
+	*mgLon = lon + dLon
+}
+
+func gcj_To_Gps84(lat, lon float64, mgLat, mgLon *float64) {
+	dTempLat,  dTempLon := float64(0), float64(0)
+	transform(lat, lon, &dTempLat, &dTempLon)
+	*mgLon = lon * 2 - dTempLon
+	*mgLat = lat * 2 - dTempLat
 }
