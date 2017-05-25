@@ -1,3 +1,5 @@
+http://127.0.0.1/tracker/web/index.php?r=app/auth/alarm&systemno=93060571398&data=170525082654,22577586,113861071,30,4,6,0,1,baoanlu,
+
 mac os下制作iso U盘刻录
 dd if=/Volumes/Seagate1TUSBHDD/tools/ubuntukylin-17.04-enhanced-amd64.iso  of=/dev/disk1 bs=8192
 

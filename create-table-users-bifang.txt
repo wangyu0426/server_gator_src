@@ -701,3 +701,11 @@ const styles = StyleSheet.create({
 
 })
 
+
+update device_location_2017_05 set location_time=20170525153000,data=jsonb_set(data,'{datatime}','170525153000'::jsonb,true), data=jsonb_set(data,'{steps}','0'::jsonb,true), data=jsonb_set(data,'{locateType}','3'::jsonb,true) where imei=357593060571398 and location_time=20170525153000;
+
+update device_location_2017_05 set location_time=20170525153000,data=jsonb_set(data,'{datatime}','170525153000'::jsonb,true), data=jsonb_set(data,'{steps}','0'::jsonb,true), data=jsonb_set(data,'{locateType}','3'::jsonb,true) where imei=357593060571398 and location_time=20170525153000;
+
+update device_location_2017_05 set location_time=20170525153000,data=jsonb_set(data,'{datatime}','170525153000'::jsonb,true), data=jsonb_set(data,'{steps}','0'::jsonb,true), data=jsonb_set(data,'{locateType}','3'::jsonb,true) where imei=357593060571398 and location_time=20170525153000;
+
+data = jsonb_set(data,'{datatime, steps, }','%d'::jsonb,'{steps}','%d'::jsonb,'{locateType}','%d'::jsonb,true) 

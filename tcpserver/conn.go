@@ -5,12 +5,15 @@ import (
 	"sync"
 	"../proto"
 	"sync/atomic"
+	"encoding/binary"
 )
 
 type Connection struct {
 	closeFlag int32
 	saved bool
 	imei uint64
+	IP   uint32
+	Port int
 	conn *net.TCPConn
 	closeOnce sync.Once
 	closeChan chan struct{}
@@ -19,8 +22,11 @@ type Connection struct {
 }
 
 func newConn(conn *net.TCPConn)  *Connection{
+	addr,  _:= net.ResolveTCPAddr("tcp", conn.RemoteAddr().String())
 	return &Connection{
 		conn: conn,
+		IP:  binary.BigEndian.Uint32(addr.IP.To4()),
+		Port: addr.Port,
 		closeChan: make(chan struct{}),
 		requestChan: make(chan *proto.MsgData, 1024),
 		responseChan: make(chan *proto.MsgData, 1024),

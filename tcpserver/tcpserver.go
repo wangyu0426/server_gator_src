@@ -12,6 +12,7 @@ import (
 	"os"
 	"sync"
 	"github.com/jackc/pgx"
+	"encoding/json"
 )
 
 const (
@@ -65,15 +66,24 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				return
 			}
 
-			if msg.Header.Header.From == proto.MsgFromAppToAppServer{
-				logging.Log("msg from app: " + string(msg.Data))
+			if msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE {
+				logging.Log(fmt.Sprintf("msg to notify to push cached data to device %d ",  msg.Header.Header.Imei))
 			}else {
-				logging.Log("msg from tcp: " + string(msg.Data))
+				if msg.Header.Header.From == proto.MsgFromAppToAppServer {
+					logging.Log("msg from app: " + string(msg.Data))
+				}else {
+					logging.Log("msg from tcp: " + string(msg.Data))
+				}
 			}
 
 			c, ok := TcpClientTable[msg.Header.Header.Imei]
 			if ok {
-				c.responseChan <- msg
+				if msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE {
+					//从缓存中读取数据，发送至手表
+				}else {
+					c.responseChan <- msg
+				}
+
 				logging.Log("send app data to write routine")
 			}else {
 				logging.Log("will send app data to tcp connection from TcpClientTable, but connection not found")
@@ -174,6 +184,12 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 			msg.Header.Header.Status = 0
 		}
 
+		//首先通知ManagerLoop, 将上次缓存的未发送的数据发送给手表
+		msgNotify := &proto.MsgData{}
+		msgNotify.Header.Header.Version = proto.MSG_HEADER_PUSH_CACHE
+		msg.Header.Header.Imei = imei
+		serverCtx.TcpServerChan <- msgNotify
+
 		// 包可能接收未完整，但此时可以开始进行业务逻辑处理
 		// 目前所有头部信息都已准备好，业务处理模块只需处理与断点续传相关逻辑
 		// 以及命令的实际逻辑
@@ -219,12 +235,15 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				return
 			}
 
-			proto.HandleTcpRequest(proto.RequestContext{Pgpool: serverCtx.PGPool,
+			proto.HandleTcpRequest(proto.RequestContext{IP: c.IP, Port: c.Port,
+				Pgpool: serverCtx.PGPool,
 				MysqlPool: serverCtx.MySQLPool,
 				WritebackChan: serverCtx.TcpServerChan,
 				Msg: data,
 				GetDeviceDataFunc: GetDeviceData,
 				SetDeviceDataFunc: SetDeviceData,
+				GetChatDataFunc: GetChatData,
+				AddChatDataFunc: AddChatData,
 			})
 		}
 	}
@@ -282,6 +301,35 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 }
 
+func GetChatData(imei uint64)  []proto.ChatInfo {
+	chatData := []proto.ChatInfo{}
+	DeviceTableLock.RLock()
+	device, ok := DeviceTable[imei]
+	if ok {
+		if len(device.ChatCache) > 0 {
+			for _, chat := range device.ChatCache {
+				chatData = append(chatData, chat)
+			}
+		}
+	}
+	DeviceTableLock.RUnlock()
+
+	return chatData
+}
+
+func AddChatData(imei uint64, chatData proto.ChatInfo) {
+	DeviceTableLock.Lock()
+	_, ok := DeviceTable[imei]
+	if ok {
+		DeviceTable[imei].ChatCache = append(DeviceTable[imei].ChatCache, chatData)
+	}else {
+		DeviceTable[imei] = &proto.DeviceCache{}
+		DeviceTable[imei].Imei = imei
+		DeviceTable[imei].ChatCache = append(DeviceTable[imei].ChatCache, chatData)
+	}
+	DeviceTableLock.Unlock()
+}
+
 func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 	isQueryDB := false
 	deviceData := proto.LocationData{}
@@ -298,7 +346,7 @@ func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 		return deviceData
 	}else {
 		//缓存中没有数据，将从数据库中查询
-		strSQL := fmt.Sprintf("select * from from device_location where imei=%d", imei)
+		strSQL := fmt.Sprintf("select * from  device_location where imei=%d order by location_time desc limit 1", imei)
 		logging.Log("sql: " + strSQL)
 		rows, err := pgpool.Query(strSQL)
 		if err != nil {
@@ -306,8 +354,31 @@ func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 			return deviceData
 		}
 
-		for rows.Next() {
+		if rows.Next() {
+			values , err := rows.Values()
+			logging.Log(fmt.Sprint("get device data: ", values, err))
+			// [357593060571398 20170524141830 29.566889 106.45424 map[datatime:1.7052414183e+11 zoneAlarm:0 zoneIndex:0 lat:29.566888 steps:0 battery:3 readflag:0 zoneName: locateType:1 org_battery:5 lng:106.454239 alarm:2 accracy:0]]
+			//deviceData.DataTime = uint64(values[1].(int64))
+			//deviceData.Lat = float64(values[2].(float32))
+			//deviceData.Lng = float64(values[3].(float32))
+			//fmt.Println("deviceData: ", deviceData)
+			jsonStr, _ := json.Marshal(values[4])
+			json.Unmarshal(jsonStr, &deviceData)
+			fmt.Println("deviceData: ", deviceData)
 
+			DeviceTableLock.Lock()
+			_, ok := DeviceTable[imei]
+			if ok {
+				DeviceTable[imei].CurrentLocation =  deviceData
+			}else {
+				DeviceTable[imei] = &proto.DeviceCache{}
+				DeviceTable[imei].Imei = imei
+				DeviceTable[imei].CurrentLocation =  deviceData
+			}
+			DeviceTableLock.Unlock()
+
+		}else {
+			logging.Log(fmt.Sprintf("[%d] get device data: no data in db, %s", imei, err.Error()))
 		}
 
 		return deviceData

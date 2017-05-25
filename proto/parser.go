@@ -22,6 +22,7 @@ const (
 	MTKEPO_DATA_ONETIME =12
 	MTKEPO_SV_NUMBER   = 32
 	MTKEPO_RECORD_SIZE    =  72
+	INVALID_TIMEZONE = -999
 )
 
 const (
@@ -37,7 +38,8 @@ const (
 const (
 	MSG_HEADER_VER   =  0x0100  //普通消息头部版本
 	MSG_HEADER_VER_EX  = 0x0101  //支持分片和断点续传功能的增强型消息头部版本
-	SHARDING_SIZE  = 640     //分片大小为640字节，这是一个比较合适的经验值。
+	MSG_HEADER_PUSH_CACHE = 0x0102  //此消息头部版本用于通知ManagerLoop推送缓存中的数据给手表
+	SHARDING_SIZE  = 700     //分片大小为700字节，这是一个比较合适的经验值。
 )
 
 const (
@@ -45,9 +47,13 @@ const (
 
 	DRT_SYNC_TIME       // 同BP00，手表请求对时
 	DRT_SEND_LOCATION      // 同BP30，手表上报定位(报警)数据
+	DRT_DEVICE_LOGIN    	   // 同BP31，手表登录服务器
+	DRT_DEVICE_ACK	    	   // 同BP04，手表对服务器请求的应答
+	DRT_MONITOR_ACK	   // 同BP05，手表对服务器请求电话监听的应答
 	DRT_SEND_MINICHAT      // 同BP34，手表发送语音微聊
-	DRT_FETCH_MINICHAT     // 同BP07，手表获取语音微聊
-	DRT_FETCH_AGPS         // 同BP08，手表获取AGPS数据
+	DRT_FETCH_MINICHAT    // 同BP11，手表获取语音微聊
+	DRT_FETCH_AGPS        	  // 同BP32，手表获取AGPS数据
+	DRT_HEART_BEAT       	  // 同BP33，手表发送状态数据
 
 	DRT_MAX
 )
@@ -62,7 +68,9 @@ const (
 	CMD_AP07
 	CMD_AP08
 	CMD_AP09
+	 CMD_AP11
 	 CMD_AP30
+	 CMD_AP31
  )
 
 
@@ -71,10 +79,13 @@ var commands = []string{
 	"",
 	"BP00",
 	"BP30",
-	"BP02",
+	"BP31",
+	"BP04",
+	"BP05",
 	"BP34",
-	"BP07",
-	"BP08",
+	"BP11",
+	"BP32",
+	"BP33",
 }
 
 /*普通的消息头部*/
@@ -401,7 +412,7 @@ func GetTimeZone(uiIP uint32) int32 {
 		}
 	}
 
-	return -100
+	return 0
 }
 
 func LoadEPOFromFile()  {
@@ -626,7 +637,7 @@ func checkTimeZoneOffset(tz string) bool {
 
 func ParseTimeZone(timezone string)  int {
 	if checkTimeZoneOffset(timezone) == false {
-		return 0
+		return INVALID_TIMEZONE
 	}
 
 	bSignal := true

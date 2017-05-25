@@ -37,13 +37,16 @@ const (
 )
 
 type RequestContext struct {
+	IP uint32
+	Port int
 	Pgpool *pgx.ConnPool
 	MysqlPool *sql.DB
-
 	WritebackChan chan *MsgData
 	Msg *MsgData
 	GetDeviceDataFunc  func (imei uint64, pgpool *pgx.ConnPool)  LocationData
 	SetDeviceDataFunc  func (imei uint64, updateType int, deviceData LocationData)
+	GetChatDataFunc  func (imei uint64)  []ChatInfo
+	AddChatDataFunc  func (imei uint64, chatData ChatInfo)
 }
 
 type GmapWifi struct {
@@ -116,11 +119,11 @@ type LocationData struct {
 type ChatInfo struct {
 	DateTime uint64
 	SenderType uint8
-	Sender []byte
+	Sender string
 	ReceiverType uint8
-	Receiver []byte
+	Receiver string
 	ContentType uint8
-	Content []byte
+	Content string
 }
 
 type DeviceCache struct {
@@ -128,6 +131,7 @@ type DeviceCache struct {
 	CurrentLocation LocationData
 	AlarmCache []LocationData
 	ChatCache []ChatInfo
+	ResponseCache []ResponseItem
 }
 
 type GT06Service struct {
@@ -137,6 +141,9 @@ type GT06Service struct {
 	old LocationData
 	cur LocationData
 	needSendLocation bool
+	needSendChatNum bool
+	needSendChat bool
+	reqChatInfoNum int
 	getSameWifi bool
 	wifiInfoList [MAX_WIFI_NUM]WIFIInfo
 	wiFiNum uint16
@@ -197,16 +204,7 @@ func (service *GT06Service)PreDoRequest() bool  {
 
 
 func (service *GT06Service)DoRequest(msg *MsgData) bool  {
-	//if msg.Data[0] != 0x28 {
-	//	logging.Log(fmt.Sprintf("Error Msg Token[%s]", string(msg.Data[0: ])))
-	//	return false;
-	//}
-
 	logging.Log("Get Input Msg: " + string(msg.Data))
-
-	//imei, _ := strconv.ParseUint(string(msg.Data[0: ImeiLen]), 0, 0)
-	//cmd := string(msg.Data[ImeiLen: ImeiLen + CmdLen])
-
 	logging.Log(fmt.Sprintf("imei: %d cmd: %s; go routines: %d", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd), runtime.NumGoroutine()))
 
 	DeviceInfoListLock.RLock()
@@ -217,26 +215,13 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		return false
 	}
 	DeviceInfoListLock.RUnlock()
-	service.GetWatchDataInfo(service.imei)
 
 	bufOffset := uint32(0)
 	service.msgSize = uint64(msg.Header.Header.Size)
 	service.imei = msg.Header.Header.Imei
 	service.cmd = msg.Header.Header.Cmd
-	//bufOffset++
-	//shMsgLen--
-	//service.msgSize, _ = strconv.ParseUint(string(msg.Data[bufOffset: bufOffset + 4]), 16, 0)
-	//bufOffset += 4
-	//shMsgLen -= 4
-	//
-	//service.imei, _ = strconv.ParseUint(string(msg.Data[bufOffset: bufOffset + DEVICEID_BIT_NUM]), 10, 0)
-	//bufOffset += DEVICEID_BIT_NUM
-	//shMsgLen -= DEVICEID_BIT_NUM
-	//
-	//service.cmd = IntCmd(string(msg.Data[bufOffset: bufOffset + DEVICE_CMD_LENGTH]))
-	//
-	//bufOffset += DEVICE_CMD_LENGTH
-	//shMsgLen -= DEVICE_CMD_LENGTH
+
+	service.GetWatchDataInfo(service.imei)
 
 	if IsDeviceInCompanyBlacklist(service.imei) {
 		logging.Log(fmt.Sprintf("device %d  is in the company black list", service.imei))
@@ -292,6 +277,10 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		}else {
 			bufOffset++
 			service.needSendLocation = (msg.Data[bufOffset] - '0') == 1
+			if service.needSendLocation {
+				resp := &ResponseItem{CMD_AP30, service.makeSendLocationReplyMsg()}
+				service.rspList = append(service.rspList, resp)
+			}
 			bufOffset += 1
 		}
 
@@ -300,13 +289,95 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			logging.Log("ProcessLocateInfo Error")
 			return false
 		}
+	}else if service.cmd == DRT_DEVICE_LOGIN {
+		//BP31, 设备登录服务器消息
+		resp := &ResponseItem{CMD_AP31, service.makeDeviceLoginReplyMsg()}
+		service.rspList = append(service.rspList, resp)
+	}else if service.cmd == DRT_DEVICE_ACK {
+		//BP04, 手表对服务器请求的应答
+		if strings.Contains(string(msg.Data),  "AP11") {
+			service.needSendChatNum = false
+		}
+	}else if service.cmd == DRT_MONITOR_ACK {
+		//BP05, 手表对服务器请求电话监听的应答
+	}else if service.cmd == DRT_SEND_MINICHAT {
+		//BP34,手表发送微聊
+		bufOffset++
+		ret := service.ProcessMicChat(msg.Data[bufOffset: ])
+		if ret == false {
+			logging.Log("ProcessMicChat Error")
+		}
+	}else if service.cmd == DRT_FETCH_MINICHAT {
+		//BP11, 手表获取未读微聊数目
+		service.needSendChat = true
+		service.needSendChatNum = true
+		service.reqChatInfoNum = 0
+		service.reqChatInfoNum = int(msg.Data[bufOffset] - '0') * 10 + int(msg.Data[bufOffset + 1]- '0')
+	}else if service.cmd == DRT_FETCH_AGPS {
+		//BP32, 手表请求EPO数据
+		ret := service.ProcessRspAGPSInfo()
+		if ret == false {
+			logging.Log("ProcessRspAGPSInfo Error")
+		}
+	}else if service.cmd == DRT_HEART_BEAT {
+		// heart beat
+		bufOffset++
+		service.cur.AlarmType = msg.Data[bufOffset] - '0'
+		bufOffset++
+		if msg.Data[bufOffset] != ',' {
+			service.cur.AlarmType = uint8(Str2Num(string(msg.Data[bufOffset - 1 : bufOffset + 1]), 16))
+			bufOffset++
+		}
+
+		bufOffset++
+
+		//steps
+		service.cur.Steps = Str2Num(string(msg.Data[bufOffset : bufOffset + 8]), 16)
+		bufOffset += 9
+
+		//battery
+		service.cur.OrigBattery = msg.Data[bufOffset] - '0'
+		bufOffset += 2
+
+		//main base station
+		//接下来解析"46000024820000DE127,"
+		szMainLBS := make([]byte, 256)
+		i := 0
+		for msg.Data[bufOffset] != ',' {
+			szMainLBS[i] = msg.Data[bufOffset]
+			bufOffset++
+			i++
+		}
+		fmt.Sscanf(string(szMainLBS), "%03d%03d%04X%07X%02X",
+			&service.MCC, &service.MNC, &service.LACID, &service.CELLID, &service.RXLEVEL)
+		service.RXLEVEL = service.RXLEVEL * 2 - 113
+		if service.RXLEVEL > 0 {
+			service.RXLEVEL = 0
+		}
+
+		ret := service.ProcessUpdateWatchStatus(msg.Data[bufOffset: ])
+		if ret == false {
+			logging.Log("ProcessUpdateWatchStatus Error")
+		}
+	}else {
+		logging.Log(fmt.Sprintf("Error Device CMD(%d, %s)", service.imei, StringCmd(service.cmd)))
 	}
 
-	return true
+	ret := service.PushCachedData()
+
+	return ret
 }
 
 
 func (service *GT06Service)DoResponse() []byte  {
+	if service.needSendChat {
+		service.ProcessRspChat()
+	}
+
+	if service.needSendChatNum {
+		service.PushChatNum()
+	}
+
 	offset, bufSize := 0, 256
 	data := make([]byte, bufSize)
 
@@ -323,15 +394,46 @@ func (service *GT06Service)DoResponse() []byte  {
 		}
 	}
 
-	if service.needSendLocation {
-
-	}
-
 	if offset == 0 {
 		return nil
 	}else {
 		return data[0: offset]
 	}
+}
+
+func (service *GT06Service)UpdateDeviceTimeZone(imei uint64, timezone int) bool {
+	DeviceInfoListLock.Lock()
+	_, ok := (*DeviceInfoList)[service.imei]
+	if ok {
+		(*DeviceInfoList)[service.imei].TimeZone = timezone
+	}
+	DeviceInfoListLock.Unlock()
+
+	//时区写入数据库
+	szTimeZone, signed,hour, min := "", "", int(timezone / 100), timezone % 100
+	if timezone > 0 {
+		signed = "+"
+	}else{
+		signed = "-"
+		if timezone == 0 {
+			signed = ""
+		}
+
+		hour, min = int(-timezone / 100), -timezone % 100
+	}
+
+	szTimeZone = fmt.Sprintf("%s%02d:%02d", signed,  hour, min)
+
+	strSQL := fmt.Sprintf("UPDATE watchinfo SET TimeZone='%s'  where IMEI='%d'", szTimeZone, service.imei)
+
+	logging.Log("SQL: " + strSQL)
+	_, err := service.reqCtx.MysqlPool.Exec(strSQL)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] update time zone into db failed, %s", service.imei, err.Error()))
+		return false
+	}
+
+	return true
 }
 
 func (service *GT06Service)makeSyncTimeReplyMsg() []byte {
@@ -345,6 +447,12 @@ func (service *GT06Service)makeSyncTimeReplyMsg() []byte {
 		timezone = device.TimeZone
 	}
 	DeviceInfoListLock.RUnlock()
+
+	if timezone == INVALID_TIMEZONE {
+		timezone = int(GetTimeZone(service.reqCtx.IP))
+		service.UpdateDeviceTimeZone(service.imei, timezone)
+	}
+
 	if timezone < 0 {
 		c = 'w'
 	}
@@ -352,7 +460,7 @@ func (service *GT06Service)makeSyncTimeReplyMsg() []byte {
 	body := fmt.Sprintf("%015dAP03,%s,%c%04d)", service.imei,curTime, c, timezone)
 	size := fmt.Sprintf("(%04X", 5 + len(body))
 
-	return []byte(size + body + string(service.makeSendLocationReplyMsg()))
+	return []byte(size + body)  // + string(service.makeSendLocationReplyMsg()))
 }
 
 func (service *GT06Service)makeSendLocationReplyMsg() []byte {
@@ -363,6 +471,22 @@ func (service *GT06Service)makeSendLocationReplyMsg() []byte {
 	body := fmt.Sprintf("%015dAP14%06f,%06f,%d,%s,%016X)",
 		service.imei, service.old.Lat, service.old.Lng,service.old.Accracy,
 		curTime, makeId())
+	size := fmt.Sprintf("(%04X", 5 + len(body))
+
+	return []byte(size + body)
+}
+
+func (service *GT06Service)makeDeviceLoginReplyMsg() []byte {
+	//(0019357593060153353AP31)
+	body := fmt.Sprintf("%015dAP31)", service.imei)
+	size := fmt.Sprintf("(%04X", 5 + len(body))
+
+	return []byte(size + body)
+}
+
+func (service *GT06Service)makeChatNumReplyMsg(chatNum int) []byte {
+	//(001B357593060153353AP1102)
+	body := fmt.Sprintf("%015dAP11%02d)", service.imei, chatNum)
 	size := fmt.Sprintf("(%04X", 5 + len(body))
 
 	return []byte(size + body)
@@ -462,6 +586,100 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 		service.NotifyAlarmMsg()
 	}
 
+	return true
+}
+
+func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
+	//需要断点续传的支持
+	if len(pszMsg) == 0 {
+		return false
+	}
+
+	return true
+}
+
+func (service *GT06Service) ProcessRspAGPSInfo() bool {
+	//需要断点续传的支持
+	return true
+}
+
+func (service *GT06Service) ProcessRspChat() bool {
+	//需要断点续传的支持
+	return true
+}
+
+func (service *GT06Service) PushChatNum() bool {
+	if service.reqCtx.GetChatDataFunc != nil {
+		chatData := service.reqCtx.GetChatDataFunc(service.imei)
+		if len(chatData) > 0 {
+			//通知终端有聊天信息
+			resp := &ResponseItem{CMD_AP11, service.makeChatNumReplyMsg(len(chatData))}
+			service.rspList = append(service.rspList, resp)
+		}
+	}
+
+	return true
+}
+
+func (service *GT06Service) ProcessUpdateWatchStatus(pszMsgBuf []byte) bool {
+	if len(pszMsgBuf) == 0 {
+		return false
+	}
+
+	ucBattery := 1
+	if service.cur.OrigBattery > 2 {
+		ucBattery = int(service.cur.OrigBattery - 2)
+	}
+
+	ret := service.UpdateWatchBattery()
+	if ret == false {
+		logging.Log(fmt.Sprintf("UpdateWatchBattery failed, battery=%d", ucBattery))
+		return ret
+	}
+
+	nStep := service.cur.Steps
+	if  nStep >= 0x7fff - 1 || int(nStep) < 0 {
+		nStep = 0
+	}
+
+	iLocateType := LBS_SMARTLOCATION
+
+	bufOffset := 0
+	bufOffset++
+
+	iDayTime := service.GetIntValue(pszMsgBuf[bufOffset: ], TIME_LEN)
+	iDayTime = iDayTime % 1000000
+	bufOffset += TIME_LEN + 1
+
+	iSecTime := service.GetIntValue(pszMsgBuf[bufOffset: ], TIME_LEN)
+	i64Time := uint64(iDayTime * 1000000 + iSecTime)
+	bufOffset += TIME_LEN + 1
+
+	logging.Log(fmt.Sprintf("Update Watch %d, Step:%d, Battery:%d", service.imei, service.cur.Steps, ucBattery))
+
+	stWatchStatus := &WatchStatus{}
+	stWatchStatus.i64DeviceID = service.imei
+	stWatchStatus.iLocateType = uint8(iLocateType)
+	stWatchStatus.i64Time = i64Time
+	stWatchStatus.Step = nStep
+	ret = service.UpdateWatchStatus(stWatchStatus)
+	if ret == false {
+		logging.Log("Update Watch status failed ")
+	}
+
+	if ucBattery <=7 && ucBattery >= 0 {
+		service.cur.Battery = uint8(ucBattery)
+		ret = service.UpdateWatchBattery()
+		if ret == false {
+			logging.Log(fmt.Sprintf("UpdateWatchBattery failed, battery=%d", ucBattery))
+			return ret
+		}
+	}
+
+	return true
+}
+
+func (service *GT06Service) PushCachedData() bool {
 	return true
 }
 
@@ -840,7 +1058,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 				iRadiu := service.GetDisTance(&stCurPoint, &stDstPoint)
 				if iRadiu < uint32(stSafeZone.Radius) {
 					if iZoneID != stSafeZone.ZoneID || (iZoneID == stSafeZone.ZoneID && iZoneAlarmType != ALARM_INZONE) {
-						if service.wifiZoneIndex < 0 && service.cur.LocateType == LBS_WIFI && service.cur.LocateType != LBS_WIFI {
+						if service.wifiZoneIndex < 0 && service.cur.LocateType == LBS_WIFI  {
 							break
 						}
 
@@ -859,7 +1077,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 					}
 				} else {
 					if iZoneID == stSafeZone.ZoneID && iZoneAlarmType != ALARM_OUTZONE {
-						if service.wifiZoneIndex < 0 && service.cur.LocateType == LBS_WIFI && service.old.LocateType != LBS_WIFI  {
+						if service.wifiZoneIndex < 0 && service.cur.LocateType == LBS_WIFI  {
 							break
 						}
 
@@ -904,6 +1122,11 @@ func (service *GT06Service) WatchDataUpdateDB() bool {
 
 	logging.Log(fmt.Sprintf("SQL: %s", strSQL))
 
+	strSQLTest := fmt.Sprintf("update %s set location_time=%d,data=jsonb_set(data,'{datatime}','%d'::jsonb,'{steps}','%d'::jsonb,'{locateType}','%d'::jsonb,true) ",
+		strTableaName, 20000000000000 + service.cur.DataTime, service.cur.DataTime, service.cur.Steps, service.cur.LocateType)
+
+	logging.Log(fmt.Sprintf("SQL Test: %s", strSQLTest))
+
 	_, err := service.reqCtx.Pgpool.Exec(strSQL)
 	if err != nil {
 		logging.Log("pg pool exec sql failed, " + err.Error())
@@ -929,7 +1152,21 @@ func (service *GT06Service) UpdateWatchStatus(watchStatus *WatchStatus) bool {
 	}
 
 	if service.reqCtx.SetDeviceDataFunc != nil  {
-		service.reqCtx.SetDeviceDataFunc(service.imei, DEVICE_DATA_STATUS, deviceData)
+		service.reqCtx.SetDeviceDataFunc(watchStatus.i64DeviceID, DEVICE_DATA_STATUS, deviceData)
+
+		//strTime := fmt.Sprintf("20%d", deviceData.DataTime) //20170520114920
+		//strTableaName := fmt.Sprintf("device_location_%s_%s", string(strTime[0:4]), string(strTime[4: 6]))
+		//strSQL := fmt.Sprintf("update %s set location_time=%d,data=jsonb_set(data,'{datatime}','%d'::jsonb,'{steps}','%d'::jsonb,'{locateType}','%d'::jsonb,true) ",
+		//	strTableaName, 20000000000000 + deviceData.DataTime, deviceData.DataTime, deviceData.Steps, deviceData.LocateType)
+		//
+		//logging.Log(fmt.Sprintf("SQL: %s", strSQL))
+		//
+		//_, err := service.reqCtx.Pgpool.Exec(strSQL)
+		//if err != nil {
+		//	logging.Log("pg pool exec sql failed, " + err.Error())
+		//	return false
+		//}
+
 		return true
 	}else{
 		return false
@@ -950,6 +1187,32 @@ func (service *GT06Service) UpdateWatchBattery() bool {
 }
 
 func (service *GT06Service) NotifyAlarmMsg() bool {
+	strRequestBody := "r=app/auth/alarm&"
+	strReqURL := "http://service.gatorcn.com/tracker/web/index.php"
+	value := fmt.Sprintf("systemno=%d&data=%d,%d,%d,%d,%d,%d,%d,%d,%s,%s",
+		service.imei % 100000000000, service.cur.DataTime, service.cur.Lat, service.cur.Lng,
+		service.cur.Steps, service.cur.Battery, service.cur.AlarmType, service.cur.ReadFlag,
+		service.cur.LocateType, service.cur.ZoneName, "")
+
+	strRequestBody += value
+	strReqURL += "?" +  strRequestBody
+	logging.Log(strReqURL)
+	resp, err := http.Get(strReqURL)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] call php api to notify app failed  failed,  %s", service.imei, err.Error()))
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] php notify api  response has err, %s", service.imei, err.Error()))
+		return false
+	}
+
+	logging.Log(fmt.Sprintf("[%d] read php notify api response:, %s", service.imei, body))
+
 	return true
 }
 
@@ -1086,7 +1349,19 @@ func  (service *GT06Service) GetWatchDataInfo(imei uint64)  {
 	}
 }
 func  (service *GT06Service) GetLocation()  bool{
-	return service.GetLocationByAmap()
+	useGooglemap := true
+	DeviceInfoListLock.RLock()
+	deviceInfo, ok := (*DeviceInfoList)[service.imei]
+	if ok && strings.Contains(deviceInfo.CountryCode, "86") {
+		useGooglemap = false
+	}
+	DeviceInfoListLock.RUnlock()
+
+	if useGooglemap {
+		return service.GetLocationByGoogle()
+	}else {
+		return service.GetLocationByAmap()
+	}
 }
 
 
