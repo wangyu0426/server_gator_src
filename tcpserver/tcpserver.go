@@ -13,6 +13,7 @@ import (
 	"sync"
 	"github.com/jackc/pgx"
 	"encoding/json"
+	"time"
 )
 
 const (
@@ -70,9 +71,9 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				logging.Log(fmt.Sprintf("msg to notify to push cached data to device %d ",  msg.Header.Header.Imei))
 			}else {
 				if msg.Header.Header.From == proto.MsgFromAppToAppServer {
-					logging.Log("msg from app: " + string(msg.Data))
+					//logging.Log("msg from app: " + string(msg.Data))
 				}else {
-					logging.Log("msg from tcp: " + string(msg.Data))
+					//logging.Log("msg from tcp: " + string(msg.Data))
 				}
 			}
 
@@ -103,10 +104,17 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 	logging.Log("new connection from: " +  c.conn.RemoteAddr().String())
 
 	for  {
-		dataSize := uint16(0)
-		headerBuf := make([]byte, MsgHeaderSize)
+		if len(c.buf) == 0 {
+			c.buf = make([]byte, 256)
+		}
 
-		//c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
+		dataSize := uint16(0)
+		headerBuf := c.buf[0: MsgHeaderSize]
+
+		if serverCtx.IsDebug == false {
+			c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
+		}
+
 		if _, err := io.ReadFull(c.conn, headerBuf); err != nil {
 			logging.Log("recv MsgHeaderSize bytes header failed, " + err.Error())
 			break
@@ -127,12 +135,19 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		}
 
 		logging.Log("data size: " + fmt.Sprintf("%d", dataSize))
+		if len(c.buf) < int(dataSize) {
+			buf := c.buf
+			c.buf = make([]byte, dataSize)
+			copy(c.buf[0: MsgHeaderSize], buf)
+		}
 
 		bufSize := dataSize - MsgHeaderSize
-		dataBuf := make([]byte, bufSize)
+		dataBuf := c.buf[MsgHeaderSize: ]
 		recvOffset := uint16(0)
 		for {
-			//c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
+			if serverCtx.IsDebug == false {
+				c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
+			}
 			n, err := c.conn.Read(dataBuf[recvOffset: ])
 			if n > 0 {
 				recvOffset += uint16(n)
@@ -195,6 +210,11 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		// 以及命令的实际逻辑
 		c.requestChan <- msg
 
+		//业务逻辑只处理完整的请求和不完整的微聊请求，处理完请求以后，
+		// 对于不完整的微聊请求，由于连接已经出错，需要将当前连接关闭
+		if recvOffset != bufSize && cmd == proto.StringCmd(proto.DRT_SEND_MINICHAT) {
+			break  //退出循环和go routine，连接关闭
+		}
 	}
 
 }
@@ -235,7 +255,7 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				return
 			}
 
-			proto.HandleTcpRequest(proto.RequestContext{IP: c.IP, Port: c.Port,
+			proto.HandleTcpRequest(proto.RequestContext{IsDebug: serverCtx.IsDebug, IP: c.IP, Port: c.Port,
 				Pgpool: serverCtx.PGPool,
 				MysqlPool: serverCtx.MySQLPool,
 				WritebackChan: serverCtx.TcpServerChan,

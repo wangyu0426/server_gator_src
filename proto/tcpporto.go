@@ -37,6 +37,7 @@ const (
 )
 
 type RequestContext struct {
+	IsDebug bool
 	IP uint32
 	Port int
 	Pgpool *pgx.ConnPool
@@ -116,14 +117,31 @@ type LocationData struct {
 	origBatteryOld uint8
 }
 
+const (
+	ChatFromDeviceToApp = iota
+	ChatFromAppToDevice
+)
+
 type ChatInfo struct {
 	DateTime uint64
+	VoiceMilisecs int
 	SenderType uint8
 	Sender string
 	ReceiverType uint8
 	Receiver string
 	ContentType uint8
 	Content string
+	Flags  int
+}
+
+type DataBlock struct {
+	MsgId uint64
+	Imei uint64
+	Cmd string
+	Time uint64
+	Phone string
+	BlockCount, BlockIndex, BlockSize  int
+	Data []byte
 }
 
 type DeviceCache struct {
@@ -302,6 +320,11 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		//BP05, 手表对服务器请求电话监听的应答
 	}else if service.cmd == DRT_SEND_MINICHAT {
 		//BP34,手表发送微聊
+		if len(msg.Data) <= 2 {
+			logging.Log("ProcessMicChat Error for too small msg data length")
+			return false
+		}
+
 		bufOffset++
 		ret := service.ProcessMicChat(msg.Data[bufOffset: ])
 		if ret == false {
@@ -372,6 +395,18 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 func (service *GT06Service)DoResponse() []byte  {
 	if service.needSendChat {
 		service.ProcessRspChat()
+		//data := make([]byte, 200*1024)
+		//offset := 0
+		//for  _, respCmd := range service.rspList {
+		//	if respCmd.rspCmdType == CMD_AP12 {
+		//		fields := strings.SplitN(string(respCmd.data), ",", 7)
+		//		size := int(Str2Num(fields[5], 10))
+		//		copy(data[offset: offset + size], fields[6][0: size])
+		//		offset += size
+		//	}
+		//}
+		//
+		//ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
 	}
 
 	if service.needSendChatNum {
@@ -484,6 +519,84 @@ func (service *GT06Service)makeDeviceLoginReplyMsg() []byte {
 	return []byte(size + body)
 }
 
+func (service *GT06Service)makeChatDataReplyMsg(voiceFile, phone string, datatime uint64) []*ResponseItem {
+	//(03B5357593060153353AP12,1,170413163300,6,1,900,数据)
+
+	//读取语音文件，并分包
+	voice, err := ioutil.ReadFile(voiceFile)
+	if err != nil {
+		logging.Log("read voice file failed, " + voiceFile + "," + err.Error())
+		return nil
+	}
+
+	if len(voice) == 0 {
+		logging.Log("voice file empty, 0 bytes, ")
+		return nil
+	}
+
+	return service.shardData("AP12", phone, datatime, voice)
+}
+
+func (service *GT06Service)shardData(cmd, phone string, datatime uint64, data []byte) []*ResponseItem {
+	resps := []*ResponseItem{}
+	bufOffset, iReadLen := 0, len(data)
+	blockSize := 700
+	packCount := int(iReadLen / blockSize + 1)
+	if iReadLen % blockSize == 0 {
+		packCount = iReadLen / blockSize
+	}
+
+	countLen, packIndex := iReadLen, 1
+	for countLen > 0 {
+		packSize := countLen
+		if countLen >= blockSize {
+			packSize = blockSize
+		}
+
+		block := &DataBlock{ MsgId:  makeId(),  Imei: service.imei,  Cmd: cmd,  Phone: phone,  Time: datatime,
+			BlockCount: packCount, BlockIndex: packIndex, BlockSize: packSize, Data: data[bufOffset: bufOffset + packSize],
+		}
+
+		intCmd := CMD_AP12
+		if cmd == "AP13" {
+			intCmd = CMD_AP13
+		}
+		resp := &ResponseItem{uint16(intCmd),  service.makeDataBlockReplyMsg(block)}
+		resps = append(resps, resp)
+
+		bufOffset += packSize
+		countLen -= packSize
+		packIndex++
+	}
+
+	return resps
+}
+
+func (service *GT06Service)makeDataBlockReplyMsg(block *DataBlock) []byte {
+	//(03B5357593060153353AP12,1,170413163300,6,1,900,数据)
+	//(03A6357593060153353AP13,7,1,900,数据)
+	body := ""
+	if block.Cmd == "AP12" {
+		body = fmt.Sprintf("%015d%s,%s,%d,%d,%d,%d,", block.Imei, block.Cmd, block.Phone, block.Time,
+			block.BlockCount, block.BlockIndex, block.BlockSize)
+	}else if block.Cmd == "AP13" {
+		body = fmt.Sprintf("%015d%s,%d,%d,%d,", block.Imei, block.Cmd,
+			block.BlockCount, block.BlockIndex, block.BlockSize)
+	}
+
+	tail := fmt.Sprintf(",%016X)", block.MsgId)
+	sizeNum := 5 + len(body) + len(block.Data) + len(tail)
+	size := fmt.Sprintf("(%04X", sizeNum)
+
+	data := make([]byte, sizeNum)
+	copy(data[0: 5 + len(body)], []byte(size + body))
+	copy(data[5 + len(body) : 5 + len(body) + len(block.Data)], block.Data)
+	copy(data[5 + len(body) + len(block.Data): ], []byte(tail))
+
+	fmt.Print(size, body, tail)
+	return data
+}
+
 func (service *GT06Service)makeChatNumReplyMsg(chatNum int) []byte {
 	//(001B357593060153353AP1102)
 	body := fmt.Sprintf("%015dAP11%02d)", service.imei, chatNum)
@@ -494,7 +607,7 @@ func (service *GT06Service)makeChatNumReplyMsg(chatNum int) []byte {
 
 func makeId()  (uint64) {
 	id := time.Now().UnixNano() / int64(time.Millisecond ) * 10
-	fmt.Println("make id: ", uint64(id))
+	//fmt.Println("make id: ", uint64(id))
 	return uint64(id)
 }
 
@@ -595,16 +708,131 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		return false
 	}
 
+	//(03BA357593060153353BP34,
+	// 123456789,170413163300,2710,6,1,900,数据)
+	fields := strings.SplitN(string(pszMsg), ",", 7)
+	if len(fields) != 7 || len(fields[6]) == 0 {
+		logging.Log("mini chat data bad length")
+		return false
+	}
+
+	data := make([]byte, 200*1024)
+	offset := 0
+	for  _, respCmd := range service.rspList {
+		if respCmd.rspCmdType == CMD_AP12 {
+			fields := strings.SplitN(string(respCmd.data), ",", 7)
+			size := int(Str2Num(fields[5], 10))
+			copy(data[offset: offset + size], fields[6][0: size])
+			offset += size
+		}
+	}
+
+	//收到所有数据以后，写入语音文件
+	ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
+
 	return true
 }
 
+
+func utc_to_gps_hour (iYr, iMo, iDay, iHr int)  int {
+	iYearsElapsed := 0     // Years since 1980
+	iDaysElapsed := 0      // Days elapsed since Jan 6, 1980
+	iLeapDays := 0         // Leap days since Jan 6, 1980
+	i := 0
+
+	// Number of days into the year at the start of each month (ignoring leap years)
+	doy := [12]int{0,31,59,90,120,151,181,212,243,273,304,334}
+
+	iYearsElapsed = iYr - 1980
+	i = 0
+	iLeapDays = 0
+
+	for i <= iYearsElapsed {
+		if (i % 100) == 20 {
+			if (i % 400) == 20 {
+				iLeapDays++
+			}
+		}else if (i % 4) == 0 {
+			iLeapDays++
+		}
+
+		i++
+	}
+
+	if (iYearsElapsed % 100) == 20 {
+		if ((iYearsElapsed % 400) == 20) && (iMo <= 2) {
+			iLeapDays--
+		}
+	} else if ((iYearsElapsed % 4) == 0) && (iMo <= 2) {
+		iLeapDays--
+	}
+
+	iDaysElapsed = iYearsElapsed * 365 + doy[iMo - 1] + iDay + iLeapDays - 6
+
+	return  (iDaysElapsed * 24 + iHr)
+}
+
+
 func (service *GT06Service) ProcessRspAGPSInfo() bool {
 	//需要断点续传的支持
+	utcNow := time.Now().UTC()
+	iCurrentGPSHour := utc_to_gps_hour(utcNow.Year(), int(utcNow.Month()),utcNow.Day(), utcNow.Hour())
+	segment := (uint32(iCurrentGPSHour) - StartGPSHour) / 6
+	if service.reqCtx.IsDebug == false && ( (segment < 0) || (segment >= MTKEPO_SEGMENT_NUM)) {
+		logging.Log(fmt.Sprintf("[%d] EPO segment invalid, %d", service.imei, segment))
+		return false
+	}
+
+	iReadLen := MTKEPO_DATA_ONETIME * MTKEPO_RECORD_SIZE * MTKEPO_SV_NUMBER
+	data := make([]byte, iReadLen)
+	offset := 0
+	EpoInfoListLock.RLock()
+	for i := 0; i < MTKEPO_DATA_ONETIME; i++ {
+		copy(data[offset: offset + MTKEPO_RECORD_SIZE * MTKEPO_SV_NUMBER], EPOInfoList[i].EPOBuf)
+		offset += MTKEPO_RECORD_SIZE * MTKEPO_SV_NUMBER
+	}
+	EpoInfoListLock.RUnlock()
+
+	service.rspList = append(service.rspList, service.shardData("AP13", "", 0, data)...)
+
+	// for test
+	//{
+	//	data := make([]byte, 200 * 1024)
+	//	offset := 0
+	//	for _, respCmd := range service.rspList {
+	//		if respCmd.rspCmdType == CMD_AP13 {
+	//			//(03A6357593060153353AP13,7,1,900,数据)
+	//			fields := strings.SplitN(string(respCmd.data), ",", 5)
+	//			size := int(Str2Num(fields[3], 10))
+	//			copy(data[offset: offset + size], fields[4][0: size])
+	//			offset += size
+	//		}
+	//	}
+	//
+	//	ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
+	//}
+
 	return true
 }
 
 func (service *GT06Service) ProcessRspChat() bool {
 	//需要断点续传的支持
+	if service.reqCtx.GetChatDataFunc != nil {
+		chatData := service.reqCtx.GetChatDataFunc(service.imei)
+		for _, chat := range chatData {
+			if chat.Flags == 0 {  //未读
+				voiceFileName :=fmt.Sprintf("/usr/share/nginx/html/tracker/web/upload/minichat/app/%d/%d.amr",
+					service.imei, chat.DateTime)
+
+				service.rspList = append(service.rspList, service.makeChatDataReplyMsg(voiceFileName, chat.Sender, chat.DateTime)...)
+			}
+		}
+	}
+
+	// for test
+	//voiceFileName := "/home/work/Documents/test.txt"
+	//service.rspList = append(service.rspList, service.makeChatDataReplyMsg(voiceFileName, "123456789", 170526134505)...)
+
 	return true
 }
 

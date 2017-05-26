@@ -22,6 +22,7 @@ const (
 	MTKEPO_DATA_ONETIME =12
 	MTKEPO_SV_NUMBER   = 32
 	MTKEPO_RECORD_SIZE    =  72
+	MTKEPO_SEGMENT_NUM  = (30 * 4)
 	INVALID_TIMEZONE = -999
 )
 
@@ -69,6 +70,8 @@ const (
 	CMD_AP08
 	CMD_AP09
 	 CMD_AP11
+	 CMD_AP12
+	 CMD_AP13
 	 CMD_AP30
 	 CMD_AP31
  )
@@ -304,10 +307,29 @@ func init()  {
 	//a := int32(133)
 	//c := float64(float64(a) / 60.0)
 	//fmt.Println("c: ", c * 100)
+	//fmt.Println(strings.SplitN("(03B5357593060153353AP12,1,170413163300,6,1,900,数据,数据)", ",", 7))
+	//a:=[]int{1,2,3}
+	//a = append(a, nil...)
+	//var a []byte
+	//a := []byte{1,2,3}
+	////b := []byte{4,5,6,7,8,9}
+	//c := a
+	//c[0] = 6
+	//a = make([]byte, 9)
+	//copy(a[0: 3], c)
+	//copy(a[3: ], b)
+	//fmt.Println(a, len(a))
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()
 	LoadEPOFromFile()
+	//utcNow := time.Now().UTC()
+	//iCurrentGPSHour := utc_to_gps_hour(utcNow.Year(), int(utcNow.Month()),utcNow.Day(), utcNow.Hour())
+	//segment := (uint32(iCurrentGPSHour) - StartGPSHour) / 6
+	//fmt.Printf("EPO y,m,d,h: %d, %d,%d, %d\n", utcNow.Year(), utcNow.Month(),utcNow.Day(), utcNow.Hour())
+	//fmt.Printf("EPO hour: %d, %d(%d), %d\n", iCurrentGPSHour, StartGPSHour, Str2Num("01050028", 16)  & 0x00FFFFFF, segment)
+	//os.Exit(0)
+
 }
 
 func LoadIPInfosFromFile()  {
@@ -423,7 +445,7 @@ func LoadEPOFromFile()  {
 	}
 	defer mtk30.Close()
 
-	epo36h, err := os.OpenFile("./EPO/36H.EPO", os.O_APPEND | os.O_CREATE | os.O_WRONLY, 0666)
+	epo36h, err := os.OpenFile("./EPO/36H.EPO", os.O_CREATE | os.O_WRONLY | os.O_TRUNC, 0666)
 	if err != nil {
 		panic(err)
 	}

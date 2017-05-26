@@ -15,6 +15,7 @@ type Connection struct {
 	IP   uint32
 	Port int
 	conn *net.TCPConn
+	buf []byte
 	closeOnce sync.Once
 	closeChan chan struct{}
 	requestChan chan  *proto.MsgData

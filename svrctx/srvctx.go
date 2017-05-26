@@ -46,6 +46,7 @@ type ServerContext struct {
 	PGPool *pgx.ConnPool
 	MySQLPool *sql.DB
 	UseGoogleMap  bool
+	IsDebug  bool
 
 	AppServerChan chan *proto.AppMsgData
 	TcpServerChan chan *proto.MsgData
@@ -98,6 +99,7 @@ func init()  {
 	}
 
 	serverCtx.UseGoogleMap = true
+	serverCtx.IsDebug = true
 
 	//创建postgresql连接池
 	var err error
