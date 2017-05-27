@@ -716,19 +716,22 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		return false
 	}
 
-	data := make([]byte, 200*1024)
-	offset := 0
-	for  _, respCmd := range service.rspList {
-		if respCmd.rspCmdType == CMD_AP12 {
-			fields := strings.SplitN(string(respCmd.data), ",", 7)
-			size := int(Str2Num(fields[5], 10))
-			copy(data[offset: offset + size], fields[6][0: size])
-			offset += size
-		}
-	}
-
-	//收到所有数据以后，写入语音文件
-	ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
+	//// for test
+	//{
+	//	data := make([]byte, 200*1024)
+	//	offset := 0
+	//	for  _, respCmd := range service.rspList {
+	//		if respCmd.rspCmdType == CMD_AP12 {
+	//			fields := strings.SplitN(string(respCmd.data), ",", 7)
+	//			size := int(Str2Num(fields[5], 10))
+	//			copy(data[offset: offset + size], fields[6][0: size])
+	//			offset += size
+	//		}
+	//	}
+	//
+	//	//收到所有数据以后，写入语音文件
+	//	ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
+	//}
 
 	return true
 }
