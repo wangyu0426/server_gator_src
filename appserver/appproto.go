@@ -7,6 +7,10 @@ import (
 	"net/url"
 	"io/ioutil"
 	"../proto"
+	"../svrctx"
+	"fmt"
+	"time"
+	"strconv"
 )
 
 func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, data []byte) bool {
@@ -26,7 +30,10 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 	case "login":
 		return login(c, msg["username"].(string), msg["password"].(string))
 
-	case "sync":
+	case "heartbeat":
+		appServerChan <- &proto.AppMsgData{Cmd: "heartbeat-ack",
+			Data: (fmt.Sprintf("{\"timestamp\": \"%s\"}", time.Now().String())), Conn: c}
+		break
 
 	default:
 		break
@@ -78,17 +85,22 @@ func login(c *AppConnection, username, password string) bool {
 		addConnChan <- c
 
 		//devicesLocationURL := "http://184.107.50.180:8012/GetMultiWatchData?systemno="
-		//for i, d := range devices.([]interface{}) {
-		//	device := d.(map[string]interface {})
-		//	imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
-		//	logging.Log("device: " + fmt.Sprint(imei))
-		//	c.imeis = append(c.imeis, imei)
-		//	devicesLocationURL += device["IMEI"].(string)[4:]
-		//
-		//	if i < len(devices.([]interface{})) - 1 {
-		//		devicesLocationURL += "|"
-		//	}
-		//}
+		locations := []proto.LocationData{}
+		for _, d := range devices.([]interface{}) {
+			device := d.(map[string]interface {})
+			imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
+			logging.Log("device: " + fmt.Sprint(imei))
+			c.imeis = append(c.imeis, imei)
+			locations = append(locations, svrctx.GetDeviceData(imei, svrctx.Get().PGPool))
+
+			//devicesLocationURL += device["IMEI"].(string)[4:]
+			//
+			//if i < len(devices.([]interface{})) - 1 {
+			//	devicesLocationURL += "|"
+			//}
+		}
+
+		jsonLocations , _ := json.Marshal(locations)
 
 		//logging.Log("devicesLocationURL: " + devicesLocationURL)
 		//
@@ -106,9 +118,8 @@ func login(c *AppConnection, username, password string) bool {
 		//
 		//logging.Log("bodyLocation: " +  string(bodyLocation))
 
-
-		//appServerChan <- &proto.AppMsgData{Cmd: "login",
-		//	Data: []byte(fmt.Sprintf("{\"user\": %s, \"location\": %s}", string(body), string(bodyLocation))), Conn: c}
+		appServerChan <- &proto.AppMsgData{Cmd: "login-ack",
+			Data: (fmt.Sprintf("{\"user\": %s, \"location\": %s}", string(body), string(jsonLocations))), Conn: c}
 	}
 
 	return true

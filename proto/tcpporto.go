@@ -100,9 +100,10 @@ type AmapResult struct {
 
 
 type LocationData struct {
-	DataTime uint64 	`json:"datatime,omitempty"`
-	Lat float64			`json:"lat,omitempty"`
-	Lng float64			`json:"lng,omitempty"`
+	Imei  uint64 		`json:"imei"`
+	DataTime uint64 	`json:"datatime"`
+	Lat float64			`json:"lat"`
+	Lng float64			`json:"lng"`
 	Steps uint64  		`json:"steps"`
 	Accracy uint32		 `json:"accracy"`
 	Battery uint8		`json:"battery"`

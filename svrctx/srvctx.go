@@ -7,10 +7,12 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"../proto"
+	"../logging"
 	"github.com/jackc/pgx"
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
 	"os"
+	"encoding/json"
 )
 
 type  DBConfig struct {
@@ -54,6 +56,9 @@ type ServerContext struct {
 }
 
 var serverCtx ServerContext
+
+var DeviceTable = map[uint64]*proto.DeviceCache{}
+var DeviceTableLock = &sync.RWMutex{}
 
 func init()  {
 	fmt.Println("server contextinit...")
@@ -163,4 +168,120 @@ func init()  {
 
 func Get() *ServerContext {
 	return &serverCtx
+}
+
+
+func GetChatData(imei uint64)  []proto.ChatInfo {
+	chatData := []proto.ChatInfo{}
+	DeviceTableLock.RLock()
+	device, ok := DeviceTable[imei]
+	if ok {
+		if len(device.ChatCache) > 0 {
+			for _, chat := range device.ChatCache {
+				chatData = append(chatData, chat)
+			}
+		}
+	}
+	DeviceTableLock.RUnlock()
+
+	return chatData
+}
+
+func AddChatData(imei uint64, chatData proto.ChatInfo) {
+	DeviceTableLock.Lock()
+	_, ok := DeviceTable[imei]
+	if ok {
+		DeviceTable[imei].ChatCache = append(DeviceTable[imei].ChatCache, chatData)
+	}else {
+		DeviceTable[imei] = &proto.DeviceCache{}
+		DeviceTable[imei].Imei = imei
+		DeviceTable[imei].ChatCache = append(DeviceTable[imei].ChatCache, chatData)
+	}
+	DeviceTableLock.Unlock()
+}
+
+func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
+	isQueryDB := false
+	deviceData := proto.LocationData{Imei: imei}
+	DeviceTableLock.RLock()
+	device, ok := DeviceTable[imei]
+	if ok {
+		deviceData = device.CurrentLocation
+	}else {
+		isQueryDB = true
+	}
+	DeviceTableLock.RUnlock()
+
+	if isQueryDB == false {
+		return deviceData
+	}else {
+		//缓存中没有数据，将从数据库中查询
+		strSQL := fmt.Sprintf("select * from  device_location where imei=%d order by location_time desc limit 1", imei)
+		logging.Log("sql: " + strSQL)
+		rows, err := pgpool.Query(strSQL)
+		if err != nil {
+			logging.Log(fmt.Sprintf("[%d] pg query failed, %s",  imei, err.Error()))
+			return deviceData
+		}
+
+		if rows.Next() {
+			values , err := rows.Values()
+			logging.Log(fmt.Sprint("get device data: ", values, err))
+			// [357593060571398 20170524141830 29.566889 106.45424 map[datatime:1.7052414183e+11 zoneAlarm:0 zoneIndex:0 lat:29.566888 steps:0 battery:3 readflag:0 zoneName: locateType:1 org_battery:5 lng:106.454239 alarm:2 accracy:0]]
+			//deviceData.DataTime = uint64(values[1].(int64))
+			//deviceData.Lat = float64(values[2].(float32))
+			//deviceData.Lng = float64(values[3].(float32))
+			//fmt.Println("deviceData: ", deviceData)
+			jsonStr, _ := json.Marshal(values[4])
+			json.Unmarshal(jsonStr, &deviceData)
+			fmt.Println("deviceData: ", deviceData)
+			deviceData.Imei = imei
+
+			DeviceTableLock.Lock()
+			_, ok := DeviceTable[imei]
+			if ok {
+				DeviceTable[imei].CurrentLocation =  deviceData
+			}else {
+				DeviceTable[imei] = &proto.DeviceCache{}
+				DeviceTable[imei].Imei = imei
+				DeviceTable[imei].CurrentLocation =  deviceData
+			}
+			DeviceTableLock.Unlock()
+
+		}else {
+			logging.Log(fmt.Sprintf("[%d] get device data: no data in db", imei))
+		}
+
+		return deviceData
+	}
+}
+
+func SetDeviceData(imei uint64, updateType int, deviceData proto.LocationData) {
+	DeviceTableLock.Lock()
+	switch updateType {
+	case proto.DEVICE_DATA_LOCATION:
+		_, ok := DeviceTable[imei]
+		if ok == false {
+			DeviceTable[imei] = &proto.DeviceCache{Imei: imei}
+		}
+		DeviceTable[imei].CurrentLocation = deviceData
+	case proto.DEVICE_DATA_STATUS:
+		device, ok := DeviceTable[imei]
+		if ok {
+			device.CurrentLocation.LocateType = deviceData.LocateType
+			device.CurrentLocation.DataTime = deviceData.DataTime
+			device.CurrentLocation.Steps = deviceData.Steps
+		}else{
+			DeviceTable[imei].CurrentLocation = deviceData
+		}
+	case proto.DEVICE_DATA_BATTERY:
+		device, ok := DeviceTable[imei]
+		if ok {
+			device.CurrentLocation.Battery = deviceData.Battery
+			device.CurrentLocation.OrigBattery = deviceData.OrigBattery
+		}else{
+			DeviceTable[imei].CurrentLocation = deviceData
+		}
+	}
+	DeviceTableLock.Unlock()
 }

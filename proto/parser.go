@@ -145,11 +145,11 @@ type MsgData struct {
 }
 
 type AppMsgData struct {
-	ID uint64
-	Cmd string
-	Imei uint64
-	Data []byte
-	Conn interface{}
+	ID uint64		 `json:"id"`
+	Cmd string  	`json:"cmd"`
+	Imei uint64		`json:"imei"`
+	Data string		`json:"data"`
+	Conn interface{}  `json:"-"`
 }
 
 

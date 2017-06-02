@@ -11,6 +11,7 @@ import (
 	"gopkg.in/kataras/iris.v6/adaptors/websocket"
 	"fmt"
 	"os"
+	"encoding/json"
 )
 
 var addConnChan chan *AppConnection
@@ -105,9 +106,10 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 				logging.Log("send data to app:" + fmt.Sprint(string(msg.Cmd)))
 				//如果是login请求，则与设备无关,无须查表，直接发送数据到APP客户端
-				if msg.Cmd == "login" {
+				if msg.Cmd == "login-ack" || msg.Cmd == "heartbeat-ack" {
 					c := msg.Conn.(*AppConnection)
-					err :=(*c.conn).EmitMessage(msg.Data)
+					data, err := json.Marshal(&msg)
+					err = (*c.conn).EmitMessage(data)
 					if err != nil {
 						logging.Log("send msg to app failed, " + err.Error())
 					}
@@ -118,7 +120,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				subTable, ok := AppClientTable[msg.Imei]
 				if ok {
 					for _, c := range subTable{
-						err :=(*c.conn).EmitMessage(msg.Data)
+						err :=(*c.conn).EmitMessage([]byte(msg.Data))
 						if err != nil {
 							logging.Log("send msg to app failed, " + err.Error())
 						}
