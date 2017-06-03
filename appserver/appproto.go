@@ -11,6 +11,9 @@ import (
 	"fmt"
 	"time"
 	"strconv"
+	//"github.com/jackc/pgx"
+	//"database/sql"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, data []byte) bool {
@@ -26,14 +29,29 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 		return false
 	}
 
-	switch cmd.(string) {
+	switch cmd{
 	case "login":
-		return login(c, msg["username"].(string), msg["password"].(string))
+		params := msg["data"].(map[string]interface{})
+		return login(c, params["username"].(string), params["password"].(string))
 
 	case "heartbeat":
+		datas := msg["data"].(map[string]interface{})
+		//params := proto.HeartBeatParams{TimeStamp: datas["timestamp"].(string),
+		//	UserName: datas["username"].(string),
+		//	AccessToken: datas["accessToken"].(string)}
+
 		appServerChan <- &proto.AppMsgData{Cmd: "heartbeat-ack",
+			UserName: datas["username"].(string),
+			AccessToken: datas["accessToken"].(string),
 			Data: (fmt.Sprintf("{\"timestamp\": \"%s\"}", time.Now().String())), Conn: c}
 		break
+
+	case "verify-code":
+		datas := msg["data"].(map[string]interface{})
+		params := proto.DeviceVerifyCodeParams{Imei: datas["imei"].(string),
+			UserName: datas["username"].(string),
+			AccessToken: datas["accessToken"].(string)}
+		return getDeviceVerifyCode(c, &params)
 
 	default:
 		break
@@ -46,7 +64,8 @@ func login(c *AppConnection, username, password string) bool {
 	resp, err := http.PostForm("http://service.gatorcn.com/tracker/web/index.php?r=app/auth/login",
 		url.Values{"username": {username}, "password": {password}})
 	if err != nil {
-		logging.Log("app login failed" + err.Error())
+		logging.Log("app login failed, " + err.Error())
+		return false
 	}
 
 	defer resp.Body.Close()
@@ -125,6 +144,39 @@ func login(c *AppConnection, username, password string) bool {
 	return true
 }
 
-func appSync()  {
+func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceVerifyCodeParams) bool {
+	//url := fmt.Sprintf("http://service.gatorcn.com/tracker/web/index.php?r=app/service/verify-code&SystemNo=%s&access-token=%s",
+	//	string(params.Imei[4: ]), params.AccessToken)
+	//logging.Log("get verify code url: " + url)
+	//resp, err := http.Get(url)
+	//if err != nil {
+	//	logging.Log(fmt.Sprintf("[%s] get device verify code  failed, ", params.Imei, err.Error()))
+	//	return false
+	//}
+	//
+	//defer resp.Body.Close()
+	//
+	//body, err := ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	logging.Log("response has err, " + err.Error())
+	//	return false
+	//}
+	//
+	//logging.Log("get verify code body: " + string(body))
 
+
+	imei, verifyCode := proto.Str2Num(params.Imei, 10), ""
+	proto.DeviceInfoListLock.RLock()
+	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+	if ok && deviceInfo != nil {
+		verifyCode = deviceInfo.VerifyCode
+	}
+	proto.DeviceInfoListLock.RUnlock()
+
+	appServerChan <- &proto.AppMsgData{Cmd: "verify-code-ack", Imei: imei,
+		UserName: params.UserName, AccessToken:params.AccessToken,
+			Data: fmt.Sprintf("{\"VerifyCode\": \"%s\"}", verifyCode), Conn: c}
+
+	return true
 }
+

@@ -9,6 +9,7 @@ import (
 )
 
 type AppConnection struct {
+	fenceIndex uint64
 	closeFlag int32
 	saved bool
 	user models.User
@@ -20,8 +21,9 @@ type AppConnection struct {
 	responseChan chan  *proto.AppMsgData
 }
 
-func newAppConn(conn *websocket.Connection)  *AppConnection{
+func newAppConn(conn *websocket.Connection, fence uint64)  *AppConnection{
 	return &AppConnection{
+		fenceIndex: fence,
 		conn: conn,
 		closeChan: make(chan struct{}),
 		requestChan: make(chan []byte, 1024),

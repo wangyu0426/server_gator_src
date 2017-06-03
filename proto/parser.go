@@ -145,13 +145,31 @@ type MsgData struct {
 }
 
 type AppMsgData struct {
-	ID uint64		 `json:"id"`
+	ID uint64		 `json:"id,omitempty"`
 	Cmd string  	`json:"cmd"`
-	Imei uint64		`json:"imei"`
+	Imei uint64		`json:"imei,omitempty"`
 	Data string		`json:"data"`
+	UserName string `json:"username,omitempty"`
+	AccessToken string `json:"accessTken,omitempty"`
 	Conn interface{}  `json:"-"`
 }
 
+type LoginParams struct {
+	UserName string  	`json:"username"`
+	Password string		`json:"password"`
+}
+
+type HeartBeatParams struct {
+	TimeStamp string  		`json:"timestamp"`
+	UserName string		`json:"username"`
+	AccessToken string		`json:"accessToken"`
+}
+
+type DeviceVerifyCodeParams struct {
+	Imei string  				`json:"imei"`
+	UserName string		`json:"username"`
+	AccessToken string		`json:"accessToken"`
+}
 
 type IPInfo struct {
 	StartIP uint32
@@ -251,6 +269,7 @@ type DeviceInfo struct {
 	CanTurnOff bool
 	UseDST bool
 	SocketModeOff bool
+	VerifyCode string
 	WatchAlarmList [MAX_WATCH_ALARM_NUM]WatchAlarm
 	SafeZoneList [MAX_SAFE_ZONE_NUM]SafeZone
 	Family [MAX_FAMILY_MEMBER_NUM]FamilyMember
@@ -474,7 +493,7 @@ func LoadEPOFromFile()  {
 }
 
 func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
-	rows, err := dbpool.Query("select w.IMEI, w.OwnerName, w.PhoneNumbers, w.TimeZone, w.CountryCode, w.ChildPowerOff, w.UseDST, w.SocketModeOff, w.Volume, w.Lang, w.Fence1,w.Fence2, w.Fence3,w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2,w.HideTimer3, pm.model, c.name from watchinfo w join device d on w.recid=d.recid join productmodel pm  on d.modelid=pm.recid join companies c on d.companyid=c.recid ")
+	rows, err := dbpool.Query("select w.IMEI, w.OwnerName, w.PhoneNumbers, w.TimeZone, w.CountryCode, w.ChildPowerOff, w.UseDST, w.SocketModeOff, w.Volume, w.Lang, w.VerifyCode, w.Fence1,w.Fence2, w.Fence3,w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2,w.HideTimer3, pm.model, c.name from watchinfo w join device d on w.recid=d.recid join productmodel pm  on d.modelid=pm.recid join companies c on d.companyid=c.recid ")
 	if err != nil {
 		fmt.Println("LoadDeviceInfoFromDB failed,", err.Error())
 		os.Exit(1)
@@ -491,6 +510,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		SocketModeOff	uint8
 		Volume		uint8
 		Lang			string
+		VerifyCode 	string
 
 		Fences		=	[MAX_SAFE_ZONE_NUM]string{}
 		WatchAlarms = [MAX_WATCH_ALARM_NUM]string{}
@@ -505,7 +525,8 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 	tmpDeviceInfoList := &map[uint64]*DeviceInfo{}
 	for rows.Next() {
 		deviceInfo := &DeviceInfo{}
-		rows.Scan(&IMEI, &OwnerName, &PhoneNumbers, &TimeZone, &CountryCode, &ChildPowerOff, &UseDST, &SocketModeOff, &Volume, &Lang,&Fences[0], &Fences[1], &Fences[2], &Fences[3], &Fences[4], &Fences[5], &Fences[6], &Fences[7], &Fences[8], &Fences[9], &WatchAlarms[0], &WatchAlarms[1],&WatchAlarms[2], &WatchAlarms[3], &WatchAlarms[4], &HideSelf, &HideTimers[0], &HideTimers[1], &HideTimers[2], &HideTimers[3], &Model, &Company)
+		rows.Scan(&IMEI, &OwnerName, &PhoneNumbers, &TimeZone, &CountryCode, &ChildPowerOff, &UseDST, &SocketModeOff,
+			&Volume, &Lang, &VerifyCode, &Fences[0], &Fences[1], &Fences[2], &Fences[3], &Fences[4], &Fences[5], &Fences[6], &Fences[7], &Fences[8], &Fences[9], &WatchAlarms[0], &WatchAlarms[1],&WatchAlarms[2], &WatchAlarms[3], &WatchAlarms[4], &HideSelf, &HideTimers[0], &HideTimers[1], &HideTimers[2], &HideTimers[3], &Model, &Company)
 		deviceInfo.Imei = Str2Num(IMEI, 10)
 		deviceInfo.Name = OwnerName
 		ParseFamilyMembers(PhoneNumbers, &deviceInfo.Family)
@@ -516,6 +537,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		deviceInfo.SocketModeOff = SocketModeOff != 0
 		deviceInfo.Volume = Volume
 		deviceInfo.Lang = Lang
+		deviceInfo.VerifyCode = VerifyCode
 		ParseSafeZones(Fences, &deviceInfo.SafeZoneList)
 		ParseWatchAlarms(WatchAlarms, &deviceInfo.WatchAlarmList)
 		deviceInfo.HideTimerOn = HideSelf != 0

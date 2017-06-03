@@ -12,11 +12,15 @@ import (
 	"fmt"
 	"os"
 	"encoding/json"
+	"strconv"
+	"net/http"
+	"io/ioutil"
 )
 
 var addConnChan chan *AppConnection
 var delConnChan chan *AppConnection
 var AppClientTable = map[uint64]map[string]*AppConnection{}
+var FenceIndex = uint64(0)
 
 var appServerChan chan *proto.AppMsgData
 
@@ -117,10 +121,15 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				}
 
 				//从表中找出所有跟此IMEI关联的APP客户端，并将数据发送至每一个APP客户端
-				subTable, ok := AppClientTable[msg.Imei]
-				if ok {
+				//如果APP客户端已经登陆过，但服务器上没有该客户端关注的手表的数据，
+				//那么收到该APP客户端的第一个请求，应该首先读取该客户端关注的手表数据
+
+				subTable := getAppClientsByImei(msg)
+				logging.Log("send msg: " + fmt.Sprint(msg))
+				if subTable != nil {
 					for _, c := range subTable{
-						err :=(*c.conn).EmitMessage([]byte(msg.Data))
+						data, err := json.Marshal(&msg)
+						err =(*c.conn).EmitMessage(data)
 						if err != nil {
 							logging.Log("send msg to app failed, " + err.Error())
 						}
@@ -134,8 +143,9 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 }
 
 func OnClientConnected(conn websocket.Connection)  {
+	FenceIndex++
 	logging.Log("websocket connected: " + conn.Context().RemoteAddr() + "Client ID: " + conn.ID())
-	connection := newAppConn(&conn)
+	connection := newAppConn(&conn, FenceIndex)
 	conn.SetValue("ctx", connection)
 
 	//for reading, 负责处理APP请求的业务逻辑
@@ -168,7 +178,83 @@ func OnClientConnected(conn websocket.Connection)  {
 		close(c.closeChan)
 		(*c.conn).Disconnect()
 
+		FenceIndex++
 		delConnChan <- c
 	})
+}
 
+func getAppClientsByImei(msg *proto.AppMsgData)  map[string]*AppConnection {
+	subTable, ok := AppClientTable[msg.Imei]
+	if ok {
+		return subTable
+	}else {
+		url := "http://service.gatorcn.com/tracker/web/index.php?r=app/service/devices&access-token=" + msg.AccessToken
+		logging.Log("url: " + url)
+		resp, err := http.Get(url)
+		if err != nil {
+			logging.Log("get user devices failed, " + err.Error())
+			return nil
+		}
+
+		defer resp.Body.Close()
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			logging.Log("response has err, " + err.Error())
+			return nil
+		}
+
+		var itf interface{}
+		err = json.Unmarshal(body, &itf)
+		if err != nil {
+			logging.Log("parse login response as json failed, " + err.Error())
+			return nil
+		}
+
+		userDevicesData := itf.(map[string]interface{})
+		if userDevicesData == nil {
+			return nil
+		}
+
+		//logging.Log("userDevicesData: " + fmt.Sprint(userDevicesData))
+		status := userDevicesData["status"].(float64)
+		devices := userDevicesData["devices"]
+
+		//logging.Log("status: " + fmt.Sprint(status))
+		//logging.Log("accessToken: " + fmt.Sprint(accessToken))
+		//logging.Log("devices: " + fmt.Sprint(devices))
+		if status == 0 && devices != nil {
+			c := msg.Conn.(*AppConnection)
+			c.user.AccessToken = msg.AccessToken
+			c.user.Logined = true
+			c.user.Name = msg.UserName
+
+			for _, d := range devices.([]interface{}) {
+				device := d.(map[string]interface{})
+				imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
+				logging.Log("device: " + fmt.Sprint(imei))
+				c.imeis = append(c.imeis, imei)
+			}
+
+			for _, imei := range c.imeis {
+				_, ok := AppClientTable[imei]
+				if !ok {   //不存在，则首先创建新表，然后加入
+					AppClientTable[imei] = map[string]*AppConnection{}
+				}
+
+				AppClientTable[imei][c.user.GetAccessToken()] = c
+			}
+
+			logging.Log("after add conn:" + fmt.Sprint(AppClientTable))
+
+			subTable, ok := AppClientTable[msg.Imei]
+			if ok {
+				return subTable
+			}else {
+				return nil
+			}
+		}
+
+		return nil
+	}
 }
