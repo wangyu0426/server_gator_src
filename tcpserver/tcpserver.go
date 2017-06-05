@@ -196,7 +196,8 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		//首先通知ManagerLoop, 将上次缓存的未发送的数据发送给手表
 		msgNotify := &proto.MsgData{}
 		msgNotify.Header.Header.Version = proto.MSG_HEADER_PUSH_CACHE
-		msg.Header.Header.Imei = imei
+		//logging.Log("MSG_HEADER_PUSH_CACHE, imei: " + proto.Num2Str(imei, 10))
+		msgNotify.Header.Header.Imei = imei
 		serverCtx.TcpServerChan <- msgNotify
 
 		// 包可能接收未完整，但此时可以开始进行业务逻辑处理
@@ -230,6 +231,8 @@ func ConnWriteLoop(c *Connection) {
 
 			if n, err := c.conn.Write([]byte(data.Data)); err != nil {
 				logging.Log(fmt.Sprintf("send data to client failed: %s,  %d bytes sent" + err.Error(), n))
+			}else{
+				logging.Log(fmt.Sprintf("send data to client: %s,  %d bytes sent", string(data.Data), n))
 			}
 		}
 	}
