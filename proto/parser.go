@@ -301,12 +301,12 @@ type WatchStatus struct {
 
 var offsets = []uint8{2, 2, 1, 1, 2, 8, 8, 4, 4, 4, 4}
 var IPInfoList []*IPInfo
-var ipinfoListLock sync.RWMutex
+var ipinfoListLock = sync.RWMutex{}
 var StartGPSHour uint32
 var EPOInfoList []*EPOInfo
-var EpoInfoListLock sync.RWMutex
+var EpoInfoListLock = sync.RWMutex{}
 var DeviceInfoList = &map[uint64]*DeviceInfo{}
-var DeviceInfoListLock sync.RWMutex
+var DeviceInfoListLock =  sync.RWMutex{}
 var company_blacklist = []string {
 	"UES",
 }
@@ -338,6 +338,24 @@ func init()  {
 	//copy(a[0: 3], c)
 	//copy(a[3: ], b)
 	//fmt.Println(a, len(a))
+	//m1 := map[int]map[int]int{}
+	//a := map[int]int{6: 6}
+	//m1[5] = a
+	//
+	//b, _ :=m1[6]
+	//b = map[int]int{}
+	//m1[6] = b
+	//
+	//
+	////a := []int{1,2}
+	////m1 := a
+	//fmt.Println(a)
+	//fmt.Println(m1)
+	//
+	//b[6] = 7
+	//fmt.Println(a)
+	//fmt.Println(m1)
+	//
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()

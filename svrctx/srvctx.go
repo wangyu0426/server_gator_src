@@ -60,6 +60,12 @@ var serverCtx ServerContext
 var DeviceTable = map[uint64]*proto.DeviceCache{}
 var DeviceTableLock = &sync.RWMutex{}
 
+var AppChatTaskTable = map[uint64]map[uint64]*proto.ChatTask{}
+var AppChatTaskTableLock = &sync.RWMutex{}
+
+var AppPhotoTaskTable = map[uint64]map[uint64]*proto.PhotoSettingTask{}
+var AppPhotoTaskTableLock = &sync.RWMutex{}
+
 func init()  {
 	fmt.Println("server contextinit...")
 	serverCtx.ProcessName = "go-server"

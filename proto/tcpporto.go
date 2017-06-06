@@ -14,6 +14,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"io/ioutil"
+	"sync"
+	"os"
 )
 
 type ResponseItem struct {
@@ -135,14 +137,33 @@ type ChatInfo struct {
 	Flags  int
 }
 
+
+type PhotoSettingInfo struct {
+	Sender string
+	member FamilyMember
+	ContentType uint8
+	Content string
+	Flags  int
+}
+
 type DataBlock struct {
 	MsgId uint64
 	Imei uint64
 	Cmd string
 	Time uint64
 	Phone string
-	BlockCount, BlockIndex, BlockSize  int
+	BlockCount, BlockIndex, BlockSize, blockSizeField, recvSized, nextIndex  int
 	Data []byte
+}
+
+type ChatTask struct {
+	Info ChatInfo
+	Data DataBlock
+}
+
+type PhotoSettingTask struct {
+	Info PhotoSettingInfo
+	Data DataBlock
 }
 
 type DeviceCache struct {
@@ -183,6 +204,7 @@ type GT06Service struct {
 const DEVICEID_BIT_NUM = 15
 const DEVICE_CMD_LENGTH = 4
 const TIME_LEN  = 6
+const DATA_BLOCK_SIZE = 700
 
 const MAX_WIFI_NAME_LEN = 64
 const MAX_MACID_LEN = 17
@@ -192,6 +214,12 @@ const MAX_LBS_NUM = 8
 const PI  = 3.1415926
 const BASE_TITUDE  =1000000
 const EARTH_RADIUS = 6378.137
+
+var DeviceChatTaskTable = map[uint64]map[uint64]*ChatTask{}
+var DeviceChatTaskTableLock = &sync.RWMutex{}
+
+var EPOTaskTable = map[uint64]map[uint64]*DataBlock{}
+var EPOTaskTableLock = &sync.RWMutex{}
 
 func HandleTcpRequest(reqCtx RequestContext)  bool{
 	service := &GT06Service{reqCtx: reqCtx}
@@ -235,6 +263,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	}
 	DeviceInfoListLock.RUnlock()
 
+	ret := true
 	bufOffset := uint32(0)
 	service.msgSize = uint64(msg.Header.Header.Size)
 	service.imei = msg.Header.Header.Imei
@@ -303,7 +332,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			bufOffset += 1
 		}
 
-		ret := service.ProcessLocate(msg.Data[bufOffset: ], cLocateTag)
+		ret = service.ProcessLocate(msg.Data[bufOffset: ], cLocateTag)
 		if ret == false {
 			logging.Log("ProcessLocateInfo Error")
 			return false
@@ -327,9 +356,16 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		}
 
 		bufOffset++
-		ret := service.ProcessMicChat(msg.Data[bufOffset: ])
+		ret = true
+		if service.reqCtx.IsDebug {
+			ret = service.ProcessMicChatForDebug(msg.Data[bufOffset: ])
+		}else{
+			ret = service.ProcessMicChat(msg.Data[bufOffset: ])
+		}
+
 		if ret == false {
 			logging.Log("ProcessMicChat Error")
+			return false
 		}
 	}else if service.cmd == DRT_FETCH_MINICHAT {
 		//BP11, 手表获取未读微聊数目
@@ -339,9 +375,10 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		service.reqChatInfoNum = int(msg.Data[bufOffset] - '0') * 10 + int(msg.Data[bufOffset + 1]- '0')
 	}else if service.cmd == DRT_FETCH_AGPS {
 		//BP32, 手表请求EPO数据
-		ret := service.ProcessRspAGPSInfo()
+		ret = service.ProcessRspAGPSInfo()
 		if ret == false {
 			logging.Log("ProcessRspAGPSInfo Error")
+			return  false
 		}
 	}else if service.cmd == DRT_HEART_BEAT {
 		// heart beat
@@ -379,15 +416,18 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			service.RXLEVEL = 0
 		}
 
-		ret := service.ProcessUpdateWatchStatus(msg.Data[bufOffset: ])
+		ret = service.ProcessUpdateWatchStatus(msg.Data[bufOffset: ])
 		if ret == false {
 			logging.Log("ProcessUpdateWatchStatus Error")
+			return false
 		}
 	}else {
 		logging.Log(fmt.Sprintf("Error Device CMD(%d, %s)", service.imei, StringCmd(service.cmd)))
 	}
 
-	ret := service.PushCachedData()
+	if ret {
+		ret = service.PushCachedData()
+	}
 
 	return ret
 }
@@ -717,6 +757,65 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		return false
 	}
 
+	ret := true
+	timestamp :=  Str2Num(fields[1], 10)
+	milisecs := int(Str2Num(fields[2], 16))
+	fileId := uint64(timestamp * 10000) + uint64(milisecs)
+	blockIndex := int(Str2Num(fields[4], 10))
+	blockSize := Str2Num(fields[5], 10)
+	DeviceChatTaskTableLock.Lock()
+	chatTasks, found :=DeviceChatTaskTable[service.imei]
+	if !found {
+		if blockIndex != 0 {
+			ret = false
+		}else{
+			chat := &ChatTask{}
+			chat.Info.DateTime = timestamp
+			chat.Info.Receiver = fields[0]
+			chat.Info.VoiceMilisecs = milisecs
+			chat.Data.Imei = service.imei
+			chat.Data.Cmd = StringCmd(DRT_SEND_MINICHAT)
+			chat.Data.blockSizeField = int(blockSize)
+			if uint64(len(fields[6]) -  1) == blockSize || uint64(len(fields[6])) == blockSize { //完整
+				chat.Data.BlockSize = int(blockSize)
+				chat.Data.nextIndex = blockIndex + 1
+			}else { //包不完整
+				chat.Data.BlockSize = len(fields[6])
+				chat.Data.nextIndex = blockIndex
+				ret = false
+			}
+			chat.Data.BlockCount = int(Str2Num(fields[3], 10))
+			chat.Data.BlockIndex = blockIndex
+			chat.Data.Phone = fields[0]
+			chat.Data.Time = timestamp
+			chat.Data.Data = make([]byte, chat.Data.BlockCount * DATA_BLOCK_SIZE)
+			copy(chat.Data.Data[0: ], fields[6][0:chat.Data.BlockSize])
+			chat.Data.recvSized = chat.Data.BlockSize
+
+			chatTasks = map[uint64]*ChatTask{}
+			chatTasks[fileId] = chat
+			DeviceChatTaskTable[service.imei] = chatTasks
+		}
+	}else{
+		chat, _ := chatTasks[fileId]
+		if blockIndex == chat.Data.nextIndex {
+			if chat.Data.nextIndex == chat.Data.BlockIndex { //包不完整，继续接收上一次包的数据
+				if chat.Data.BlockSize + int(blockSize) > chat.Data.blockSizeField {
+					ret = false
+				}else if chat.Data.BlockSize + int(blockSize) == chat.Data.blockSizeField {//刚好完整
+				}else {//继续不完整。。。
+					ret = false
+				}
+			}else {//新包
+
+			}
+		}else {//包index不匹配
+			ret = false
+		}
+	}
+
+	DeviceChatTaskTableLock.Unlock()
+
 	//// for test
 	//{
 	//	data := make([]byte, 200*1024)
@@ -734,8 +833,115 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 	//	ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
 	//}
 
-	return true
+	return ret
 }
+
+
+func (service *GT06Service) ProcessMicChatForDebug(pszMsg []byte) bool {
+	//需要断点续传的支持
+	if len(pszMsg) == 0 {
+		return false
+	}
+
+	//(03BA357593060153353BP34,
+	// 123456789,170413163300,2710,6,1,900,数据)
+	fields := strings.SplitN(string(pszMsg), ",", 7)
+	if len(fields) != 7 || len(fields[6]) == 0 {
+		logging.Log("mini chat data bad length")
+		return false
+	}
+
+	ret := true
+	fileFinished := false
+	var fileData []byte
+	timestamp :=  Str2Num(fields[1], 10)
+	milisecs := int(Str2Num(fields[2], 16))
+	fileId := uint64(timestamp * 10000) + uint64(milisecs)
+	blockIndex := int(Str2Num(fields[4], 10))
+	blockSize := Str2Num(fields[5], 10)
+
+	DeviceChatTaskTableLock.Lock()
+	chatTasks, found :=DeviceChatTaskTable[service.imei]
+	if !found {
+		if blockIndex != 1 {
+			ret = false
+		}else{
+			chat := &ChatTask{}
+			chat.Info.DateTime = timestamp
+			chat.Info.Receiver = fields[0]
+			chat.Info.VoiceMilisecs = milisecs
+			chat.Data.Imei = service.imei
+			chat.Data.Cmd = StringCmd(DRT_SEND_MINICHAT)
+			chat.Data.blockSizeField = int(blockSize)
+			chat.Data.BlockSize = int(blockSize)
+			chat.Data.nextIndex = blockIndex + 1
+
+			chat.Data.BlockCount = int(Str2Num(fields[3], 10))
+			chat.Data.BlockIndex = blockIndex
+			chat.Data.Phone = fields[0]
+			chat.Data.Time = timestamp
+			chat.Data.Data = make([]byte, chat.Data.BlockCount * DATA_BLOCK_SIZE)
+			copy(chat.Data.Data[0: ], fields[6][0:chat.Data.BlockSize])
+			chat.Data.recvSized = chat.Data.BlockSize
+
+			chatTasks = map[uint64]*ChatTask{}
+			chatTasks[fileId] = chat
+			DeviceChatTaskTable[service.imei] = chatTasks
+		}
+	}else{
+		chat, _ := chatTasks[fileId]
+		if blockIndex == chat.Data.nextIndex && blockIndex <= chat.Data.BlockCount {
+			chat.Data.blockSizeField = int(blockSize)
+			chat.Data.BlockSize = int(blockSize)
+			chat.Data.nextIndex = blockIndex + 1
+			chat.Data.BlockIndex = blockIndex
+
+			copy(chat.Data.Data[chat.Data.recvSized: ], fields[6][0:chat.Data.BlockSize])
+			chat.Data.recvSized += chat.Data.BlockSize
+
+			if blockIndex == chat.Data.BlockCount {
+				fileFinished = true
+				fileData = chat.Data.Data[0: chat.Data.recvSized]
+			}
+		}else {//包index不匹配
+			ret = false
+		}
+	}
+
+	DeviceChatTaskTableLock.Unlock()
+
+	if fileFinished {
+		filePathDir := fmt.Sprintf("/usr/share/nginx/html/tracker/web/upload/minichat/watch/%d",
+			service.imei)
+		os.MkdirAll(filePathDir, 0755)
+		filePath := fmt.Sprintf("%s/%d.amr", filePathDir, fileId)
+		ioutil.WriteFile(filePath, fileData[0: ], 0666)
+		DeviceChatTaskTableLock.Lock()
+		chatTasks, _ :=DeviceChatTaskTable[service.imei]
+		delete(chatTasks, fileId)
+		DeviceChatTaskTableLock.Unlock()
+	}
+
+	//// for test
+	//{
+	//	data := make([]byte, 200*1024)
+	//	offset := 0
+	//	for  _, respCmd := range service.rspList {
+	//		if respCmd.rspCmdType == CMD_AP12 {
+	//			fields := strings.SplitN(string(respCmd.data), ",", 7)
+	//			size := int(Str2Num(fields[5], 10))
+	//			copy(data[offset: offset + size], fields[6][0: size])
+	//			offset += size
+	//		}
+	//	}
+	//
+	//	//收到所有数据以后，写入语音文件
+	//	ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
+	//}
+
+	return ret
+}
+
 
 
 func utc_to_gps_hour (iYr, iMo, iDay, iHr int)  int {

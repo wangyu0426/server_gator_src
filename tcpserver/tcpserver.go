@@ -128,6 +128,10 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 			break
 		}
 
+		//将IMEI和cmd解析出来
+		imei, _ := strconv.ParseUint(string(headerBuf[5: 20]), 0, 0)
+		cmd := string(headerBuf[20: 24])
+
 		logging.Log("data size: " + fmt.Sprintf("%d", dataSize))
 		if len(c.buf) < int(dataSize) {
 			buf := c.buf
@@ -136,45 +140,44 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		}
 
 		bufSize := dataSize - MsgHeaderSize
-		dataBuf := c.buf[MsgHeaderSize: ]
-		recvOffset := uint16(0)
-		for {
-			if serverCtx.IsDebug == false {
-				c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
-			}
-			n, err := c.conn.Read(dataBuf[recvOffset: ])
-			if n > 0 {
-				recvOffset += uint16(n)
-				if recvOffset == bufSize {
-					break
-				}
-			}else {
-				logging.Log("recv data failed, " + err.Error())
+		dataBuf := c.buf[MsgHeaderSize: MsgHeaderSize + bufSize]
+		//recvOffset := uint16(0)
+		full := false
+
+		if serverCtx.IsDebug == false {
+			c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
+		}
+		n, err := io.ReadFull(c.conn, dataBuf)
+		if err == nil && n == len(dataBuf) {
+			full = true
+		}else {
+			logging.Log(fmt.Sprintf("recv data failed, %s, recv %d bytes", err.Error(), n))
+		}
+
+		//记录收到的是些什么数据
+		logging.Log(string(c.buf))
+
+		if !full {
+			if serverCtx.IsDebug == true {
+				logging.Log("data packet was not fully received ")
 				break
 			}
 		}
 
-		//记录收到的是些什么数据
-		logging.Log(fmt.Sprint(dataBuf))
-
-		if recvOffset == bufSize && dataBuf[bufSize - 1] != ')' {
+		if full && dataBuf[bufSize - 1] != ')' {
 			logging.Log("bad format of data packet, it must end with )")
 			break
 		}
 
-		//将IMEI和cmd解析出来
-		imei, _ := strconv.ParseUint(string(headerBuf[5: 20]), 0, 0)
-		cmd := string(headerBuf[20: 24])
-
 		// 消息接收不完整，如果是微聊（BP34）等需要支持续传的请求，
 		// 则将当前不完整的数据加入续传队列，等待下一次连接以后进行续传
 		// 否则，为普通命令请求如BP01，BP09等，直接丢弃并关闭连接
-		if recvOffset != bufSize && cmd != proto.StringCmd(proto.DRT_SEND_MINICHAT) {
+		if !full && cmd != proto.StringCmd(proto.DRT_SEND_MINICHAT) {
 			break  //退出循环和go routine，连接关闭
 		}
 
 		c.imei = imei
-		if c.saved == false {
+		if c.saved == false && full {
 			c.saved = true
 			addConnChan <- c
 		}
@@ -186,7 +189,8 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		msg.Header.Header.ID = proto.NewMsgID()
 		msg.Header.Header.Imei = imei
 		msg.Header.Header.Cmd = proto.IntCmd(cmd)
-		msg.Data = dataBuf[0: recvOffset] //不包含头部24字节
+		msg.Data = make([]byte, n)
+		copy(msg.Data, dataBuf[0: n]) //不包含头部24字节
 		if  msg.Header.Header.Cmd ==  proto.DRT_SEND_MINICHAT {
 			msg.Header.Header.Status = 1
 		}else{
@@ -207,7 +211,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 
 		//业务逻辑只处理完整的请求和不完整的微聊请求，处理完请求以后，
 		// 对于不完整的微聊请求，由于连接已经出错，需要将当前连接关闭
-		if recvOffset != bufSize && cmd == proto.StringCmd(proto.DRT_SEND_MINICHAT) {
+		if !full && cmd == proto.StringCmd(proto.DRT_SEND_MINICHAT) {
 			break  //退出循环和go routine，连接关闭
 		}
 	}
