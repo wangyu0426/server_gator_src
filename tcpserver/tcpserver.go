@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	MsgHeaderSize = 24
-	MsgMinSize = 25
+	MsgHeaderSize = 28
+	MsgMinSize = 29
+	DeviceMsgVersionSize = 4
 )
 
 var addConnChan chan *Connection
@@ -129,8 +130,8 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		}
 
 		//将IMEI和cmd解析出来
-		imei, _ := strconv.ParseUint(string(headerBuf[5: 20]), 0, 0)
-		cmd := string(headerBuf[20: 24])
+		imei, _ := strconv.ParseUint(string(headerBuf[5 + DeviceMsgVersionSize: 20 + DeviceMsgVersionSize]), 0, 0)
+		cmd := string(headerBuf[20 + DeviceMsgVersionSize: 24 + DeviceMsgVersionSize])
 
 		logging.Log("data size: " + fmt.Sprintf("%d", dataSize))
 		if len(c.buf) < int(dataSize) {

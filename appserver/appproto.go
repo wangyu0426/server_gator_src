@@ -52,6 +52,16 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 			UserName: datas["username"].(string),
 			AccessToken: datas["accessToken"].(string)}
 		return getDeviceVerifyCode(c, &params)
+	case "set-device":
+		datas := msg["data"].(map[string]interface{})
+		params := proto.DeviceSettingParams{Imei: datas["imei"].(string),
+			UserName: datas["username"].(string),
+			AccessToken: datas["accessToken"].(string),
+			FieldName: datas["fieldname"].(string),
+			CurValue: datas["curvalue"].(string),
+			NewValue: datas["newvalue"].(string),
+		}
+		return updateDeviceSetting(c, &params)
 
 	default:
 		break
@@ -180,3 +190,52 @@ func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceVerifyCodeParams)
 	return true
 }
 
+
+func updateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams) bool {
+	isNeedNotifyDevice := true
+	imei := proto.Str2Num(params.Imei, 10)
+	fieldName :=  params.FieldName
+	newValue :=  params.NewValue
+	proto.DeviceInfoListLock.Lock()
+	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+	if ok && deviceInfo != nil {
+		switch params.FieldName {
+		case "avatar":
+			isNeedNotifyDevice = false
+			deviceInfo.Avatar = newValue
+		}
+	}
+	proto.DeviceInfoListLock.Unlock()
+
+	//更新数据库
+	ret := UpdateDeviceSettingInDB(imei, fieldName, newValue)
+	if ret == false {
+
+	}else{
+
+	}
+
+	if isNeedNotifyDevice {
+
+	}
+
+	//svrctx.Get().TcpServerChan <-
+	//appServerChan <- &proto.AppMsgData{Cmd: "verify-code-ack", Imei: imei,
+	//	UserName: params.UserName, AccessToken:params.AccessToken,
+	//	Data: fmt.Sprintf("{\"VerifyCode\": \"%s\"}", verifyCode), Conn: c}
+
+	return true
+}
+
+func UpdateDeviceSettingInDB(imei uint64, fieldName, newValue string) bool {
+	strSQL := fmt.Sprintf("UPDATE watchinfo SET %s=%s  where IMEI='%d'", fieldName, newValue, imei)
+
+	logging.Log("SQL: " + strSQL)
+	_, err := svrctx.Get().MySQLPool.Exec(strSQL)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] update time zone into db failed, %s", imei, err.Error()))
+		return false
+	}
+
+	return true
+}

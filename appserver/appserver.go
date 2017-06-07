@@ -58,6 +58,59 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	app.Adapt(ws)
 	ws.OnConnection(OnClientConnected)
 
+	app.Get("/api/hi", func(ctx *iris.Context) {
+		result := proto.HttpAPIResult{
+			ErrCode: 0,
+			ErrMsg: "",
+			Imei: "0",
+		}
+		ctx.JSON(200, result)
+	})
+
+	app.Post("/api/set-avatar", func(ctx *iris.Context) {
+		result := proto.HttpAPIResult{
+			ErrCode: 0,
+			ErrMsg: "",
+			Imei: "0",
+		}
+
+		//fmt.Println(ctx.FormValues())
+		_,fileInfo, err1 := ctx.FormFile("avatar")
+		if err1 != nil {
+			result.ErrCode = 500
+			ctx.JSON(500, result)
+			return
+		}
+
+		file,err2 :=fileInfo.Open()
+		if err2 != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to open the uploaded avatar file"
+			ctx.JSON(500, result)
+			return
+		}
+
+		defer file.Close()
+		avatarData, err3 :=ioutil.ReadAll(file)
+		if err3 != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to read the data of  the uploaded avatar file"
+			ctx.JSON(500, result)
+			return
+		}
+
+		err4 := ioutil.WriteFile("myfile.txt", avatarData, 0666)
+		if err4 != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to save the uploaded avatar file"
+			ctx.JSON(500, result)
+			return
+		}
+
+		fmt.Println(fileInfo.Filename)
+		ctx.JSON(200, result)
+	})
+
 	//负责管理连接、并且回发数据到app端
 	go func() {
 		for  {

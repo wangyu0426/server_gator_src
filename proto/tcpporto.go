@@ -860,36 +860,55 @@ func (service *GT06Service) ProcessMicChatForDebug(pszMsg []byte) bool {
 	blockIndex := int(Str2Num(fields[4], 10))
 	blockSize := Str2Num(fields[5], 10)
 
+	isFoundTable, isFoundTask := false, false
 	DeviceChatTaskTableLock.Lock()
-	chatTasks, found :=DeviceChatTaskTable[service.imei]
-	if !found {
-		if blockIndex != 1 {
-			ret = false
-		}else{
-			chat := &ChatTask{}
-			chat.Info.DateTime = timestamp
-			chat.Info.Receiver = fields[0]
-			chat.Info.VoiceMilisecs = milisecs
-			chat.Data.Imei = service.imei
-			chat.Data.Cmd = StringCmd(DRT_SEND_MINICHAT)
-			chat.Data.blockSizeField = int(blockSize)
-			chat.Data.BlockSize = int(blockSize)
-			chat.Data.nextIndex = blockIndex + 1
-
-			chat.Data.BlockCount = int(Str2Num(fields[3], 10))
-			chat.Data.BlockIndex = blockIndex
-			chat.Data.Phone = fields[0]
-			chat.Data.Time = timestamp
-			chat.Data.Data = make([]byte, chat.Data.BlockCount * DATA_BLOCK_SIZE)
-			copy(chat.Data.Data[0: ], fields[6][0:chat.Data.BlockSize])
-			chat.Data.recvSized = chat.Data.BlockSize
-
-			chatTasks = map[uint64]*ChatTask{}
+	chat := &ChatTask{}
+	chatTasks, isFoundTable :=DeviceChatTaskTable[service.imei]
+	if isFoundTable {
+		chat, isFoundTask = chatTasks[fileId]
+		if isFoundTask == false {
+			chat = &ChatTask{}
 			chatTasks[fileId] = chat
-			DeviceChatTaskTable[service.imei] = chatTasks
 		}
 	}else{
-		chat, _ := chatTasks[fileId]
+		chatTasks = map[uint64]*ChatTask{}
+		chatTasks[fileId] = chat
+		DeviceChatTaskTable[service.imei] = chatTasks
+	}
+
+	if isFoundTask == false && blockIndex != 1{
+		DeviceChatTaskTableLock.Unlock()
+		return false
+	}
+
+	if isFoundTask == true && (blockIndex != chat.Data.nextIndex){
+		DeviceChatTaskTableLock.Unlock()
+		return false
+	}
+
+	if isFoundTask == false {
+		chat := &ChatTask{}
+		chat.Info.DateTime = timestamp
+		chat.Info.Receiver = fields[0]
+		chat.Info.VoiceMilisecs = milisecs
+		chat.Data.Imei = service.imei
+		chat.Data.Cmd = StringCmd(DRT_SEND_MINICHAT)
+		chat.Data.blockSizeField = int(blockSize)
+		chat.Data.BlockSize = int(blockSize)
+		chat.Data.nextIndex = blockIndex + 1
+
+		chat.Data.BlockCount = int(Str2Num(fields[3], 10))
+		chat.Data.BlockIndex = blockIndex
+		chat.Data.Phone = fields[0]
+		chat.Data.Time = timestamp
+		chat.Data.Data = make([]byte, chat.Data.BlockCount * DATA_BLOCK_SIZE)
+		copy(chat.Data.Data[0: ], fields[6][0:chat.Data.BlockSize])
+		chat.Data.recvSized = chat.Data.BlockSize
+
+		chatTasks = map[uint64]*ChatTask{}
+		chatTasks[fileId] = chat
+		DeviceChatTaskTable[service.imei] = chatTasks
+	}else{
 		if blockIndex == chat.Data.nextIndex && blockIndex <= chat.Data.BlockCount {
 			chat.Data.blockSizeField = int(blockSize)
 			chat.Data.BlockSize = int(blockSize)
