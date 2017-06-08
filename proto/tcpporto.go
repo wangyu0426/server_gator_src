@@ -512,6 +512,61 @@ func (service *GT06Service)UpdateDeviceTimeZone(imei uint64, timezone int) bool 
 	return true
 }
 
+
+func MakeTimeZoneReplyMsg(imei  uint64, deviceTimeZone string) []byte {
+	//(002D357593060153353AP03,150728,152900,e0800)
+	curTime := time.Now().UTC().Format("060102,150405")
+
+	body := fmt.Sprintf("%015dAP03,%s,%s,%016X)", imei, curTime, deviceTimeZone, makeId())
+	size := fmt.Sprintf("(%04X", 5 + len(body))
+
+	return []byte(size + body)
+}
+
+func deviceTimeZoneString(tz string) string {
+	tz = strings.Replace(tz, ":", "", 1)
+	if tz[0] == '-' {
+		tz = strings.Replace(tz, "-", "w", 1)
+	}else if tz[0] == '+'{
+		tz = strings.Replace(tz, "+", "e", 1)
+	}else{
+		tz = "e" + tz
+	}
+	return tz
+}
+
+
+func DeviceTimeZoneInt(tz string) int {
+	tz = strings.Replace(tz, ":", "", 1)
+	negative := 1
+	if tz[0] == '-' {
+		negative = -1
+		tz = strings.Replace(tz, "-", "", 1)
+	}else if tz[0] == '+'{
+		tz = strings.Replace(tz, "+", "", 1)
+	}else{
+		tz = "0"
+	}
+	return int(Str2Num(tz, 10)) * negative
+}
+
+
+func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams) []byte {
+	body := ""
+	switch params.FieldName {
+	case "OwnerName":
+		body = fmt.Sprintf("%015dAP18,%s,%016X)", imei, params.NewValue, makeId())
+	case "TimeZone":
+		return  MakeTimeZoneReplyMsg(imei, deviceTimeZoneString(params.NewValue))
+	default:
+		return nil
+	}
+
+	size := fmt.Sprintf("(%04X", 5 + len(body))
+
+	return []byte(size + body)
+}
+
 func (service *GT06Service)makeSyncTimeReplyMsg() []byte {
 	//(002D357593060153353AP03,150728,152900,e0800)
 	curTime := time.Now().UTC().Format("060102,150405")

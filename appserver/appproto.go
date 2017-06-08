@@ -190,50 +190,94 @@ func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceVerifyCodeParams)
 	return true
 }
 
-
-func updateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams) bool {
-	isNeedNotifyDevice := true
-	imei := proto.Str2Num(params.Imei, 10)
-	fieldName :=  params.FieldName
-	newValue :=  params.NewValue
+func SaveDeviceSetting(imei uint64, fieldName, newValue string, valueIsString bool)  bool {
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 	if ok && deviceInfo != nil {
-		switch params.FieldName {
+		switch fieldName {
 		case "avatar":
-			isNeedNotifyDevice = false
 			deviceInfo.Avatar = newValue
+		case "OwnerName":
+			deviceInfo.Name = newValue
+		case "TimeZone":
+			deviceInfo.TimeZone = proto.DeviceTimeZoneInt(newValue)
+		case "SimID":
+			deviceInfo.SimID = newValue
+		default:
 		}
 	}
 	proto.DeviceInfoListLock.Unlock()
 
 	//更新数据库
-	ret := UpdateDeviceSettingInDB(imei, fieldName, newValue)
-	if ret == false {
+	if valueIsString {
+		newValue = "'" + newValue + "'"
+	}
+	return UpdateDeviceSettingInDB(imei, fieldName, newValue)
+}
 
-	}else{
+func updateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams) bool {
+	isNeedNotifyDevice := true
+	valuleIsString := true
+	imei := proto.Str2Num(params.Imei, 10)
+	fieldName :=  params.FieldName
+	newValue := params.NewValue
 
+	switch fieldName {
+	case "OwnerName":
+	case "TimeZone":
+	case "SimID":
+		isNeedNotifyDevice = false
+	default:
+		return false
+	}
+
+	ret := SaveDeviceSetting(imei, fieldName, newValue, valuleIsString)
+	settingResult := proto.DeviceSettingResult{
+		FieldName: fieldName,
+		Value: newValue,
+	}
+	result := proto.HttpAPIResult{
+		ErrCode: 0,
+		ErrMsg: "",
+		Imei: proto.Num2Str(imei, 10),
 	}
 
 	if isNeedNotifyDevice {
-
+		msgNotify := &proto.MsgData{}
+		msgNotify.Header.Header.Version = proto.MSG_HEADER_VER
+		msgNotify.Header.Header.Imei = imei
+		msgNotify.Data = proto.MakeSetDeviceConfigReplyMsg(imei, params)
+		svrctx.Get().TcpServerChan <- msgNotify
 	}
 
-	//svrctx.Get().TcpServerChan <-
-	//appServerChan <- &proto.AppMsgData{Cmd: "verify-code-ack", Imei: imei,
-	//	UserName: params.UserName, AccessToken:params.AccessToken,
-	//	Data: fmt.Sprintf("{\"VerifyCode\": \"%s\"}", verifyCode), Conn: c}
+	if ret == false {
+		result.ErrCode = 500
+		result.ErrMsg = "save device setting in db failed"
+	}else {
+		settingResultJson, _ := json.Marshal(&settingResult)
+		result.Data = string(settingResultJson)
+		jsonData, _ := json.Marshal(&result)
 
-	return true
+		appServerChan <- &proto.AppMsgData{Cmd: "set-device-ack", Imei: imei,
+			UserName: params.UserName, AccessToken:params.AccessToken,
+			Data: string(jsonData), Conn: c}
+	}
+
+	return ret
 }
 
 func UpdateDeviceSettingInDB(imei uint64, fieldName, newValue string) bool {
-	strSQL := fmt.Sprintf("UPDATE watchinfo SET %s=%s  where IMEI='%d'", fieldName, newValue, imei)
+	strSQL := ""
+	if fieldName == "SimID" {
+		strSQL = fmt.Sprintf("UPDATE device SET %s=%s  where systemNo=%d", fieldName, newValue, imei % 100000000000)
+	}else{
+		strSQL = fmt.Sprintf("UPDATE watchinfo SET %s=%s  where IMEI='%d'", fieldName, newValue, imei)
+	}
 
 	logging.Log("SQL: " + strSQL)
 	_, err := svrctx.Get().MySQLPool.Exec(strSQL)
 	if err != nil {
-		logging.Log(fmt.Sprintf("[%d] update time zone into db failed, %s", imei, err.Error()))
+		logging.Log(fmt.Sprintf("[%d] update %s into db failed, %s", imei, fieldName, err.Error()))
 		return false
 	}
 

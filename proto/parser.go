@@ -154,11 +154,16 @@ type AppMsgData struct {
 	Conn interface{}  `json:"-"`
 }
 
+type DeviceSettingResult struct {
+	FieldName string 		`json:"fieldname"`
+	Value string 			`json:"value"`
+}
 
 type HttpAPIResult struct {
 	ErrCode int				`json:"errcode"`
 	ErrMsg string  			`json:"errmsg"`
 	Imei string  				`json:"imei"`
+	Data  string  			`json:"data"`
 }
 
 type LoginParams struct {
@@ -281,6 +286,7 @@ type DeviceInfo struct {
 	Company string
 	CountryCode string
 	Avatar string
+	SimID string
 	Lang string
 	Volume uint8
 	CanTurnOff bool
@@ -373,6 +379,20 @@ func init()  {
 	//fmt.Println(a)
 	//fmt.Println(m1)
 	//
+	//tz := "-01:30"
+	//tz = strings.Replace(tz, ":", "", 1)
+	//if tz[0] == '-' {
+	//	tz = strings.Replace(tz, "-", "w", 1)
+	//}else if tz[0] == '+'{
+	//	tz = strings.Replace(tz, "+", "e", 1)
+	//}else{
+	//	tz = "e" + tz
+	//}
+	//
+	//fmt.Println("tz", DeviceTimeZoneInt(tz))
+	//imei := 357593060571398
+	//fmt.Println("sn: ")
+	//fmt.Println(imei % 100000000000)
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()
@@ -528,7 +548,12 @@ func LoadEPOFromFile()  {
 }
 
 func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
-	rows, err := dbpool.Query("select w.IMEI, w.OwnerName, w.PhoneNumbers, w.TimeZone, w.CountryCode, w.Avatar,w.ChildPowerOff, w.UseDST, w.SocketModeOff, w.Volume, w.Lang, w.VerifyCode, w.Fence1,w.Fence2, w.Fence3,w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2,w.HideTimer3, pm.model, c.name from watchinfo w join device d on w.recid=d.recid join productmodel pm  on d.modelid=pm.recid join companies c on d.companyid=c.recid ")
+	rows, err := dbpool.Query("select w.IMEI, w.OwnerName, w.PhoneNumbers, w.TimeZone, w.CountryCode, w.Avatar, d.SimID," +
+		" w.ChildPowerOff, w.UseDST, w.SocketModeOff, w.Volume, w.Lang, w.VerifyCode, w.Fence1,w.Fence2, w.Fence3," +
+		" w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, " +
+		" w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2," +
+		" w.HideTimer3, pm.model, c.name from watchinfo w join device d on w.recid=d.recid join productmodel pm  " +
+		" on d.modelid=pm.recid join companies c on d.companyid=c.recid ")
 	if err != nil {
 		fmt.Println("LoadDeviceInfoFromDB failed,", err.Error())
 		os.Exit(1)
@@ -541,6 +566,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		TimeZone		string
 		CountryCode 		string
 		Avatar 			string
+		SimID 			string
 		ChildPowerOff		uint8
 		UseDST		uint8
 		SocketModeOff	uint8
@@ -561,7 +587,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 	tmpDeviceInfoList := &map[uint64]*DeviceInfo{}
 	for rows.Next() {
 		deviceInfo := &DeviceInfo{}
-		rows.Scan(&IMEI, &OwnerName, &PhoneNumbers, &TimeZone, &CountryCode, &Avatar, &ChildPowerOff, &UseDST, &SocketModeOff,
+		rows.Scan(&IMEI, &OwnerName, &PhoneNumbers, &TimeZone, &CountryCode, &Avatar, &SimID, &ChildPowerOff, &UseDST, &SocketModeOff,
 			&Volume, &Lang, &VerifyCode, &Fences[0], &Fences[1], &Fences[2], &Fences[3], &Fences[4], &Fences[5], &Fences[6], &Fences[7], &Fences[8], &Fences[9], &WatchAlarms[0], &WatchAlarms[1],&WatchAlarms[2], &WatchAlarms[3], &WatchAlarms[4], &HideSelf, &HideTimers[0], &HideTimers[1], &HideTimers[2], &HideTimers[3], &Model, &Company)
 		deviceInfo.Imei = Str2Num(IMEI, 10)
 		deviceInfo.Name = OwnerName
@@ -569,6 +595,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		deviceInfo.TimeZone  = ParseTimeZone(TimeZone)
 		deviceInfo.CountryCode = CountryCode
 		deviceInfo.Avatar = Avatar
+		deviceInfo.SimID = SimID
 		deviceInfo.CanTurnOff = ChildPowerOff != 0
 		deviceInfo.UseDST = UseDST != 0
 		deviceInfo.SocketModeOff = SocketModeOff != 0

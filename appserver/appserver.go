@@ -58,6 +58,8 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	app.Adapt(ws)
 	ws.OnConnection(OnClientConnected)
 
+	app.StaticWeb(svrctx.Get().HttpStaticURL, svrctx.Get().HttpStaticDir)
+
 	app.Get("/api/hi", func(ctx *iris.Context) {
 		result := proto.HttpAPIResult{
 			ErrCode: 0,
@@ -67,15 +69,19 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		ctx.JSON(200, result)
 	})
 
-	app.Post("/api/set-avatar", func(ctx *iris.Context) {
+	app.Post(svrctx.Get().HttpUploadURL, func(ctx *iris.Context) {
 		result := proto.HttpAPIResult{
 			ErrCode: 0,
 			ErrMsg: "",
 			Imei: "0",
 		}
 
-		//fmt.Println(ctx.FormValues())
-		_,fileInfo, err1 := ctx.FormFile("avatar")
+		imei := ctx.FormValue("imei")
+		fieldname := ctx.FormValue("fieldname")
+		uploadType := ctx.FormValue("type")
+		fmt.Println(uploadType)
+
+		_,fileInfo, err1 := ctx.FormFile(uploadType)
 		if err1 != nil {
 			result.ErrCode = 500
 			ctx.JSON(500, result)
@@ -85,30 +91,40 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		file,err2 :=fileInfo.Open()
 		if err2 != nil {
 			result.ErrCode = 500
-			result.ErrMsg = "server failed to open the uploaded avatar file"
+			result.ErrMsg = "server failed to open the uploaded  file"
 			ctx.JSON(500, result)
 			return
 		}
 
 		defer file.Close()
-		avatarData, err3 :=ioutil.ReadAll(file)
+		fileData, err3 :=ioutil.ReadAll(file)
 		if err3 != nil {
 			result.ErrCode = 500
-			result.ErrMsg = "server failed to read the data of  the uploaded avatar file"
+			result.ErrMsg = "server failed to read the data of  the uploaded  file"
 			ctx.JSON(500, result)
 			return
 		}
 
-		err4 := ioutil.WriteFile("myfile.txt", avatarData, 0666)
+		err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir + fileInfo.Filename, fileData, 0666)
 		if err4 != nil {
 			result.ErrCode = 500
-			result.ErrMsg = "server failed to save the uploaded avatar file"
+			result.ErrMsg = "server failed to save the uploaded  file"
 			ctx.JSON(500, result)
 			return
 		}
 
-		fmt.Println(fileInfo.Filename)
-		ctx.JSON(200, result)
+		ret := SaveDeviceSetting(proto.Str2Num(imei, 10), fieldname, svrctx.Get().HttpStaticAvatarDir +  fileInfo.Filename, true)
+		if ret {
+			result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
+				svrctx.Get().HttpStaticAvatarDir +  fileInfo.Filename)
+			fmt.Println(fileInfo.Filename)
+			ctx.JSON(200, result)
+		}else{
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to update the device setting in db"
+			ctx.JSON(500, result)
+			return
+		}
 	})
 
 	//负责管理连接、并且回发数据到app端

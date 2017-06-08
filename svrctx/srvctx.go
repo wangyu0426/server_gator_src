@@ -30,7 +30,12 @@ type ServerContext struct {
 	MasterListenAddrPort string
 	BindAddr      string
 	Port          uint16
+	HttpServerName string
 	WSPort        uint16
+	HttpUploadURL string
+	HttpStaticURL string
+	HttpStaticDir string
+	HttpStaticAvatarDir string
 	AcceptTimeout time.Duration
 	RecvTimeout   time.Duration
 	RedisAddr     string
@@ -73,7 +78,13 @@ func init()  {
 
 	serverCtx.BindAddr = "0.0.0.0"
 	serverCtx.Port = 7015
+
+	serverCtx.HttpServerName = "http://192.168.3.97"
 	serverCtx.WSPort = 8015
+	serverCtx.HttpUploadURL = "/api/upload"
+	serverCtx.HttpStaticURL = "/static"
+	serverCtx.HttpStaticDir = "./static"
+	serverCtx.HttpStaticAvatarDir = "/upload/avatar/"
 
 	serverCtx.AcceptTimeout = 30
 	serverCtx.RecvTimeout = 30
