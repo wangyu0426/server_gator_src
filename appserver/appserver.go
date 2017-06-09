@@ -113,7 +113,11 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			return
 		}
 
-		ret := SaveDeviceSetting(proto.Str2Num(imei, 10), fieldname, svrctx.Get().HttpStaticAvatarDir +  fileInfo.Filename, true)
+		settings := make([]proto.SettingParam, 1)
+		settings[0].FieldName = fieldname
+		settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir +  fileInfo.Filename
+
+		ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
 		if ret {
 			result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
 				svrctx.Get().HttpStaticAvatarDir +  fileInfo.Filename)

@@ -14,7 +14,23 @@ import (
 	//"github.com/jackc/pgx"
 	//"database/sql"
 	_ "github.com/go-sql-driver/mysql"
+	"strings"
+	"encoding/base64"
 )
+
+const (
+	base64Table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+)
+
+var coder = base64.NewEncoding(base64Table)
+
+func base64Encode(src []byte) []byte {
+	return []byte(coder.EncodeToString(src))
+}
+
+func base64Decode(src []byte) ([]byte, error) {
+	return coder.DecodeString(string(src))
+}
 
 func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, data []byte) bool {
 	var itf interface{}
@@ -53,15 +69,14 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 			AccessToken: datas["accessToken"].(string)}
 		return getDeviceVerifyCode(c, &params)
 	case "set-device":
-		datas := msg["data"].(map[string]interface{})
-		params := proto.DeviceSettingParams{Imei: datas["imei"].(string),
-			UserName: datas["username"].(string),
-			AccessToken: datas["accessToken"].(string),
-			FieldName: datas["fieldname"].(string),
-			CurValue: datas["curvalue"].(string),
-			NewValue: datas["newvalue"].(string),
+		jsonString, _ := json.Marshal(msg["data"])
+		params := proto.DeviceSettingParams{}
+		err:=json.Unmarshal(jsonString, &params)
+		if err != nil {
+			logging.Log("set-device parse json failed, " + err.Error())
+			return false
 		}
-		return updateDeviceSetting(c, &params)
+		return AppUpdateDeviceSetting(c, &params)
 
 	default:
 		break
@@ -190,72 +205,99 @@ func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceVerifyCodeParams)
 	return true
 }
 
-func SaveDeviceSetting(imei uint64, fieldName, newValue string, valueIsString bool)  bool {
+func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsString []bool)  bool {
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 	if ok && deviceInfo != nil {
-		switch fieldName {
-		case "avatar":
-			deviceInfo.Avatar = newValue
-		case "OwnerName":
-			deviceInfo.Name = newValue
-		case "TimeZone":
-			deviceInfo.TimeZone = proto.DeviceTimeZoneInt(newValue)
-		case "SimID":
-			deviceInfo.SimID = newValue
-		default:
+		for _, setting := range settings {
+			switch setting.FieldName {
+			case "Avatar":
+				deviceInfo.Avatar = setting.NewValue
+			case "OwnerName":
+				deviceInfo.Name = setting.NewValue
+			case "TimeZone":
+				deviceInfo.TimeZone = proto.DeviceTimeZoneInt(setting.NewValue)
+			case "SimID":
+				deviceInfo.SimID = setting.NewValue
+			case "Volume":
+				deviceInfo.Volume = uint8(proto.Str2Num(setting.NewValue, 10))
+			case "Lang":
+				deviceInfo.Lang = setting.NewValue
+			case "UseDST":
+				deviceInfo.UseDST = (proto.Str2Num(setting.NewValue, 10)) != 0
+			case "ChildPowerOff":
+				deviceInfo.CanTurnOff = (proto.Str2Num(setting.NewValue, 10)) != 0
+			default:
+			}
 		}
 	}
 	proto.DeviceInfoListLock.Unlock()
 
 	//更新数据库
-	if valueIsString {
-		newValue = "'" + newValue + "'"
-	}
-	return UpdateDeviceSettingInDB(imei, fieldName, newValue)
+	return UpdateDeviceSettingInDB(imei, settings, valulesIsString)
 }
 
-func updateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams) bool {
-	isNeedNotifyDevice := true
-	valuleIsString := true
+func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams) bool {
+	isNeedNotifyDevice := make([]bool, len(params.Settings))
+	valulesIsString := make([]bool, len(params.Settings))
 	imei := proto.Str2Num(params.Imei, 10)
-	fieldName :=  params.FieldName
-	newValue := params.NewValue
 
-	switch fieldName {
-	case "OwnerName":
-	case "TimeZone":
-	case "SimID":
-		isNeedNotifyDevice = false
-	default:
-		return false
+	for i, setting := range params.Settings {
+		fieldName :=  setting.FieldName
+		//newValue := setting.NewValue
+		isNeedNotifyDevice[i] = true
+		valulesIsString[i] = true
+
+		switch fieldName {
+		case "OwnerName":
+		case "TimeZone":
+		case "Volume":
+		case "Lang":
+		case "UseDST":
+		case "ChildPowerOff":
+		case "SimID":
+			isNeedNotifyDevice[i] = false
+		default:
+			return false
+		}
 	}
 
-	ret := SaveDeviceSetting(imei, fieldName, newValue, valuleIsString)
-	settingResult := proto.DeviceSettingResult{
-		FieldName: fieldName,
-		Value: newValue,
-	}
+	ret := SaveDeviceSettings(imei, params.Settings, valulesIsString)
+	settingResult := proto.DeviceSettingResult{Settings: params.Settings}
 	result := proto.HttpAPIResult{
 		ErrCode: 0,
 		ErrMsg: "",
 		Imei: proto.Num2Str(imei, 10),
 	}
 
-	if isNeedNotifyDevice {
-		msgNotify := &proto.MsgData{}
-		msgNotify.Header.Header.Version = proto.MSG_HEADER_VER
-		msgNotify.Header.Header.Imei = imei
-		msgNotify.Data = proto.MakeSetDeviceConfigReplyMsg(imei, params)
-		svrctx.Get().TcpServerChan <- msgNotify
+	for _, isNeed := range isNeedNotifyDevice {
+		if isNeed {
+			msgNotify := &proto.MsgData{}
+			msgNotify.Header.Header.Version = proto.MSG_HEADER_VER
+			msgNotify.Header.Header.Imei = imei
+			msgNotify.Data = proto.MakeSetDeviceConfigReplyMsg(imei, params)
+			svrctx.Get().TcpServerChan <- msgNotify
+			break
+		}
 	}
 
 	if ret == false {
 		result.ErrCode = 500
 		result.ErrMsg = "save device setting in db failed"
 	}else {
-		settingResultJson, _ := json.Marshal(&settingResult)
-		result.Data = string(settingResultJson)
+		//concatStr := ""
+		//for i, setting := range settingResult.Settings {
+		//	strJson, _ := json.Marshal(&setting)
+		//	if i == 0 {
+		//		concatStr += fmt.Sprintf("\"v%d\": %s ", i, strJson)
+		//	}else{
+		//		concatStr += fmt.Sprintf(" , \"v%d\": %s ", i, strJson)
+		//	}
+		//}
+		//settingResultJson := fmt.Sprintf("{\"count\": \"%d\", %s}", len(settingResult.Settings), concatStr)
+		//result.Data = string(base64Encode([]byte(settingResultJson)))
+		settingResultJson, _ := json.Marshal(settingResult)
+		result.Data = string([]byte(settingResultJson))
 		jsonData, _ := json.Marshal(&result)
 
 		appServerChan <- &proto.AppMsgData{Cmd: "set-device-ack", Imei: imei,
@@ -266,19 +308,43 @@ func updateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams) bo
 	return ret
 }
 
-func UpdateDeviceSettingInDB(imei uint64, fieldName, newValue string) bool {
+func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesIsString []bool) bool {
 	strSQL := ""
-	if fieldName == "SimID" {
-		strSQL = fmt.Sprintf("UPDATE device SET %s=%s  where systemNo=%d", fieldName, newValue, imei % 100000000000)
-	}else{
-		strSQL = fmt.Sprintf("UPDATE watchinfo SET %s=%s  where IMEI='%d'", fieldName, newValue, imei)
+	concatValues := ""
+	FieldNames := ""
+	for i, setting := range settings {
+		FieldNames += setting.FieldName + ","
+		newValue := setting.NewValue
+		if valulesIsString == nil || valulesIsString[i] {
+			newValue = strings.Replace(newValue, "'", "\\'", -1)
+			newValue = "'" + setting.NewValue + "'"
+		}
+
+		if setting.FieldName == "SimID" {
+			strSQLUpdateSimID := fmt.Sprintf("UPDATE device SET %s=%s  where systemNo=%d", setting.FieldName, newValue, imei % 100000000000)
+			logging.Log("SQL: " + strSQLUpdateSimID)
+			_, err := svrctx.Get().MySQLPool.Exec(strSQLUpdateSimID)
+			if err != nil {
+				logging.Log(fmt.Sprintf("[%d] update %s into db failed, %s", imei, FieldNames, err.Error()))
+				return false
+			}
+		}else{
+			if len(concatValues) == 0 {
+				concatValues += fmt.Sprintf(" %s=%s ", setting.FieldName, newValue)
+			}else{
+				concatValues += fmt.Sprintf(", %s=%s ", setting.FieldName, newValue)
+			}
+		}
 	}
 
-	logging.Log("SQL: " + strSQL)
-	_, err := svrctx.Get().MySQLPool.Exec(strSQL)
-	if err != nil {
-		logging.Log(fmt.Sprintf("[%d] update %s into db failed, %s", imei, fieldName, err.Error()))
-		return false
+	if len(concatValues) > 0 {
+		strSQL = fmt.Sprintf("UPDATE watchinfo SET %s where IMEI='%d'", concatValues, imei)
+		logging.Log("SQL: " + strSQL)
+		_, err := svrctx.Get().MySQLPool.Exec(strSQL)
+		if err != nil {
+			logging.Log(fmt.Sprintf("[%d] update %s into db failed, %s", imei, FieldNames, err.Error()))
+			return false
+		}
 	}
 
 	return true

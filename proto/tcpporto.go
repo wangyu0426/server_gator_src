@@ -552,19 +552,32 @@ func DeviceTimeZoneInt(tz string) int {
 
 
 func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams) []byte {
-	body := ""
-	switch params.FieldName {
-	case "OwnerName":
-		body = fmt.Sprintf("%015dAP18,%s,%016X)", imei, params.NewValue, makeId())
-	case "TimeZone":
-		return  MakeTimeZoneReplyMsg(imei, deviceTimeZoneString(params.NewValue))
-	default:
-		return nil
+	data := ""
+	for _, setting := range params.Settings {
+		body := ""
+		switch setting.FieldName {
+		case "OwnerName":
+			body = fmt.Sprintf("%015dAP18,%s,%016X)", imei, setting.NewValue, makeId())
+		case "TimeZone":
+			return  MakeTimeZoneReplyMsg(imei, deviceTimeZoneString(setting.NewValue))
+		case "Volume":
+			body = fmt.Sprintf("%015dAP21,%s,%016X)", imei, setting.NewValue, makeId())
+		case "Lang":
+			body = fmt.Sprintf("%015dAP20,%04d,%016X)", imei, Str2Num(setting.NewValue, 10), makeId())
+		case "UseDST":
+			body = fmt.Sprintf("%015dAP19,%s,%016X)", imei, setting.NewValue, makeId())
+		case "ChildPowerOff":
+			body = fmt.Sprintf("%015dAP15,%s,%016X)", imei, setting.NewValue, makeId())
+		default:
+			return nil
+		}
+
+		size := fmt.Sprintf("(%04X", 5 + len(body))
+		data += (size + body)
 	}
 
-	size := fmt.Sprintf("(%04X", 5 + len(body))
-
-	return []byte(size + body)
+	logging.Log("MakeSetDeviceConfigReplyMsg: " + data)
+	return []byte(data)
 }
 
 func (service *GT06Service)makeSyncTimeReplyMsg() []byte {

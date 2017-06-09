@@ -155,8 +155,7 @@ type AppMsgData struct {
 }
 
 type DeviceSettingResult struct {
-	FieldName string 		`json:"fieldname"`
-	Value string 			`json:"value"`
+	Settings []SettingParam `json:"settings"`
 }
 
 type HttpAPIResult struct {
@@ -183,13 +182,17 @@ type DeviceVerifyCodeParams struct {
 	AccessToken string		`json:"accessToken"`
 }
 
+type SettingParam struct {
+	FieldName string 		`json:"fieldname"`
+	CurValue string 		`json:"curvalue"`
+	NewValue string 		`json:"newvalue"`
+}
+
 type DeviceSettingParams struct {
 	Imei string  				`json:"imei"`
 	UserName string		`json:"username"`
 	AccessToken string		`json:"accessToken"`
-	FieldName string 		`json:"fieldname"`
-	CurValue string 		`json:"curvalue"`
-	NewValue string 		`json:"newvalue"`
+	Settings []SettingParam `json:"settings"`
 }
 
 type IPInfo struct {
