@@ -23,6 +23,13 @@ var AppClientTable = map[uint64]map[string]*AppConnection{}
 var FenceIndex = uint64(0)
 
 var appServerChan chan *proto.AppMsgData
+var addDeviceManagerChan = make(chan *AddDeviceChanCtx, 1024 * 2)
+
+type AddDeviceChanCtx struct {
+	cmd string
+	params *proto.DeviceAddParams
+	c *AppConnection
+}
 
 func init() {
 	logging.Log("appserver init")
@@ -45,6 +52,7 @@ func init() {
 	//for i, letter := range a  {
 	//	fmt.Println(i, letter)
 	//}
+	//fmt.Println("rand verify code: ", makerRandomVerifyCode())
 	//os.Exit(0)
 
 }
@@ -183,7 +191,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 				logging.Log("send data to app:" + fmt.Sprint(string(msg.Cmd)))
 				//如果是login请求，则与设备无关,无须查表，直接发送数据到APP客户端
-				if msg.Cmd == "login-ack" || msg.Cmd == "heartbeat-ack" {
+				if msg.Cmd == "login-ack" || msg.Cmd == "heartbeat-ack" || msg.Cmd == "get-device-by-imei-ack" {
 					c := msg.Conn.(*AppConnection)
 					data, err := json.Marshal(&msg)
 					err = (*c.conn).EmitMessage(data)

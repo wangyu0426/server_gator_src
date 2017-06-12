@@ -176,10 +176,27 @@ type HeartBeatParams struct {
 	AccessToken string		`json:"accessToken"`
 }
 
-type DeviceVerifyCodeParams struct {
+type DeviceInfoQueryParams struct {
 	Imei string  				`json:"imei"`
 	UserName string		`json:"username"`
 	AccessToken string		`json:"accessToken"`
+}
+
+type DeviceAddParams struct {
+	Imei string  				`json:"imei"`
+	UserName string		`json:"username"`
+	AccessToken string		`json:"accessToken"`
+	UserId string			`json:"userId"`
+	OwnerName string		`json:"ownerName"`
+	DeviceSimCountryCode string		`json:"deviceSimCountryCode"`
+	DeviceSimID string		`json:"deviceSimID"`
+	MySimCountryCode string		`json:"mySimCountryCode"`
+	MySimID string		`json:"mySimID"`
+	PhoneType int		`json:"phoneType"`
+	MyName string		`json:"myName"`
+	VerifyCode string		`json:"verifyCode "`
+	IsAdmin int		`json:"isAdmin"`
+	TimeZone  string 	`json:"timezone"`
 }
 
 type SettingParam struct {
@@ -258,6 +275,7 @@ type SafeZone struct {
 }
 
 type FamilyMember struct {
+	CountryCode string
 	Phone string
 	Name string
 	Avatar string
@@ -285,17 +303,18 @@ type DeviceInfo struct {
 	Imei uint64
 	Model int
 	TimeZone int
-	Name string
+	OwnerName string
 	Company string
 	CountryCode string
 	Avatar string
 	SimID string
 	Lang string
 	Volume uint8
-	CanTurnOff bool
+	ChildPowerOff bool
 	UseDST bool
 	SocketModeOff bool
 	VerifyCode string
+	IsAdmin int
 	WatchAlarmList [MAX_WATCH_ALARM_NUM]WatchAlarm
 	SafeZoneList [MAX_SAFE_ZONE_NUM]SafeZone
 	Family [MAX_FAMILY_MEMBER_NUM]FamilyMember
@@ -593,13 +612,13 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		rows.Scan(&IMEI, &OwnerName, &PhoneNumbers, &TimeZone, &CountryCode, &Avatar, &SimID, &ChildPowerOff, &UseDST, &SocketModeOff,
 			&Volume, &Lang, &VerifyCode, &Fences[0], &Fences[1], &Fences[2], &Fences[3], &Fences[4], &Fences[5], &Fences[6], &Fences[7], &Fences[8], &Fences[9], &WatchAlarms[0], &WatchAlarms[1],&WatchAlarms[2], &WatchAlarms[3], &WatchAlarms[4], &HideSelf, &HideTimers[0], &HideTimers[1], &HideTimers[2], &HideTimers[3], &Model, &Company)
 		deviceInfo.Imei = Str2Num(IMEI, 10)
-		deviceInfo.Name = OwnerName
+		deviceInfo.OwnerName = OwnerName
 		ParseFamilyMembers(PhoneNumbers, &deviceInfo.Family)
 		deviceInfo.TimeZone  = ParseTimeZone(TimeZone)
 		deviceInfo.CountryCode = CountryCode
 		deviceInfo.Avatar = Avatar
 		deviceInfo.SimID = SimID
-		deviceInfo.CanTurnOff = ChildPowerOff != 0
+		deviceInfo.ChildPowerOff = ChildPowerOff != 0
 		deviceInfo.UseDST = UseDST != 0
 		deviceInfo.SocketModeOff = SocketModeOff != 0
 		deviceInfo.Volume = Volume

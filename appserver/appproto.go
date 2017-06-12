@@ -16,6 +16,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"strings"
 	"encoding/base64"
+	"math/rand"
 )
 
 const (
@@ -64,7 +65,7 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 
 	case "verify-code":
 		datas := msg["data"].(map[string]interface{})
-		params := proto.DeviceVerifyCodeParams{Imei: datas["imei"].(string),
+		params := proto.DeviceInfoQueryParams{Imei: datas["imei"].(string),
 			UserName: datas["username"].(string),
 			AccessToken: datas["accessToken"].(string)}
 		return getDeviceVerifyCode(c, &params)
@@ -77,7 +78,23 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 			return false
 		}
 		return AppUpdateDeviceSetting(c, &params)
+	case "get-device-by-imei":
+		datas := msg["data"].(map[string]interface{})
+		params := proto.DeviceAddParams{Imei: datas["imei"].(string),
+			UserName: datas["username"].(string),
+			AccessToken: datas["accessToken"].(string)}
+		//return getDeviceInfoByImei(c, &params)
+		addDeviceManagerChan <- &AddDeviceChanCtx{cmd: "get-device-by-imei", c: c, params: &params}
+	case "add-device":
+		jsonString, _ := json.Marshal(msg["data"])
+		params := proto.DeviceAddParams{}
+		err:=json.Unmarshal(jsonString, &params)
+		if err != nil {
+			logging.Log("add-device parse json failed, " + err.Error())
+			return false
+		}
 
+		addDeviceManagerChan <- &AddDeviceChanCtx{cmd: "add-device", c: c, params: &params}
 	default:
 		break
 	}
@@ -169,7 +186,7 @@ func login(c *AppConnection, username, password string) bool {
 	return true
 }
 
-func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceVerifyCodeParams) bool {
+func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceInfoQueryParams) bool {
 	//url := fmt.Sprintf("http://service.gatorcn.com/tracker/web/index.php?r=app/service/verify-code&SystemNo=%s&access-token=%s",
 	//	string(params.Imei[4: ]), params.AccessToken)
 	//logging.Log("get verify code url: " + url)
@@ -205,6 +222,186 @@ func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceVerifyCodeParams)
 	return true
 }
 
+func queryIsAdmin(imei, userName string) (bool, bool, string, error) {
+	strSQL := fmt.Sprintf("SELECT  u.loginname,  viu.VehId  from users u JOIN vehiclesinuser viu on u.recid = viu.UserID JOIN " +
+		"watchinfo w on w.recid = viu.VehId where w.imei='%s' order by viu.CreateTime asc", imei)
+	logging.Log("SQL: " + strSQL)
+	rows, err := svrctx.Get().MySQLPool.Query(strSQL)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%s] query is admin in db failed, %s", imei, err.Error()))
+		return false, false, "", err
+	}
+
+	usersCount := 0
+	matched := false
+	deviceRecId := ""
+	for rows.Next() {
+		userNameInDB, deviceRecIdInDB := "", ""
+		rows.Scan(&userNameInDB, &deviceRecIdInDB)
+		if userNameInDB == userName {
+			matched = true
+			deviceRecId = deviceRecIdInDB
+			break
+		}
+		usersCount++
+	}
+
+	if usersCount == 0 {
+		return true, matched, deviceRecId, nil
+	}else {
+		return false, matched, deviceRecId, nil
+	}
+}
+
+func getDeviceInfoByImei(c *AppConnection, params *proto.DeviceAddParams) bool {
+	deviceInfoResult := proto.DeviceInfo{}
+	imei := proto.Str2Num(params.Imei, 10)
+	proto.DeviceInfoListLock.RLock()
+	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+	if ok && deviceInfo != nil {
+		deviceInfoResult = *deviceInfo
+	}else{
+		proto.DeviceInfoListLock.RUnlock()
+		logging.Log(params.Imei + "  imei not found")
+		return false
+	}
+	proto.DeviceInfoListLock.RUnlock()
+
+	deviceInfoResult.VerifyCode = ""
+
+	isAdmin, _, _, err := queryIsAdmin(params.Imei, params.UserName)
+	if err != nil {
+		return false
+	}
+
+	if isAdmin {
+		deviceInfoResult.IsAdmin = 1
+	}
+
+	resultData, _ := json.Marshal(&deviceInfoResult)
+
+	appServerChan <- &proto.AppMsgData{Cmd: "get-device-by-imei-ack", Imei: imei,
+		UserName: params.UserName, AccessToken:params.AccessToken,
+		Data: string(resultData), Conn: c}
+
+	return true
+}
+
+func checkVerifyCode(imei, code string) bool {
+	matched := false
+	proto.DeviceInfoListLock.RLock()
+	deviceInfo, ok := (*proto.DeviceInfoList)[proto.Str2Num(imei, 10)]
+	if ok && deviceInfo != nil {
+		matched = deviceInfo.VerifyCode == code
+	}else{
+		matched = true
+	}
+	proto.DeviceInfoListLock.RUnlock()
+
+	return matched
+}
+
+const CHAR_LIST = "1234567890abcdefghijklmnopqrstuvwxyz_"
+
+func makerRandomVerifyCode() string {
+	rand.Seed(time.Now().UnixNano())
+	randChars := [4]byte{}
+	for i := 0; i < 4; i++{
+		index := rand.Uint64() %  uint64(len(CHAR_LIST))
+		randChars[i] = CHAR_LIST[int(index)]
+	}
+
+	return string(randChars[0:4])
+}
+
+func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
+	result := proto.HttpAPIResult{0, "", params.Imei, ""}
+	imei := proto.Str2Num(params.Imei, 10)
+
+	verifyCodeIncorrect := false
+
+	isAdmin, isFound, deviceRecId, err := queryIsAdmin(params.Imei, params.UserName)
+	if err == nil {
+		if params.IsAdmin == 1 && isAdmin == false {
+			verifyCodeIncorrect = true
+		} else if params.IsAdmin == 0 && isAdmin == false {
+			if checkVerifyCode(params.Imei, params.VerifyCode) == false {
+				verifyCodeIncorrect = true
+			}
+		}
+
+		if verifyCodeIncorrect {
+			// error code:  -1 表示验证码不正确
+			result.ErrCode = -1
+			result.ErrMsg = "the verify code is incorrect"
+		}else{
+			//从数据库查询是否已经关注了该手表
+			if isFound {
+				// error code:  -2 表示验该用户已经关注了手表
+				result.ErrCode = -2
+				result.ErrMsg = "the device was added duplicately"
+			}else{
+				strSqlInsertDeviceUser :=  fmt.Sprintf("insert into vehiclesinuser (userid, vehid, FamilyNumber, Name, " +
+					"CountryCode)  values('%s, '%s', '%s', '%s', '%s'') ", params.UserId, deviceRecId, params.MySimID,
+					params.MyName, params.MySimCountryCode )
+				logging.Log("SQL: " + strSqlInsertDeviceUser)
+				if err != nil {
+					logging.Log(fmt.Sprintf("[%s] insert into vehiclesinuser db failed, %s", imei, err.Error()))
+					result.ErrCode = 500
+					result.ErrMsg = "server failed to update db"
+				}else {
+					strSqlUpdateDeviceInfo := ""
+					phoneNumbers := "" //这里需要用到DeviceInfoList缓存来寻找空闲的亲情号列表，并且更新到缓存中去
+					if isAdmin {
+						//如果是管理员，则更新手表对应的字段数据，非管理员仅更新关注列表和对应的亲情号
+						strSqlUpdateDeviceInfo = fmt.Sprintf("update watchinfo set OwnerName='%s, CountryCode='%s', PhoneNumbers='%s', " +
+							"TimeZone='%s', VerifyCode='%s' ", params.OwnerName, params.DeviceSimCountryCode,
+							phoneNumbers, params.TimeZone, makerRandomVerifyCode())
+					} else {
+						strSqlUpdateDeviceInfo = fmt.Sprintf("update watchinfo set PhoneNumbers='%s', VerifyCode='%s' ",
+							phoneNumbers, makerRandomVerifyCode())
+					}
+
+					logging.Log("SQL: " + strSqlUpdateDeviceInfo)
+					if err != nil {
+						logging.Log(fmt.Sprintf("[%s] insert into watchinfo db failed, %s", imei, err.Error()))
+						result.ErrCode = 500
+						result.ErrMsg = "server failed to update db"
+					}
+				}
+			}
+		}
+	}else{
+		result.ErrCode = 500
+		result.ErrMsg = "server failed to query db"
+	}
+
+	resultData, _ := json.Marshal(&result)
+
+	appServerChan <- &proto.AppMsgData{Cmd: "add-device-ack", Imei: imei,
+		UserName: params.UserName, AccessToken:params.AccessToken,
+		Data: string(resultData), Conn: c}
+
+	return true
+}
+
+func AddDeviceManagerLoop()  {
+	for {
+		select {
+		case msg := <- addDeviceManagerChan:
+			if msg == nil {
+				return
+			}
+
+			if msg.cmd == "get-device-by-imei" {
+				getDeviceInfoByImei(msg.c, msg.params)
+			}else if  msg.cmd == "add-device" {
+				addDeviceByUser(msg.c, msg.params)
+			}
+		}
+	}
+}
+
 func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsString []bool)  bool {
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
@@ -214,7 +411,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 			case "Avatar":
 				deviceInfo.Avatar = setting.NewValue
 			case "OwnerName":
-				deviceInfo.Name = setting.NewValue
+				deviceInfo.OwnerName = setting.NewValue
 			case "TimeZone":
 				deviceInfo.TimeZone = proto.DeviceTimeZoneInt(setting.NewValue)
 			case "SimID":
@@ -226,7 +423,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 			case "UseDST":
 				deviceInfo.UseDST = (proto.Str2Num(setting.NewValue, 10)) != 0
 			case "ChildPowerOff":
-				deviceInfo.CanTurnOff = (proto.Str2Num(setting.NewValue, 10)) != 0
+				deviceInfo.ChildPowerOff = (proto.Str2Num(setting.NewValue, 10)) != 0
 			default:
 			}
 		}
