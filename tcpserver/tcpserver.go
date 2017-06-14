@@ -22,6 +22,7 @@ const (
 var addConnChan chan *Connection
 var delConnChan chan *Connection
 var TcpClientTable = map[uint64]*Connection{}
+var DevicePushCache = map[uint64][]*proto.MsgData{}
 
 func init()  {
 	logging.Log("tcpserver init")
@@ -65,24 +66,63 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 			if msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE {
 				logging.Log(fmt.Sprintf("msg to notify to push cached data to device %d ",  msg.Header.Header.Imei))
 			}else {
-				if msg.Header.Header.From == proto.MsgFromAppToAppServer {
-					//logging.Log("msg from app: " + string(msg.Data))
-				}else {
-					//logging.Log("msg from tcp: " + string(msg.Data))
+				//if msg.Header.Header.From == proto.MsgFromAppToAppServer {
+				//	//logging.Log("msg from app: " + string(msg.Data))
+				//}else {
+				//	//logging.Log("msg from tcp: " + string(msg.Data))
+				//}
+
+				cache, ok1 := DevicePushCache[msg.Header.Header.Imei]
+				if ok1 == false {
+					DevicePushCache[msg.Header.Header.Imei] = []*proto.MsgData{}
 				}
+
+				DevicePushCache[msg.Header.Header.Imei] = append(DevicePushCache[msg.Header.Header.Imei], msg)
+				//}else{
+				//	cache = append(cache, msg)
+				logging.Log(fmt.Sprintf("[%d] cache --  count: %d", msg.Header.Header.Imei, len(cache)))
 			}
 
-			c, ok := TcpClientTable[msg.Header.Header.Imei]
-			if ok {
-				if msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE {
-					//从缓存中读取数据，发送至手表
-				}else {
-					c.responseChan <- msg
-				}
+			c, ok2 := TcpClientTable[msg.Header.Header.Imei]
+			if ok2 {
+				logging.Log(fmt.Sprintf("[%d] lastActiveTime: %d", msg.Header.Header.Imei, c.lastActiveTime))
+				if (c.lastActiveTime - time.Now().Unix()) <= int64(serverCtx.MaxDeviceIdleTimeSecs) {
+					//如果60秒内有数据，则认为连接良好
+					cache, ok3 := DevicePushCache[msg.Header.Header.Imei]
+					if (ok3 == false || cache == nil) && msg.Header.Header.Version != proto.MSG_HEADER_PUSH_CACHE  {
+						logging.Log(fmt.Sprintf("[%d] oh my god", msg.Header.Header.Imei ))
+					}else{
+						logging.Log(fmt.Sprintf("[%d] cache --////--  count: %d", msg.Header.Header.Imei, len(cache)))
+						for i, cachedMsg := range cache {
+							if cachedMsg.Header.Header.Status == 0 {
+								//0， 不需要手表回复确认，直接发送完并删除
+								c.responseChan <- cachedMsg
+								cache = append(cache[:i], cache[i+1:]...)
+							}else if cachedMsg.Header.Header.Status == 1 {
+								//1, 消息尚未发送，且需要确认，则首先发出消息，并将status置2,
+								c.responseChan <- cachedMsg
+								cachedMsg.Header.Header.Status = 2
+							}else {
+								//2, 消息已经发送，并处于等待手表确认的状态
+							}
 
-				logging.Log("send app data to write routine")
+							logging.Log("send app data to write routine")
+						}
+					}
+				}else{
+					logging.Log(fmt.Sprintf("[%d] device idle no data over %d seconds",
+						msg.Header.Header.Imei, serverCtx.MaxDeviceIdleTimeSecs ))
+				}
+				//if msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE {
+				//	//从缓存中读取数据，发送至手表
+				//}else {
+				//	c.responseChan <- msg
+				//}
+				//
+				//logging.Log("send app data to write routine")
 			}else {
-				logging.Log("will send app data to tcp connection from TcpClientTable, but connection not found")
+				logging.Log(fmt.Sprintf("[%d]will send app data to tcp connection from TcpClientTable, but connection not found",
+					msg.Header.Header.Imei))
 			}
 		}
 	}
@@ -114,6 +154,8 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 			logging.Log("recv MsgHeaderSize bytes header failed, " + err.Error())
 			break
 		}
+
+		c.lastActiveTime = time.Now().Unix()
 
 		logging.Log("recv: " + string(headerBuf))
 
@@ -153,6 +195,10 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 			full = true
 		}else {
 			logging.Log(fmt.Sprintf("recv data failed, %s, recv %d bytes", err.Error(), n))
+		}
+
+		if n > 0 {
+			c.lastActiveTime = time.Now().Unix()
 		}
 
 		//记录收到的是些什么数据
@@ -261,6 +307,7 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				Pgpool: serverCtx.PGPool,
 				MysqlPool: serverCtx.MySQLPool,
 				WritebackChan: serverCtx.TcpServerChan,
+				AppNotifyChan: serverCtx.AppServerChan,
 				Msg: data,
 				GetDeviceDataFunc: svrctx.GetDeviceData,
 				SetDeviceDataFunc: svrctx.SetDeviceData,
@@ -310,6 +357,7 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		}
 
 		c := newConn(conn)
+		c.lastActiveTime = time.Now().Unix()
 
 		//for reading
 		go ConnReadLoop(c, serverCtx)

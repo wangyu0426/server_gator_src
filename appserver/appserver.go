@@ -139,6 +139,8 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		}
 	})
 
+	go AddDeviceManagerLoop()
+
 	//负责管理连接、并且回发数据到app端
 	go func() {
 		for  {
@@ -191,7 +193,12 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 				logging.Log("send data to app:" + fmt.Sprint(string(msg.Cmd)))
 				//如果是login请求，则与设备无关,无须查表，直接发送数据到APP客户端
-				if msg.Cmd == "login-ack" || msg.Cmd == "heartbeat-ack" || msg.Cmd == "get-device-by-imei-ack" {
+				if msg.Cmd == proto.LoginAckCmdName ||
+					(msg.Cmd == proto.HearbeatAckCmdName && msg.Conn != nil) ||
+					msg.Conn == proto.VerifyCodeAckCmdName ||
+					msg.Cmd == proto.GetDeviceByImeiAckCmdName ||
+					msg.Cmd == proto.AddDeviceAckCmdName ||
+					msg.Cmd == proto.DeleteDeviceAckCmdName {
 					c := msg.Conn.(*AppConnection)
 					data, err := json.Marshal(&msg)
 					err = (*c.conn).EmitMessage(data)
@@ -269,6 +276,10 @@ func getAppClientsByImei(msg *proto.AppMsgData)  map[string]*AppConnection {
 	if ok {
 		return subTable
 	}else {
+		if msg.Conn == nil || len(msg.AccessToken) == 0 {
+			return nil
+		}
+
 		url := "http://service.gatorcn.com/tracker/web/index.php?r=app/service/devices&access-token=" + msg.AccessToken
 		logging.Log("url: " + url)
 		resp, err := http.Get(url)
@@ -315,6 +326,10 @@ func getAppClientsByImei(msg *proto.AppMsgData)  map[string]*AppConnection {
 				imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
 				logging.Log("device: " + fmt.Sprint(imei))
 				c.imeis = append(c.imeis, imei)
+			}
+
+			if msg.Cmd == proto.AddDeviceOKAckCmdName {
+				c.imeis = append(c.imeis, msg.Imei)
 			}
 
 			for _, imei := range c.imeis {

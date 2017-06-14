@@ -72,6 +72,7 @@ const (
 	 CMD_AP11
 	 CMD_AP12
 	 CMD_AP13
+	 CMD_AP14
 	 CMD_AP30
 	 CMD_AP31
  )
@@ -106,7 +107,7 @@ type MsgHeader struct {
 	From  uint8  /*当前消息的类型，0 - 客户端请求；1 - 服务器响应；2 - 服务器请求；3 - 客户端响应*/
 
 	Status  uint8  /*消息请求处理的状态，
-                                  0 - 表示完成并OK；如果是不做分片和断点续传的请求，则status应始终赋值为0
+                                  0 - 表示完成并OK；如果是不做分片和断点续传并且不需要ack的请求，则status应始终赋值为0
                                   1 - 表示请求已经开始处理，但尚未完成，需要继续进行后续通信；
                                  -1 - 表示此次请求非正常结束终止，不再进行后续通信*/
 
@@ -154,6 +155,19 @@ type AppMsgData struct {
 	Conn interface{}  `json:"-"`
 }
 
+type HeartbeatParams struct {
+	UserName string `json:"username"`
+	AccessToken string `json:"accessToken"`
+	Timestamp int64 `json:"timestamp"`
+	Devices []string `json:"devices"`
+}
+
+type HeartbeatResult struct {
+	Timestamp string `json:"timestamp"`
+	Locations []LocationData`json:"locations"`
+}
+
+
 type DeviceSettingResult struct {
 	Settings []SettingParam `json:"settings"`
 }
@@ -170,13 +184,7 @@ type LoginParams struct {
 	Password string		`json:"password"`
 }
 
-type HeartBeatParams struct {
-	TimeStamp string  		`json:"timestamp"`
-	UserName string		`json:"username"`
-	AccessToken string		`json:"accessToken"`
-}
-
-type DeviceInfoQueryParams struct {
+type DeviceBaseParams struct {
 	Imei string  				`json:"imei"`
 	UserName string		`json:"username"`
 	AccessToken string		`json:"accessToken"`
@@ -194,7 +202,7 @@ type DeviceAddParams struct {
 	MySimID string		`json:"mySimID"`
 	PhoneType int		`json:"phoneType"`
 	MyName string		`json:"myName"`
-	VerifyCode string		`json:"verifyCode "`
+	VerifyCode string		`json:"verifyCode"`
 	IsAdmin int		`json:"isAdmin"`
 	TimeZone  string 	`json:"timezone"`
 }
@@ -255,6 +263,43 @@ const (
 	MAX_HIDE_TIMER_NUM = 4
 	MAX_FAMILY_MEMBER_NUM = 13
 )
+
+
+var	AvatarFieldName 			= "Avatar"
+var	OwnerNameFieldName 	= "OwnerName"
+var	TimeZoneFieldName 		= "TimeZone"
+var	SimIDFieldName 			= "SimID"
+var	VolumeFieldName 			= "Volume"
+var	LangFieldName 			= "Lang"
+var	UseDSTFieldName 			= "UseDST"
+var	ChildPowerOffFieldName 	= "ChildPowerOff"
+var PhoneNumbersFieldName 	= "PhoneNumbers"
+var CountryCodeFieldName	= "CountryCode"
+
+var CmdOKTail 				= "-ok"
+var CmdAckTail 				= "-ack"
+
+var LoginCmdName  			= "login"
+var LoginAckCmdName  		= LoginCmdName + CmdAckTail
+
+var HearbeatCmdName  		= "heartbeat"
+var HearbeatAckCmdName  	= HearbeatCmdName + CmdAckTail
+
+var VerifyCodeCmdName  		= "verify-code"
+var VerifyCodeAckCmdName  	= VerifyCodeCmdName + CmdAckTail
+
+var SetDeviceCmdName  		= "set-device"
+var SetDeviceAckCmdName  	= SetDeviceCmdName + CmdAckTail
+
+var GetDeviceByImeiCmdName  		= "get-device-by-imei"
+var GetDeviceByImeiAckCmdName  	= GetDeviceByImeiCmdName + CmdAckTail
+
+var AddDeviceCmdName  			= "add-device"
+var AddDeviceAckCmdName  		= AddDeviceCmdName + CmdAckTail
+var AddDeviceOKAckCmdName  	= AddDeviceCmdName + CmdOKTail +  CmdAckTail
+
+var DeleteDeviceCmdName  			= "delete-device"
+var DeleteDeviceAckCmdName  		= DeleteDeviceCmdName + CmdAckTail
 
 type SafeZone struct {
 	ZoneID int32
@@ -320,6 +365,44 @@ type DeviceInfo struct {
 	Family [MAX_FAMILY_MEMBER_NUM]FamilyMember
 	HideTimerOn bool
 	HideTimerList [MAX_HIDE_TIMER_NUM]HideiTimer
+}
+
+type DeviceInfoResult struct {
+	IMEI,
+	OwnerName,
+	PhoneNumbers,
+	AlarmEmail,
+	LocateInterval,
+	TimeZone,
+	CountryCode,
+	Avatar,
+	Fence1,
+	Fence2,
+	VerifyCode,
+	WatchAlarm0,
+	WatchAlarm1,
+	WatchAlarm2,
+	WatchAlarm3,
+	WatchAlarm4,
+	Fence3,
+	Fence4,
+	Fence5,
+	Fence6,
+	Fence7,
+	Fence8,
+	Fence9,
+	Fence10,
+	Lang,
+	HideTimer0,
+	HideTimer1,
+	HideTimer2,
+	HideTimer3 string
+	HideSelf,
+	ChildPowerOff,
+	AlertSMS,
+	UseDST,
+	SocketModeOff,
+	Volume uint8
 }
 
 type WIFIInfo  struct  {
@@ -569,6 +652,78 @@ func LoadEPOFromFile()  {
 	EpoInfoListLock.Unlock()
 }
 
+func parseUint8Array(data interface{}) string {
+	if data == nil {
+		return ""
+	}
+
+	return string([]byte(data.([]uint8)))
+}
+
+func makeDBTimeZoneString(tz int) string  {
+	if tz == 0 {
+		return "00:00"
+	}else if tz < 0 {
+		return fmt.Sprintf("-%02d:%02d", int(tz / 100), tz % 100)
+	}else{
+		return fmt.Sprintf("+%02d:%02d", int(tz / 100), tz % 100)
+	}
+}
+
+func MakeStructToJson(v interface{}) string {
+	data, _ := json.Marshal(v)
+	return string(data)
+}
+
+func Bool2UInt8(b bool)   uint8 {
+	if b {
+		return 1
+	}
+
+	return 0
+}
+
+func MakeDeviceInfoResult(deviceInfo *DeviceInfo) DeviceInfoResult {
+	result := DeviceInfoResult{}
+	result.IMEI = Num2Str(deviceInfo.Imei, 10)
+	result.OwnerName = deviceInfo.OwnerName
+	result.PhoneNumbers = makeDeviceFamilyPhoneNumbers(&deviceInfo.Family)
+	result.TimeZone = makeDBTimeZoneString(deviceInfo.TimeZone)
+	result.CountryCode = deviceInfo.CountryCode
+	result.Avatar = deviceInfo.Avatar
+	result.VerifyCode = deviceInfo.VerifyCode
+	result.Lang = deviceInfo.Lang
+	result.Volume = deviceInfo.Volume
+	result.HideSelf = Bool2UInt8(deviceInfo.HideTimerOn)
+	result.ChildPowerOff = Bool2UInt8(deviceInfo.ChildPowerOff)
+	result.UseDST = Bool2UInt8(deviceInfo.UseDST)
+	result.SocketModeOff = Bool2UInt8(deviceInfo.SocketModeOff)
+
+	result.Fence1 = MakeStructToJson(&deviceInfo.SafeZoneList[0])
+	result.Fence2 = MakeStructToJson(&deviceInfo.SafeZoneList[1])
+	result.Fence3 = MakeStructToJson(&deviceInfo.SafeZoneList[2])
+	result.Fence4 = MakeStructToJson(&deviceInfo.SafeZoneList[3])
+	result.Fence5 = MakeStructToJson(&deviceInfo.SafeZoneList[4])
+	result.Fence6 = MakeStructToJson(&deviceInfo.SafeZoneList[5])
+	result.Fence7 = MakeStructToJson(&deviceInfo.SafeZoneList[6])
+	result.Fence8 = MakeStructToJson(&deviceInfo.SafeZoneList[7])
+	result.Fence9 = MakeStructToJson(&deviceInfo.SafeZoneList[8])
+	result.Fence10 = MakeStructToJson(&deviceInfo.SafeZoneList[9])
+
+	result.WatchAlarm0 = MakeStructToJson(&deviceInfo.WatchAlarmList[0])
+	result.WatchAlarm1 = MakeStructToJson(&deviceInfo.WatchAlarmList[1])
+	result.WatchAlarm2 = MakeStructToJson(&deviceInfo.WatchAlarmList[2])
+	result.WatchAlarm3 = MakeStructToJson(&deviceInfo.WatchAlarmList[3])
+	result.WatchAlarm4 = MakeStructToJson(&deviceInfo.WatchAlarmList[4])
+
+	result.HideTimer0 = MakeStructToJson(&deviceInfo.HideTimerList[0])
+	result.HideTimer1 = MakeStructToJson(&deviceInfo.HideTimerList[1])
+	result.HideTimer2 = MakeStructToJson(&deviceInfo.HideTimerList[2])
+	result.HideTimer3 = MakeStructToJson(&deviceInfo.HideTimerList[3])
+
+	return result
+}
+
 func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 	rows, err := dbpool.Query("select w.IMEI, w.OwnerName, w.PhoneNumbers, w.TimeZone, w.CountryCode, w.Avatar, d.SimID," +
 		" w.ChildPowerOff, w.UseDST, w.SocketModeOff, w.Volume, w.Lang, w.VerifyCode, w.Fence1,w.Fence2, w.Fence3," +
@@ -582,57 +737,62 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 	}
 
 	var(
-		IMEI      		string
-		OwnerName  		string
-		PhoneNumbers   	string
-		TimeZone		string
-		CountryCode 		string
-		Avatar 			string
-		SimID 			string
-		ChildPowerOff		uint8
-		UseDST		uint8
-		SocketModeOff	uint8
-		Volume		uint8
-		Lang			string
-		VerifyCode 	string
+		IMEI      		,
+		OwnerName  		,
+		PhoneNumbers   	,
+		TimeZone		,
+		CountryCode 		,
+		Avatar 			,
+		SimID 			,
+		ChildPowerOff		,
+		UseDST		,
+		SocketModeOff	,
+		Volume		,
+		Lang			,
+		VerifyCode 	interface{}
 
-		Fences		=	[MAX_SAFE_ZONE_NUM]string{}
-		WatchAlarms = [MAX_WATCH_ALARM_NUM]string{}
+		Fences		=	make([]interface{}, MAX_SAFE_ZONE_NUM)//[MAX_SAFE_ZONE_NUM]string{}
+		WatchAlarms = make([]interface{}, MAX_WATCH_ALARM_NUM) //[MAX_WATCH_ALARM_NUM]string{}
 
-		HideSelf		uint8
-		HideTimers = [MAX_HIDE_TIMER_NUM]string{}
+		HideSelf		interface{}
+		HideTimers = make([]interface{}, MAX_HIDE_TIMER_NUM) //[MAX_HIDE_TIMER_NUM]string{}
 
-		Model 			string
-		Company 		 string
+		Model 			interface{}
+		Company 		 interface{}
 	)
 
 	tmpDeviceInfoList := &map[uint64]*DeviceInfo{}
 	for rows.Next() {
 		deviceInfo := &DeviceInfo{}
-		rows.Scan(&IMEI, &OwnerName, &PhoneNumbers, &TimeZone, &CountryCode, &Avatar, &SimID, &ChildPowerOff, &UseDST, &SocketModeOff,
-			&Volume, &Lang, &VerifyCode, &Fences[0], &Fences[1], &Fences[2], &Fences[3], &Fences[4], &Fences[5], &Fences[6], &Fences[7], &Fences[8], &Fences[9], &WatchAlarms[0], &WatchAlarms[1],&WatchAlarms[2], &WatchAlarms[3], &WatchAlarms[4], &HideSelf, &HideTimers[0], &HideTimers[1], &HideTimers[2], &HideTimers[3], &Model, &Company)
-		deviceInfo.Imei = Str2Num(IMEI, 10)
-		deviceInfo.OwnerName = OwnerName
-		ParseFamilyMembers(PhoneNumbers, &deviceInfo.Family)
-		deviceInfo.TimeZone  = ParseTimeZone(TimeZone)
-		deviceInfo.CountryCode = CountryCode
-		deviceInfo.Avatar = Avatar
-		deviceInfo.SimID = SimID
-		deviceInfo.ChildPowerOff = ChildPowerOff != 0
-		deviceInfo.UseDST = UseDST != 0
-		deviceInfo.SocketModeOff = SocketModeOff != 0
-		deviceInfo.Volume = Volume
-		deviceInfo.Lang = Lang
-		deviceInfo.VerifyCode = VerifyCode
+		err := rows.Scan(&IMEI, &OwnerName, &PhoneNumbers, &TimeZone, &CountryCode, &Avatar, &SimID,
+			&ChildPowerOff, &UseDST, &SocketModeOff, &Volume, &Lang, &VerifyCode, &Fences[0], &Fences[1], &Fences[2],
+			&Fences[3], &Fences[4], &Fences[5], &Fences[6], &Fences[7], &Fences[8], &Fences[9], &WatchAlarms[0], &WatchAlarms[1],
+			&WatchAlarms[2], &WatchAlarms[3], &WatchAlarms[4], &HideSelf, &HideTimers[0], &HideTimers[1], &HideTimers[2],
+			&HideTimers[3], &Model, &Company)
+		if err != nil {
+			fmt.Println("row scan err: ", err.Error())
+		}
+		deviceInfo.Imei = Str2Num(parseUint8Array(IMEI), 10)
+		deviceInfo.OwnerName = parseUint8Array(OwnerName)
+		ParseFamilyMembers(parseUint8Array(PhoneNumbers), &deviceInfo.Family)
+		deviceInfo.TimeZone  = ParseTimeZone(parseUint8Array(TimeZone))
+		deviceInfo.CountryCode = parseUint8Array(CountryCode)
+		deviceInfo.Avatar = parseUint8Array(Avatar)
+		deviceInfo.SimID = parseUint8Array(SimID)
+		deviceInfo.ChildPowerOff = parseUint8Array(ChildPowerOff) == "1"
+		deviceInfo.UseDST = parseUint8Array(UseDST) == "1"
+		deviceInfo.SocketModeOff = parseUint8Array(SocketModeOff) == "1"
+		deviceInfo.Volume = uint8(Str2Num(parseUint8Array(Volume), 10))
+		deviceInfo.Lang = parseUint8Array(Lang)
+		deviceInfo.VerifyCode = parseUint8Array(VerifyCode)
 		ParseSafeZones(Fences, &deviceInfo.SafeZoneList)
 		ParseWatchAlarms(WatchAlarms, &deviceInfo.WatchAlarmList)
-		deviceInfo.HideTimerOn = HideSelf != 0
+		deviceInfo.HideTimerOn = parseUint8Array(HideSelf) == "1"
 		ParseHideTimers(HideTimers, &deviceInfo.HideTimerList)
-		deviceInfo.Model = ParseDeviceModel(Model)
-		deviceInfo.Company = Company
+		deviceInfo.Model = ParseDeviceModel(parseUint8Array(Model))
+		deviceInfo.Company = parseUint8Array(Company)
 
 		(*tmpDeviceInfoList)[deviceInfo.Imei] = deviceInfo
-		//fmt.Println("deviceInfo: ", *deviceInfo)
 	}
 
 	DeviceInfoListLock.Lock()
@@ -658,34 +818,87 @@ func ParseDeviceModel(model string) int {
 	return -1
 }
 
-func ParseSafeZones(zones [MAX_SAFE_ZONE_NUM]string, safeZoneList *[MAX_SAFE_ZONE_NUM]SafeZone)  {
+func ParseSafeZones(zones []interface{}, safeZoneList *[MAX_SAFE_ZONE_NUM]SafeZone)  {
 //	{"Radius":200,"Name":"home","Center":"22.588015574341,113.91333157419001","On":"1","Wifi":{"SSID":"gatorgroup","BSSID":"d8:24:bd:77:4d:6e"}}
 	for i, zone := range zones  {
-		err:=json.Unmarshal([]byte(zone), &safeZoneList[i])
+		strZone := parseUint8Array(zone)
+		if len(strZone) == 0 {
+			continue
+		}
+
+		err:=json.Unmarshal([]byte(strZone), &safeZoneList[i])
 		if err != nil {
 			continue
 		}
 	}
 }
 
-func ParseWatchAlarms(alarms [MAX_WATCH_ALARM_NUM]string, alarmList *[MAX_WATCH_ALARM_NUM]WatchAlarm)  {
+func ParseWatchAlarms(alarms []interface{}, alarmList *[MAX_WATCH_ALARM_NUM]WatchAlarm)  {
 	for i, alarm := range alarms  {
-		err:=json.Unmarshal([]byte(alarm), &alarmList[i])
+		strAlarm := parseUint8Array(alarm)
+		if len(strAlarm) == 0 {
+			continue
+		}
+
+		err:=json.Unmarshal([]byte(strAlarm), &alarmList[i])
 		if err != nil {
 			continue
 		}
 	}
 }
 
-func ParseHideTimers(timers [MAX_HIDE_TIMER_NUM]string, hidetimerList *[MAX_HIDE_TIMER_NUM]HideiTimer)  {
+func ParseHideTimers(timers []interface{}, hidetimerList *[MAX_HIDE_TIMER_NUM]HideiTimer)  {
 	for i, timer := range timers  {
-		err:=json.Unmarshal([]byte(timer), &hidetimerList[i])
+		strTimer := parseUint8Array(timer)
+		if len(strTimer) == 0 {
+			continue
+		}
+
+		err:=json.Unmarshal([]byte(strTimer), &hidetimerList[i])
 		if err != nil {
 			continue
 		}
 	}
 }
 
+
+func ParseSinglePhoneNumberString(phone string, i int)  FamilyMember{
+	member := FamilyMember{}
+	if len(phone) == 0 {
+		return member
+	}
+
+	fields := strings.SplitAfter(phone, "|")
+	//fmt.Println(m, len(fields), fields)
+	if len(fields) >= 1 && len(fields[0]) > 0 && fields[0] != "|"{
+		if fields[0][len(fields[0]) - 1] == '|' {
+			member.Phone = string(fields[0][0: len(fields[0]) - 2])
+		}else {
+			member.Phone = fields[0]
+		}
+	}
+
+	if len(fields) >= 2 && len(fields[1]) > 0 && fields[1] != "|" {
+		if fields[1][len(fields[1]) - 1] == '|' {
+			member.Type = int(Str2Num(string(fields[1][0: len(fields[1]) - 2]), 10))
+		}else {
+			member.Type = int(Str2Num(fields[1], 10))
+		}
+	}
+
+	if len(fields) >= 3 && len(fields[2]) > 0 && fields[2] != "|" {
+		//fmt.Println("fields2: ", fields, fields[2], len(fields[2]))
+		if fields[2][len(fields[2]) - 1] == '|' {
+			member.Name = string(fields[2][0: len(fields[2]) - 2])
+		}else {
+			member.Name = fields[2]
+		}
+	}
+
+	member.Index = i + 1
+
+	return member
+}
 
 func ParseFamilyMembers(PhoneNumbers string, familyMemberList *[MAX_FAMILY_MEMBER_NUM]FamilyMember)  {
 	members := strings.Split(PhoneNumbers, ",")
@@ -698,34 +911,7 @@ func ParseFamilyMembers(PhoneNumbers string, familyMemberList *[MAX_FAMILY_MEMBE
 			continue
 		}
 
-		fields := strings.SplitAfter(m, "|")
-		//fmt.Println(m, len(fields), fields)
-		if len(fields) >= 1 && len(fields[0]) > 0 && fields[0] != "|"{
-			if fields[0][len(fields[0]) - 1] == '|' {
-				familyMemberList[i].Phone = string(fields[0][0: len(fields[0]) - 2])
-			}else {
-				familyMemberList[i].Phone = fields[0]
-			}
-		}
-
-		if len(fields) >= 2 && len(fields[1]) > 0 && fields[1] != "|" {
-			if fields[1][len(fields[1]) - 1] == '|' {
-				familyMemberList[i].Type = int(Str2Num(string(fields[1][0: len(fields[1]) - 2]), 10))
-			}else {
-				familyMemberList[i].Type = int(Str2Num(fields[1], 10))
-			}
-		}
-
-		if len(fields) >= 3 && len(fields[2]) > 0 && fields[2] != "|" {
-			//fmt.Println("fields2: ", fields, fields[2], len(fields[2]))
-			if fields[2][len(fields[2]) - 1] == '|' {
-				familyMemberList[i].Name = string(fields[2][0: len(fields[2]) - 2])
-			}else {
-				familyMemberList[i].Name = fields[2]
-			}
-		}
-
-		familyMemberList[i].Index = i + 1
+		familyMemberList[i] = ParseSinglePhoneNumberString(m, i)
 	}
 }
 

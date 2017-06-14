@@ -47,29 +47,33 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 	}
 
 	switch cmd{
-	case "login":
+	case proto.LoginCmdName:
 		params := msg["data"].(map[string]interface{})
 		return login(c, params["username"].(string), params["password"].(string))
 
-	case "heartbeat":
-		datas := msg["data"].(map[string]interface{})
+	case proto.HearbeatCmdName:
+		//datas := msg["data"].(map[string]interface{})
 		//params := proto.HeartBeatParams{TimeStamp: datas["timestamp"].(string),
 		//	UserName: datas["username"].(string),
 		//	AccessToken: datas["accessToken"].(string)}
 
-		appServerChan <- &proto.AppMsgData{Cmd: "heartbeat-ack",
-			UserName: datas["username"].(string),
-			AccessToken: datas["accessToken"].(string),
-			Data: (fmt.Sprintf("{\"timestamp\": \"%s\"}", time.Now().String())), Conn: c}
-		break
+		jsonString, _ := json.Marshal(msg["data"])
+		params := proto.HeartbeatParams{}
+		err:=json.Unmarshal(jsonString, &params)
+		if err != nil {
+			logging.Log("heartbeat parse json failed, " + err.Error())
+			return false
+		}
 
-	case "verify-code":
+		return handleHeartBeat(c, &params)
+
+	case proto.VerifyCodeCmdName:
 		datas := msg["data"].(map[string]interface{})
-		params := proto.DeviceInfoQueryParams{Imei: datas["imei"].(string),
+		params := proto.DeviceBaseParams{Imei: datas["imei"].(string),
 			UserName: datas["username"].(string),
 			AccessToken: datas["accessToken"].(string)}
 		return getDeviceVerifyCode(c, &params)
-	case "set-device":
+	case proto.SetDeviceCmdName:
 		jsonString, _ := json.Marshal(msg["data"])
 		params := proto.DeviceSettingParams{}
 		err:=json.Unmarshal(jsonString, &params)
@@ -77,15 +81,15 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 			logging.Log("set-device parse json failed, " + err.Error())
 			return false
 		}
-		return AppUpdateDeviceSetting(c, &params)
-	case "get-device-by-imei":
+		return AppUpdateDeviceSetting(c, &params, false)
+	case proto.GetDeviceByImeiCmdName:
 		datas := msg["data"].(map[string]interface{})
 		params := proto.DeviceAddParams{Imei: datas["imei"].(string),
 			UserName: datas["username"].(string),
 			AccessToken: datas["accessToken"].(string)}
 		//return getDeviceInfoByImei(c, &params)
-		addDeviceManagerChan <- &AddDeviceChanCtx{cmd: "get-device-by-imei", c: c, params: &params}
-	case "add-device":
+		addDeviceManagerChan <- &AddDeviceChanCtx{cmd: proto.GetDeviceByImeiCmdName, c: c, params: &params}
+	case proto.AddDeviceCmdName:
 		jsonString, _ := json.Marshal(msg["data"])
 		params := proto.DeviceAddParams{}
 		err:=json.Unmarshal(jsonString, &params)
@@ -94,11 +98,35 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 			return false
 		}
 
-		addDeviceManagerChan <- &AddDeviceChanCtx{cmd: "add-device", c: c, params: &params}
+		addDeviceManagerChan <- &AddDeviceChanCtx{cmd: proto.AddDeviceCmdName, c: c, params: &params}
+	case proto.DeleteDeviceCmdName:
+		jsonString, _ := json.Marshal(msg["data"])
+		params := proto.DeviceAddParams{}
+		err:=json.Unmarshal(jsonString, &params)
+		if err != nil {
+			logging.Log("delete-device parse json failed, " + err.Error())
+			return false
+		}
+
+		addDeviceManagerChan <- &AddDeviceChanCtx{cmd: proto.DeleteDeviceCmdName, c: c, params: &params}
 	default:
 		break
 	}
 	
+	return true
+}
+
+func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
+	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
+	for _, imei := range params.Devices {
+		result.Locations = append(result.Locations, svrctx.GetDeviceData(proto.Str2Num(imei, 10), svrctx.Get().PGPool))
+	}
+
+	appServerChan <- &proto.AppMsgData{Cmd: proto.HearbeatAckCmdName,
+		UserName: params.UserName,
+		AccessToken: params.AccessToken,
+		Data: proto.MakeStructToJson(result), Conn: c}
+
 	return true
 }
 
@@ -179,14 +207,14 @@ func login(c *AppConnection, username, password string) bool {
 		//
 		//logging.Log("bodyLocation: " +  string(bodyLocation))
 
-		appServerChan <- &proto.AppMsgData{Cmd: "login-ack",
+		appServerChan <- &proto.AppMsgData{Cmd: proto.LoginAckCmdName,
 			Data: (fmt.Sprintf("{\"user\": %s, \"location\": %s}", string(body), string(jsonLocations))), Conn: c}
 	}
 
 	return true
 }
 
-func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceInfoQueryParams) bool {
+func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceBaseParams) bool {
 	//url := fmt.Sprintf("http://service.gatorcn.com/tracker/web/index.php?r=app/service/verify-code&SystemNo=%s&access-token=%s",
 	//	string(params.Imei[4: ]), params.AccessToken)
 	//logging.Log("get verify code url: " + url)
@@ -208,16 +236,19 @@ func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceInfoQueryParams) 
 
 
 	imei, verifyCode := proto.Str2Num(params.Imei, 10), ""
-	proto.DeviceInfoListLock.RLock()
-	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
-	if ok && deviceInfo != nil {
-		verifyCode = deviceInfo.VerifyCode
+	isAdmin, _,_,_ := queryIsAdmin(params.Imei, params.UserName)
+	if isAdmin {
+		proto.DeviceInfoListLock.RLock()
+		deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+		if ok && deviceInfo != nil {
+			verifyCode = deviceInfo.VerifyCode
+		}
+		proto.DeviceInfoListLock.RUnlock()
 	}
-	proto.DeviceInfoListLock.RUnlock()
 
-	appServerChan <- &proto.AppMsgData{Cmd: "verify-code-ack", Imei: imei,
+	appServerChan <- &proto.AppMsgData{Cmd: proto.VerifyCodeAckCmdName, Imei: imei,
 		UserName: params.UserName, AccessToken:params.AccessToken,
-			Data: fmt.Sprintf("{\"VerifyCode\": \"%s\"}", verifyCode), Conn: c}
+			Data: fmt.Sprintf("{\"VerifyCode\": \"%s\", \"isAdmin\": %d}", verifyCode, proto.Bool2UInt8(isAdmin)), Conn: c}
 
 	return true
 }
@@ -238,9 +269,10 @@ func queryIsAdmin(imei, userName string) (bool, bool, string, error) {
 	for rows.Next() {
 		userNameInDB, deviceRecIdInDB := "", ""
 		rows.Scan(&userNameInDB, &deviceRecIdInDB)
+		fmt.Println(userNameInDB, deviceRecIdInDB)
+		deviceRecId = deviceRecIdInDB
 		if userNameInDB == userName {
 			matched = true
-			deviceRecId = deviceRecIdInDB
 			break
 		}
 		usersCount++
@@ -280,7 +312,7 @@ func getDeviceInfoByImei(c *AppConnection, params *proto.DeviceAddParams) bool {
 
 	resultData, _ := json.Marshal(&deviceInfoResult)
 
-	appServerChan <- &proto.AppMsgData{Cmd: "get-device-by-imei-ack", Imei: imei,
+	appServerChan <- &proto.AppMsgData{Cmd: proto.GetDeviceByImeiAckCmdName, Imei: imei,
 		UserName: params.UserName, AccessToken:params.AccessToken,
 		Data: string(resultData), Conn: c}
 
@@ -314,23 +346,41 @@ func makerRandomVerifyCode() string {
 	return string(randChars[0:4])
 }
 
+func makeFamilyPhoneNumbers(family *[proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember) string {
+	phoneNumbers := ""
+	for i := 0; i < len(family); i++ {
+		if  i > 0 {
+			phoneNumbers += ","
+		}
+
+		phoneNumbers += fmt.Sprintf("%s|%d|%s",  family[i].Phone, family[i].Type, family[i].Name)
+	}
+
+	return phoneNumbers
+}
+
 func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
+	// error code:  -1 表示验证码不正确
+	// error code:  -2 表示验该用户已经关注了手表
+	// error code:  -3 表示手表的亲情号码满了
+	// error code:  500 表示服务器内部错误
 	result := proto.HttpAPIResult{0, "", params.Imei, ""}
 	imei := proto.Str2Num(params.Imei, 10)
 
-	verifyCodeIncorrect := false
+	verifyCodeWrong := false
+	phoneNumbers := "" //这里需要用到DeviceInfoList缓存来寻找空闲的亲情号列表，并且更新到缓存中去
 
 	isAdmin, isFound, deviceRecId, err := queryIsAdmin(params.Imei, params.UserName)
 	if err == nil {
 		if params.IsAdmin == 1 && isAdmin == false {
-			verifyCodeIncorrect = true
+			verifyCodeWrong = true
 		} else if params.IsAdmin == 0 && isAdmin == false {
 			if checkVerifyCode(params.Imei, params.VerifyCode) == false {
-				verifyCodeIncorrect = true
+				verifyCodeWrong = true
 			}
 		}
 
-		if verifyCodeIncorrect {
+		if verifyCodeWrong {
 			// error code:  -1 表示验证码不正确
 			result.ErrCode = -1
 			result.ErrMsg = "the verify code is incorrect"
@@ -341,33 +391,63 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 				result.ErrCode = -2
 				result.ErrMsg = "the device was added duplicately"
 			}else{
-				strSqlInsertDeviceUser :=  fmt.Sprintf("insert into vehiclesinuser (userid, vehid, FamilyNumber, Name, " +
-					"CountryCode)  values('%s, '%s', '%s', '%s', '%s'') ", params.UserId, deviceRecId, params.MySimID,
-					params.MyName, params.MySimCountryCode )
-				logging.Log("SQL: " + strSqlInsertDeviceUser)
-				if err != nil {
-					logging.Log(fmt.Sprintf("[%s] insert into vehiclesinuser db failed, %s", imei, err.Error()))
-					result.ErrCode = 500
-					result.ErrMsg = "server failed to update db"
-				}else {
-					strSqlUpdateDeviceInfo := ""
-					phoneNumbers := "" //这里需要用到DeviceInfoList缓存来寻找空闲的亲情号列表，并且更新到缓存中去
+				strSqlUpdateDeviceInfo := ""
+				isFound := false
+				family := [proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember{}
+				newVerifycode := makerRandomVerifyCode()
+				proto.DeviceInfoListLock.Lock()
+				deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+				if ok && deviceInfo != nil {
+					deviceInfo.VerifyCode = newVerifycode
+					for i := 0; i < len(deviceInfo.Family); i++ {
+						if len(deviceInfo.Family[i].Phone) == 0 {//空号码，没有被使用
+							deviceInfo.Family[i].Phone = params.MySimID
+							deviceInfo.Family[i].CountryCode = params.MySimCountryCode
+							deviceInfo.Family[i].Name = params.MyName
+							deviceInfo.Family[i].Type = params.PhoneType
+							deviceInfo.Family[i].Index = i + 1
+							isFound = true
+							break
+						}
+					}
+
+					family = deviceInfo.Family
+				}
+				proto.DeviceInfoListLock.Unlock()
+				if isFound {
+					phoneNumbers = makeFamilyPhoneNumbers(&family)
 					if isAdmin {
 						//如果是管理员，则更新手表对应的字段数据，非管理员仅更新关注列表和对应的亲情号
-						strSqlUpdateDeviceInfo = fmt.Sprintf("update watchinfo set OwnerName='%s, CountryCode='%s', PhoneNumbers='%s', " +
-							"TimeZone='%s', VerifyCode='%s' ", params.OwnerName, params.DeviceSimCountryCode,
-							phoneNumbers, params.TimeZone, makerRandomVerifyCode())
+						strSqlUpdateDeviceInfo = fmt.Sprintf("update watchinfo set OwnerName='%s', CountryCode='%s', " +
+							"PhoneNumbers='%s', TimeZone='%s', VerifyCode='%s'  where IMEI='%s' ", params.OwnerName, params.DeviceSimCountryCode,
+							phoneNumbers, params.TimeZone, newVerifycode, params.Imei)
 					} else {
 						strSqlUpdateDeviceInfo = fmt.Sprintf("update watchinfo set PhoneNumbers='%s', VerifyCode='%s' ",
-							phoneNumbers, makerRandomVerifyCode())
+							phoneNumbers, newVerifycode)
 					}
 
 					logging.Log("SQL: " + strSqlUpdateDeviceInfo)
+					_, err := svrctx.Get().MySQLPool.Exec(strSqlUpdateDeviceInfo)
 					if err != nil {
-						logging.Log(fmt.Sprintf("[%s] insert into watchinfo db failed, %s", imei, err.Error()))
+						logging.Log(fmt.Sprintf("[%s] update  watchinfo db failed, %s", imei, err.Error()))
 						result.ErrCode = 500
 						result.ErrMsg = "server failed to update db"
+					}else{
+						strSqlInsertDeviceUser :=  fmt.Sprintf("insert into vehiclesinuser (userid, vehid, FamilyNumber, Name, " +
+							"CountryCode)  values('%s', '%s', '%s', '%s', '%s') ", params.UserId, deviceRecId, params.MySimID,
+							params.MyName, params.MySimCountryCode )
+						logging.Log("SQL: " + strSqlInsertDeviceUser)
+						_, err := svrctx.Get().MySQLPool.Exec(strSqlInsertDeviceUser)
+						if err != nil {
+							logging.Log(fmt.Sprintf("[%s] insert into vehiclesinuser db failed, %s", imei, err.Error()))
+							result.ErrCode = 500
+							result.ErrMsg = "server failed to update db"
+						}
 					}
+				}else{
+					// error code:  -3 表示手表的亲情号码满了
+					result.ErrCode = -3
+					result.ErrMsg = "the device family numbers are used up"
 				}
 			}
 		}
@@ -376,9 +456,60 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 		result.ErrMsg = "server failed to query db"
 	}
 
-	resultData, _ := json.Marshal(&result)
+	if result.ErrCode == 0 {
+		newSettings := proto.DeviceSettingParams{Imei: params.Imei,
+			UserName: params.UserName,
+			AccessToken: params.AccessToken,
+		}
 
-	appServerChan <- &proto.AppMsgData{Cmd: "add-device-ack", Imei: imei,
+		setting := proto.SettingParam{proto.PhoneNumbersFieldName, "", phoneNumbers,
+			//fmt.Sprintf("%s|%d|%s",  params.MySimID, params.PhoneType, params.MyName),
+		}
+
+		newSettings.Settings = append(newSettings.Settings, setting)
+
+		if isAdmin {
+			setting = proto.SettingParam{proto.OwnerNameFieldName, "", params.OwnerName}
+			newSettings.Settings = append(newSettings.Settings, setting)
+
+			setting = proto.SettingParam{proto.CountryCodeFieldName, "", params.DeviceSimCountryCode}
+			newSettings.Settings = append(newSettings.Settings, setting)
+
+			setting = proto.SettingParam{proto.SimIDFieldName, "", params.DeviceSimID}
+			newSettings.Settings = append(newSettings.Settings, setting)
+
+			setting = proto.SettingParam{proto.TimeZoneFieldName, "", params.TimeZone}
+			newSettings.Settings = append(newSettings.Settings, setting)
+		}
+
+		return AppUpdateDeviceSetting(c, &newSettings, true)
+	}else{
+		resultData, _ := json.Marshal(&result)
+		appServerChan <- &proto.AppMsgData{Cmd: proto.AddDeviceAckCmdName, Imei: imei,
+			UserName: params.UserName, AccessToken:params.AccessToken,
+			Data: string(resultData), Conn: c}
+	}
+
+	return true
+}
+
+func deleteDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
+	// error code:  500 表示服务器内部错误
+	result := proto.HttpAPIResult{0, "", params.Imei, ""}
+	imei := proto.Str2Num(params.Imei, 10)
+
+	strSqlDeleteDeviceUser := fmt.Sprintf("delete v  from vehiclesinuser as v left join watchinfo as w on v.VehId=w.recid " +
+		" where w.imei='%s' and v.UserID='%s' ", params.Imei,  params.UserId)
+	logging.Log("SQL: " + strSqlDeleteDeviceUser)
+	_, err := svrctx.Get().MySQLPool.Exec(strSqlDeleteDeviceUser)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%s] delete  from vehiclesinuser db failed, %s", imei, err.Error()))
+		result.ErrCode = 500
+		result.ErrMsg = "server failed to update db"
+	}
+
+	resultData, _ := json.Marshal(&result)
+	appServerChan <- &proto.AppMsgData{Cmd: proto.DeleteDeviceAckCmdName, Imei: imei,
 		UserName: params.UserName, AccessToken:params.AccessToken,
 		Data: string(resultData), Conn: c}
 
@@ -393,37 +524,62 @@ func AddDeviceManagerLoop()  {
 				return
 			}
 
-			if msg.cmd == "get-device-by-imei" {
+			if msg.cmd == proto.GetDeviceByImeiCmdName {
 				getDeviceInfoByImei(msg.c, msg.params)
-			}else if  msg.cmd == "add-device" {
+			}else if  msg.cmd == proto.AddDeviceCmdName {
 				addDeviceByUser(msg.c, msg.params)
+			}else if  msg.cmd == proto.DeleteDeviceCmdName {
+				deleteDeviceByUser(msg.c, msg.params)
 			}
 		}
 	}
 }
 
 func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsString []bool)  bool {
+	phoneNumbers := ""
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 	if ok && deviceInfo != nil {
-		for _, setting := range settings {
+		for index, setting := range settings {
 			switch setting.FieldName {
-			case "Avatar":
+			case proto.AvatarFieldName:
 				deviceInfo.Avatar = setting.NewValue
-			case "OwnerName":
+			case proto.OwnerNameFieldName:
 				deviceInfo.OwnerName = setting.NewValue
-			case "TimeZone":
+			case proto.TimeZoneFieldName:
 				deviceInfo.TimeZone = proto.DeviceTimeZoneInt(setting.NewValue)
-			case "SimID":
+			case proto.SimIDFieldName:
 				deviceInfo.SimID = setting.NewValue
-			case "Volume":
+			case proto.VolumeFieldName:
 				deviceInfo.Volume = uint8(proto.Str2Num(setting.NewValue, 10))
-			case "Lang":
+			case proto.LangFieldName:
 				deviceInfo.Lang = setting.NewValue
-			case "UseDST":
+			case proto.UseDSTFieldName:
 				deviceInfo.UseDST = (proto.Str2Num(setting.NewValue, 10)) != 0
-			case "ChildPowerOff":
+			case proto.ChildPowerOffFieldName:
 				deviceInfo.ChildPowerOff = (proto.Str2Num(setting.NewValue, 10)) != 0
+			case proto.CountryCodeFieldName:
+				deviceInfo.CountryCode = setting.NewValue
+			case proto.PhoneNumbersFieldName:
+				phoneNumbers = makeFamilyPhoneNumbers(&deviceInfo.Family)
+				for i := 0; i < len(deviceInfo.Family); i++ {
+					curPhone := proto.ParseSinglePhoneNumberString(setting.CurValue, i)
+					newPhone := proto.ParseSinglePhoneNumberString(setting.NewValue, i)
+					//fullPhoneNnumber := "00" + deviceInfo.Family[i].CountryCode + deviceInfo.Family[i].Phone
+					if len(curPhone.Phone) == 0 { //之前没有号码，直接寻找一个空位就可以了
+						if len(deviceInfo.Family[i].Phone) == 0 {
+							deviceInfo.Family[i] = newPhone
+							break
+						}
+					}else{ //之前有号码，那么这里是修改号码，需要匹配之前的号码
+						if deviceInfo.Family[i].Phone == curPhone.Phone {
+							deviceInfo.Family[i] = newPhone
+							break
+						}
+					}
+				}
+
+				settings[index].NewValue = phoneNumbers
 			default:
 			}
 		}
@@ -434,10 +590,14 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 	return UpdateDeviceSettingInDB(imei, settings, valulesIsString)
 }
 
-func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams) bool {
+func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams, isAddDevice bool) bool {
 	isNeedNotifyDevice := make([]bool, len(params.Settings))
 	valulesIsString := make([]bool, len(params.Settings))
 	imei := proto.Str2Num(params.Imei, 10)
+	cmdAck := proto.SetDeviceAckCmdName
+	if isAddDevice {
+		cmdAck = proto.AddDeviceOKAckCmdName
+	}
 
 	for i, setting := range params.Settings {
 		fieldName :=  setting.FieldName
@@ -446,21 +606,28 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams)
 		valulesIsString[i] = true
 
 		switch fieldName {
-		case "OwnerName":
-		case "TimeZone":
-		case "Volume":
-		case "Lang":
-		case "UseDST":
-		case "ChildPowerOff":
-		case "SimID":
+		case proto.OwnerNameFieldName:
+		case proto.TimeZoneFieldName:
+		case proto.VolumeFieldName:
+		case proto.LangFieldName:
+		case proto.UseDSTFieldName:
+		case proto.ChildPowerOffFieldName:
+		case proto.PhoneNumbersFieldName:
+			//上面都是需要通知手表更新设置的
+
+		case proto.CountryCodeFieldName:
+		case proto.SimIDFieldName:
 			isNeedNotifyDevice[i] = false
 		default:
 			return false
 		}
 	}
 
-	ret := SaveDeviceSettings(imei, params.Settings, valulesIsString)
-	settingResult := proto.DeviceSettingResult{Settings: params.Settings}
+	ret := true
+	if isAddDevice == false {
+		ret = SaveDeviceSettings(imei, params.Settings, valulesIsString)
+	}
+
 	result := proto.HttpAPIResult{
 		ErrCode: 0,
 		ErrMsg: "",
@@ -469,11 +636,15 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams)
 
 	for _, isNeed := range isNeedNotifyDevice {
 		if isNeed {
-			msgNotify := &proto.MsgData{}
-			msgNotify.Header.Header.Version = proto.MSG_HEADER_VER
-			msgNotify.Header.Header.Imei = imei
-			msgNotify.Data = proto.MakeSetDeviceConfigReplyMsg(imei, params)
-			svrctx.Get().TcpServerChan <- msgNotify
+			//msgNotify := &proto.MsgData{}
+			//msgNotify.Header.Header.Version = proto.MSG_HEADER_VER
+			//msgNotify.Header.Header.Imei = imei
+			//msgNotify.Data = proto.MakeSetDeviceConfigReplyMsg(imei, params)
+			msgNotifyDataList := proto.MakeSetDeviceConfigReplyMsg(imei, params)
+			for _, msgNotify := range msgNotifyDataList  {
+				svrctx.Get().TcpServerChan <- msgNotify
+			}
+
 			break
 		}
 	}
@@ -493,11 +664,23 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams)
 		//}
 		//settingResultJson := fmt.Sprintf("{\"count\": \"%d\", %s}", len(settingResult.Settings), concatStr)
 		//result.Data = string(base64Encode([]byte(settingResultJson)))
-		settingResultJson, _ := json.Marshal(settingResult)
-		result.Data = string([]byte(settingResultJson))
+		if isAddDevice{
+			proto.DeviceInfoListLock.RLock()
+			deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+			if ok && deviceInfo != nil {
+				resultJson, _ := json.Marshal(proto.MakeDeviceInfoResult(deviceInfo))
+				result.Data = string([]byte(resultJson))
+			}
+			proto.DeviceInfoListLock.RUnlock()
+		}else{
+			settingResult := proto.DeviceSettingResult{Settings: params.Settings}
+			settingResultJson, _ := json.Marshal(settingResult)
+			result.Data = string([]byte(settingResultJson))
+		}
+
 		jsonData, _ := json.Marshal(&result)
 
-		appServerChan <- &proto.AppMsgData{Cmd: "set-device-ack", Imei: imei,
+		appServerChan <- &proto.AppMsgData{Cmd: cmdAck, Imei: imei,
 			UserName: params.UserName, AccessToken:params.AccessToken,
 			Data: string(jsonData), Conn: c}
 	}

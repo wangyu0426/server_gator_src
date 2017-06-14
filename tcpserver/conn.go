@@ -14,6 +14,7 @@ type Connection struct {
 	imei uint64
 	IP   uint32
 	Port int
+	lastActiveTime int64
 	conn *net.TCPConn
 	buf []byte
 	closeOnce sync.Once
@@ -29,8 +30,8 @@ func newConn(conn *net.TCPConn)  *Connection{
 		IP:  binary.BigEndian.Uint32(addr.IP.To4()),
 		Port: addr.Port,
 		closeChan: make(chan struct{}),
-		requestChan: make(chan *proto.MsgData, 1024),
-		responseChan: make(chan *proto.MsgData, 1024),
+		requestChan: make(chan *proto.MsgData, 2*1024),
+		responseChan: make(chan *proto.MsgData, 2*1024),
 	}
 }
 

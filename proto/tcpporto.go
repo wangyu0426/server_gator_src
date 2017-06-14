@@ -20,7 +20,10 @@ import (
 
 type ResponseItem struct {
 	rspCmdType uint16
-	data []byte
+	msg *MsgData
+	//id uint64
+	//imei uint64
+	//data []byte
 }
 
 type TPoint struct {
@@ -45,6 +48,7 @@ type RequestContext struct {
 	Pgpool *pgx.ConnPool
 	MysqlPool *sql.DB
 	WritebackChan chan *MsgData
+	AppNotifyChan chan *AppMsgData
 	Msg *MsgData
 	GetDeviceDataFunc  func (imei uint64, pgpool *pgx.ConnPool)  LocationData
 	SetDeviceDataFunc  func (imei uint64, updateType int, deviceData LocationData)
@@ -232,15 +236,28 @@ func HandleTcpRequest(reqCtx RequestContext)  bool{
 	if ret == false {
 		return false
 	}
-	data := service.DoResponse()
-	if data == nil {
+
+	msgReplyList := service.DoResponse()
+	if msgReplyList  == nil {
 		return false
 	}
-	msgResp := &MsgData{Data: data}
-	msgResp.Header.Header.Imei = service.imei
 
-	reqCtx.WritebackChan <- msgResp
+	for _, msg := range msgReplyList {
+		reqCtx.WritebackChan <- msg
+	}
+
 	return true
+}
+
+func (service *GT06Service)makeReplyMsg(requireAck bool, data []byte, id uint64) *MsgData{
+	msg := MsgData{}
+	msg.Data = data
+	msg.Header.Header.Imei = service.imei
+	msg.Header.Header.ID = id
+	if requireAck {
+		msg.Header.Header.Status = 1
+	}
+	return &msg
 }
 
 func (service *GT06Service)PreDoRequest() bool  {
@@ -278,7 +295,8 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 
 
 	if service.cmd == DRT_SYNC_TIME {  //BP00 对时
-		resp := &ResponseItem{CMD_AP03, service.makeSyncTimeReplyMsg()}
+		madeData, id := service.makeSyncTimeReplyMsg()
+		resp := &ResponseItem{CMD_AP03,  service.makeReplyMsg(true, madeData, id)}
 		service.rspList = append(service.rspList, resp)
 		bufOffset++
 		szVersion := make([]byte, 64)
@@ -294,7 +312,8 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		logging.Log(fmt.Sprintf("%d|%s", service.imei, szVersion)) // report version
 	}  else if service.cmd == DRT_SEND_LOCATION {
 		//BP30 上报定位和报警等数据
-		resp := &ResponseItem{CMD_AP30, []byte(fmt.Sprintf("(0019%dAP30)", service.imei))}
+		resp := &ResponseItem{CMD_AP30, service.makeReplyMsg(false,
+			[]byte(fmt.Sprintf("(0019%dAP30)", service.imei)), makeId())}
 		service.rspList = append(service.rspList, resp)
 
 		bufOffset++
@@ -326,7 +345,8 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			bufOffset++
 			service.needSendLocation = (msg.Data[bufOffset] - '0') == 1
 			if service.needSendLocation {
-				resp := &ResponseItem{CMD_AP30, service.makeSendLocationReplyMsg()}
+				madeData, id := service.makeSendLocationReplyMsg()
+				resp := &ResponseItem{CMD_AP14, service.makeReplyMsg(true, madeData, id)}
 				service.rspList = append(service.rspList, resp)
 			}
 			bufOffset += 1
@@ -339,7 +359,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		}
 	}else if service.cmd == DRT_DEVICE_LOGIN {
 		//BP31, 设备登录服务器消息
-		resp := &ResponseItem{CMD_AP31, service.makeDeviceLoginReplyMsg()}
+		resp := &ResponseItem{CMD_AP31,  service.makeReplyMsg(false, service.makeDeviceLoginReplyMsg(), makeId())}
 		service.rspList = append(service.rspList, resp)
 	}else if service.cmd == DRT_DEVICE_ACK {
 		//BP04, 手表对服务器请求的应答
@@ -433,7 +453,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 }
 
 
-func (service *GT06Service)DoResponse() []byte  {
+func (service *GT06Service)DoResponse() []*MsgData  {
 	if service.needSendChat {
 		service.ProcessRspChat()
 		//data := make([]byte, 200*1024)
@@ -454,26 +474,40 @@ func (service *GT06Service)DoResponse() []byte  {
 		service.PushChatNum()
 	}
 
-	offset, bufSize := 0, 256
-	data := make([]byte, bufSize)
-
-	for  _, respCmd := range service.rspList {
-		if respCmd.data != nil && len(respCmd.data) > 0 {
-			if offset + len(respCmd.data) > bufSize {
-				bufSize += offset + len(respCmd.data)
-				dataNew := make([]byte, bufSize)
-				copy(dataNew[0: offset], data[0: offset])
-				data = dataNew
-			}
-			copy(data[offset: offset + len(respCmd.data)], respCmd.data)
-			offset += len(respCmd.data)
+	//offset, bufSize := 0, 256
+	//data := make([]byte, bufSize)
+	//
+	//for  _, respCmd := range service.rspList {
+	//	if respCmd.data != nil && len(respCmd.data) > 0 {
+	//		if offset + len(respCmd.data) > bufSize {
+	//			bufSize += offset + len(respCmd.data)
+	//			dataNew := make([]byte, bufSize)
+	//			copy(dataNew[0: offset], data[0: offset])
+	//			data = dataNew
+	//		}
+	//		copy(data[offset: offset + len(respCmd.data)], respCmd.data)
+	//		offset += len(respCmd.data)
+	//	}
+	//}
+	//
+	//if offset == 0 {
+	//	return nil
+	//}else {
+	//	return data[0: offset]
+	//}
+	if len(service.rspList) > 0 {
+		msgList := []*MsgData{}
+		for  _, respCmd := range service.rspList {
+			msg := MsgData{}
+			msg = *respCmd.msg
+			msg.Data = make([]byte, len(respCmd.msg.Data))
+			copy(msg.Data[0:], respCmd.msg.Data[0:])
+			msgList = append(msgList, &msg)
 		}
-	}
 
-	if offset == 0 {
+		return msgList
+	}else{
 		return nil
-	}else {
-		return data[0: offset]
 	}
 }
 
@@ -513,11 +547,11 @@ func (service *GT06Service)UpdateDeviceTimeZone(imei uint64, timezone int) bool 
 }
 
 
-func MakeTimeZoneReplyMsg(imei  uint64, deviceTimeZone string) []byte {
+func MakeTimeZoneReplyMsg(imei , id uint64, deviceTimeZone string) []byte {
 	//(002D357593060153353AP03,150728,152900,e0800)
 	curTime := time.Now().UTC().Format("060102,150405")
 
-	body := fmt.Sprintf("%015dAP03,%s,%s,%016X)", imei, curTime, deviceTimeZone, makeId())
+	body := fmt.Sprintf("%015dAP03,%s,%s,%016X)", imei, curTime, deviceTimeZone, id)
 	size := fmt.Sprintf("(%04X", 5 + len(body))
 
 	return []byte(size + body)
@@ -551,36 +585,73 @@ func DeviceTimeZoneInt(tz string) int {
 }
 
 
-func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams) []byte {
-	data := ""
-	for _, setting := range params.Settings {
-		body := ""
-		switch setting.FieldName {
-		case "OwnerName":
-			body = fmt.Sprintf("%015dAP18,%s,%016X)", imei, setting.NewValue, makeId())
-		case "TimeZone":
-			return  MakeTimeZoneReplyMsg(imei, deviceTimeZoneString(setting.NewValue))
-		case "Volume":
-			body = fmt.Sprintf("%015dAP21,%s,%016X)", imei, setting.NewValue, makeId())
-		case "Lang":
-			body = fmt.Sprintf("%015dAP20,%04d,%016X)", imei, Str2Num(setting.NewValue, 10), makeId())
-		case "UseDST":
-			body = fmt.Sprintf("%015dAP19,%s,%016X)", imei, setting.NewValue, makeId())
-		case "ChildPowerOff":
-			body = fmt.Sprintf("%015dAP15,%s,%016X)", imei, setting.NewValue, makeId())
-		default:
-			return nil
-		}
-
-		size := fmt.Sprintf("(%04X", 5 + len(body))
-		data += (size + body)
+func makeDeviceFamilyPhoneNumbers(family *[MAX_FAMILY_MEMBER_NUM]FamilyMember) string {
+	phoneNumbers := ""
+	for i := 0; i < len(family); i++ {
+		phoneNumbers += fmt.Sprintf("#%s#%d#%s",  family[i].Phone, family[i].Type, family[i].Name)
 	}
 
-	logging.Log("MakeSetDeviceConfigReplyMsg: " + data)
-	return []byte(data)
+	return phoneNumbers
 }
 
-func (service *GT06Service)makeSyncTimeReplyMsg() []byte {
+func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*MsgData  {
+	if len(params.Settings) > 0 {
+		msgList := []*MsgData{}
+		for _, setting := range params.Settings {
+			msg := MsgData{}
+			msg.Header.Header.Imei = imei
+			msg.Header.Header.ID = NewMsgID()
+			msg.Header.Header.Status = 1
+
+			switch setting.FieldName {
+			case OwnerNameFieldName:
+				body := fmt.Sprintf("%015dAP18,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
+				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+			case TimeZoneFieldName:
+				msg.Data = MakeTimeZoneReplyMsg(imei, msg.Header.Header.ID,
+					deviceTimeZoneString(setting.NewValue))
+			case VolumeFieldName:
+				body := fmt.Sprintf("%015dAP21,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
+				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+			case LangFieldName:
+				body := fmt.Sprintf("%015dAP20,%04d,%016X)", imei, Str2Num(setting.NewValue, 10), msg.Header.Header.ID)
+				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+			case UseDSTFieldName:
+				body := fmt.Sprintf("%015dAP19,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
+				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+			case ChildPowerOffFieldName:
+				body := fmt.Sprintf("%015dAP15,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
+				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+			case PhoneNumbersFieldName:
+				DeviceInfoListLock.RLock()
+				deviceInfo, ok := (*DeviceInfoList)[imei]
+				if ok && deviceInfo != nil {
+					body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
+						makeDeviceFamilyPhoneNumbers(&deviceInfo.Family), msg.Header.Header.ID)
+					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				}
+				DeviceInfoListLock.RUnlock()
+
+				if ok == false {
+					return nil
+				}
+			default:
+				return nil
+			}
+
+			msgList = append(msgList, &msg)
+		}
+
+		return msgList
+	}else{
+		return nil
+	}
+
+	//logging.Log("MakeSetDeviceConfigReplyMsg: " + data)
+	//return []byte(data)
+}
+
+func (service *GT06Service)makeSyncTimeReplyMsg() ([]byte, uint64) {
 	//(002D357593060153353AP03,150728,152900,e0800)
 	curTime := time.Now().UTC().Format("060102,150405")
 	c, timezone := 'e', 0
@@ -601,23 +672,25 @@ func (service *GT06Service)makeSyncTimeReplyMsg() []byte {
 		c = 'w'
 	}
 
-	body := fmt.Sprintf("%015dAP03,%s,%c%04d)", service.imei,curTime, c, timezone)
+	id := makeId()
+	body := fmt.Sprintf("%015dAP03,%s,%c%04d,%016X)", service.imei,curTime, c, timezone, id)
 	size := fmt.Sprintf("(%04X", 5 + len(body))
 
-	return []byte(size + body)  // + string(service.makeSendLocationReplyMsg()))
+	return []byte(size + body) , id // + string(service.makeSendLocationReplyMsg()))
 }
 
-func (service *GT06Service)makeSendLocationReplyMsg() []byte {
+func (service *GT06Service)makeSendLocationReplyMsg() ([]byte, uint64) {
 	//(0056357593060153353AP1424.772816,121.022636,160,2015,11,12,08,00,00,0000000000000009)
 	//(0051357593060571398AP140.000000,0.000000,0,2017,05,22,11,04,28,00000D99DE4C0826)
+	id := makeId()
 	curTime := time.Now().UTC().Format("2006,01,02,15,04,05")
 	service.old.Lat, service.old.Lng = 22.587725123456,113.913641123456
 	body := fmt.Sprintf("%015dAP14%06f,%06f,%d,%s,%016X)",
 		service.imei, service.old.Lat, service.old.Lng,service.old.Accracy,
-		curTime, makeId())
+		curTime, id)
 	size := fmt.Sprintf("(%04X", 5 + len(body))
 
-	return []byte(size + body)
+	return []byte(size + body) , id
 }
 
 func (service *GT06Service)makeDeviceLoginReplyMsg() []byte {
@@ -670,7 +743,9 @@ func (service *GT06Service)shardData(cmd, phone string, datatime uint64, data []
 		if cmd == "AP13" {
 			intCmd = CMD_AP13
 		}
-		resp := &ResponseItem{uint16(intCmd),  service.makeDataBlockReplyMsg(block)}
+
+		resp := &ResponseItem{uint16(intCmd),  service.makeReplyMsg(true,
+			service.makeDataBlockReplyMsg(block), block.MsgId)}
 		resps = append(resps, resp)
 
 		bufOffset += packSize
@@ -808,6 +883,18 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 		service.NotifyAlarmMsg()
 	}
 
+	service.NotifyAppWithNewLocation()
+
+	return true
+}
+
+func (service *GT06Service)  NotifyAppWithNewLocation() bool  {
+	result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
+	result.Locations = append(result.Locations, service.cur)
+
+	service.reqCtx.AppNotifyChan  <- &AppMsgData{Cmd: HearbeatAckCmdName,
+		Imei: service.imei,
+		Data: MakeStructToJson(result), Conn: nil}
 	return true
 }
 
@@ -1138,7 +1225,8 @@ func (service *GT06Service) PushChatNum() bool {
 		chatData := service.reqCtx.GetChatDataFunc(service.imei)
 		if len(chatData) > 0 {
 			//通知终端有聊天信息
-			resp := &ResponseItem{CMD_AP11, service.makeChatNumReplyMsg(len(chatData))}
+			resp := &ResponseItem{CMD_AP11,  service.makeReplyMsg(false,
+				service.makeChatNumReplyMsg(len(chatData)), makeId())}
 			service.rspList = append(service.rspList, resp)
 		}
 	}
@@ -1567,9 +1655,6 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 
 		DeviceInfoListLock.RLock()
 		safeZones := GetSafeZoneSettings(service.imei)
-		strLatLng := strings.Split(safeZones[service.wifiZoneIndex].Center, ",")
-		zoneLat := Str2Float(strLatLng[0])
-		zoneLng := Str2Float(strLatLng[1])
 
 		if safeZones != nil {
 			for  i := 0; i < len(safeZones); i++ {
@@ -1577,6 +1662,10 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 				if stSafeZone.On == "0" {
 					continue
 				}
+
+				strLatLng := strings.Split(stSafeZone.Center, ",")
+				zoneLat := Str2Float(strLatLng[0])
+				zoneLng := Str2Float(strLatLng[1])
 
 				stDstPoint.Latitude = zoneLat
 				stDstPoint.LongtiTude = zoneLng
@@ -1715,7 +1804,7 @@ func (service *GT06Service) NotifyAlarmMsg() bool {
 	strRequestBody := "r=app/auth/alarm&"
 	strReqURL := "http://service.gatorcn.com/tracker/web/index.php"
 	value := fmt.Sprintf("systemno=%d&data=%d,%d,%d,%d,%d,%d,%d,%d,%s,%s",
-		service.imei % 100000000000, service.cur.DataTime, service.cur.Lat, service.cur.Lng,
+		service.imei % 100000000000, service.cur.DataTime, int(service.cur.Lat * 1000000), int(service.cur.Lng * 1000000),
 		service.cur.Steps, service.cur.Battery, service.cur.AlarmType, service.cur.ReadFlag,
 		service.cur.LocateType, service.cur.ZoneName, "")
 

@@ -38,6 +38,7 @@ type ServerContext struct {
 	HttpStaticAvatarDir string
 	AcceptTimeout time.Duration
 	RecvTimeout   time.Duration
+	MaxDeviceIdleTimeSecs int
 	RedisAddr     string
 	RedisPort     uint16
 	RedisPassword string
@@ -88,6 +89,7 @@ func init()  {
 
 	serverCtx.AcceptTimeout = 30
 	serverCtx.RecvTimeout = 30
+	serverCtx.MaxDeviceIdleTimeSecs = 60
 
 	serverCtx.RedisAddr = "127.0.0.1"
 	serverCtx.RedisPort = 6379
@@ -230,6 +232,7 @@ func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 	DeviceTableLock.RUnlock()
 
 	if isQueryDB == false {
+		deviceData.Imei = imei
 		return deviceData
 	}else {
 		//缓存中没有数据，将从数据库中查询
@@ -238,6 +241,7 @@ func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 		rows, err := pgpool.Query(strSQL)
 		if err != nil {
 			logging.Log(fmt.Sprintf("[%d] pg query failed, %s",  imei, err.Error()))
+			deviceData.Imei = imei
 			return deviceData
 		}
 
@@ -269,6 +273,7 @@ func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 			logging.Log(fmt.Sprintf("[%d] get device data: no data in db", imei))
 		}
 
+		deviceData.Imei = imei
 		return deviceData
 	}
 }
