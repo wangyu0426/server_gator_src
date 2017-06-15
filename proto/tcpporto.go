@@ -1678,6 +1678,9 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 				}
 
 				strLatLng := strings.Split(stSafeZone.Center, ",")
+				if len(strLatLng) != 2 {
+					continue
+				}
 				zoneLat := Str2Float(strLatLng[0])
 				zoneLng := Str2Float(strLatLng[1])
 

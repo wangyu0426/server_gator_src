@@ -194,11 +194,15 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				logging.Log("send data to app:" + fmt.Sprint(string(msg.Cmd)))
 				//如果是login请求，则与设备无关,无须查表，直接发送数据到APP客户端
 				if msg.Cmd == proto.LoginAckCmdName ||
+					msg.Cmd == proto.RegisterAckCmdName ||
 					(msg.Cmd == proto.HearbeatAckCmdName && msg.Conn != nil) ||
 					msg.Conn == proto.VerifyCodeAckCmdName ||
 					msg.Cmd == proto.GetDeviceByImeiAckCmdName ||
 					msg.Cmd == proto.AddDeviceAckCmdName ||
 					msg.Cmd == proto.DeleteDeviceAckCmdName {
+					if msg.Cmd == proto.HearbeatCmdName {
+						getAppClientsByImei(msg)
+					}
 					c := msg.Conn.(*AppConnection)
 					data, err := json.Marshal(&msg)
 					err = (*c.conn).EmitMessage(data)
@@ -280,7 +284,7 @@ func getAppClientsByImei(msg *proto.AppMsgData)  map[string]*AppConnection {
 			return nil
 		}
 
-		url := "http://127.0.0.1/tracker/web/index.php?r=app/service/devices&access-token=" + msg.AccessToken
+		url := "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + msg.AccessToken
 		logging.Log("url: " + url)
 		resp, err := http.Get(url)
 		if err != nil {

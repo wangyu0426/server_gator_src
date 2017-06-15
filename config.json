@@ -1,0 +1,41 @@
+{
+    "ProcessName":"go-server",
+    "MasterListenAddrPort":"localhost:9015",
+    "BindAddr":"0.0.0.0",
+    "Port":7016,
+    "HttpServerName":"http://120.25.214.188",
+    "WSPort":8015,
+    "HttpUploadURL":"/api/upload",
+    "HttpStaticURL":"/static",
+    "HttpStaticDir":"./static",
+    "HttpStaticAvatarDir":"/upload/avatar/",
+    "AcceptTimeout":30,
+    "RecvTimeout":30,
+    "MaxDeviceIdleTimeSecs":60,
+    "RedisAddr":"127.0.0.1",
+    "RedisPort":6379,
+    "RedisPassword":"",
+    "RedisDeviceMQKeyPrefix":"mq:device:",
+    "RedisAppMQKeyPrefix":"mq:app:",
+    "PasswordSalt":"15c1185d610017ad70f740f1b76a673d1421b003",
+    "SessionSecret":"ca0c6dfa1c0c901e1187f0f1ef4b47d9",
+    "DbMysqlConfig":{
+        "DBHost":"127.0.0.1",
+        "DBPort":3306,
+        "DBName":"gpsbaseinfo",
+        "DBUser":"root",
+        "DBPasswd":"1234",
+        "DBPoolMaxConn":1024
+    },
+    "DbPgsqlConfig":{
+        "DBHost":"127.0.0.1",
+        "DBPort":5432,
+        "DBName":"gator_db",
+        "DBUser":"postgres",
+        "DBPasswd":"",
+        "DBPoolMaxConn":1024
+    },
+
+    "UseGoogleMap":true,
+    "IsDebug":true
+}

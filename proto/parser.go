@@ -238,9 +238,8 @@ type EPOInfo struct {
 	EPOBuf[]byte
 }
 
+const DM_MIN = -1
 const (
-	DM_MIN = -1
-
 	DM_WH01 = iota
 	DM_GT03
 	DM_GTI3
@@ -248,6 +247,8 @@ const (
 
 	DM_MAX
 )
+
+var ModelNameList = []string{ "WH01", "GT03","GTI3", "GT06"}
 
 const (
 	ALARM_INZONE = 1
@@ -272,6 +273,7 @@ const (
 	MAX_FAMILY_MEMBER_NUM = 13
 )
 
+var	ModelFieldName 			= "Model"
 
 var	AvatarFieldName 			= "Avatar"
 var	OwnerNameFieldName 	= "OwnerName"
@@ -289,6 +291,9 @@ var CmdAckTail 				= "-ack"
 
 var LoginCmdName  			= "login"
 var LoginAckCmdName  		= LoginCmdName + CmdAckTail
+
+var RegisterCmdName  		= "register"
+var RegisterAckCmdName  		= RegisterCmdName + CmdAckTail
 
 var HearbeatCmdName  		= "heartbeat"
 var HearbeatAckCmdName  	= HearbeatCmdName + CmdAckTail
@@ -506,6 +511,9 @@ func init()  {
 	//imei := 357593060571398
 	//fmt.Println("sn: ")
 	//fmt.Println(imei % 100000000000)
+	//fmt.Println(DM_MIN , DM_WH01, DM_GT03, DM_GTI3 , DM_GT06, DM_MAX)
+	//fmt.Println(DRT_MIN,  DRT_SYNC_TIME)
+	//fmt.Println(MsgFromDeviceToTcpServer, CMD_AP00,  DEVICE_DATA_LOCATION,  ChatFromDeviceToApp,)
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()
@@ -812,17 +820,10 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 }
 
 func ParseDeviceModel(model string) int {
-	switch model {
-	case "WH01":
-		return DM_WH01
-	case "GT03":
-		return DM_GT03
-	case "GTI3":
-		return DM_GTI3
-	case "GT06":
-		return DM_GT06
-	default:
-		return -1
+	for i, modelName := range ModelNameList {
+		if modelName == model {
+			return i
+		}
 	}
 
 	return -1

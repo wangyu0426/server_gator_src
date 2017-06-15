@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"../svrctx"
 	"../proto"
-	"encoding/json"
 )
 
 func AdminServerLoop(exitServerFunc func())  {
@@ -21,19 +20,82 @@ func AdminServerLoop(exitServerFunc func())  {
 			return nil
 		}
 
+		if len(in.Args) != 2 {
+			out.WriteInlineString("bad args")
+			return nil
+		}
+
+		imei := proto.Str2Num(in.Args[0], 10)
+		fieldName := in.Args[1]
+		result := "nil"
+
 		proto.DeviceInfoListLock.RLock()
-		device, ok := (*proto.DeviceInfoList)[proto.Str2Num(in.Args[0], 10)]
+		device, ok := (*proto.DeviceInfoList)[imei]
 		if ok {
-			jsonData, err := json.Marshal(device)
-			if err != nil {
-				out.WriteInlineString(err.Error())
-			} else {
-				out.WriteInlineString(string(jsonData))
+			switch fieldName {
+			case proto.ModelFieldName:
+				if device.Model >= 0 && device.Model < len(proto.ModelNameList){
+					result = proto.ModelNameList[device.Model]
+				}
+			default:
+				result = proto.MakeStructToJson(device)
 			}
-		}else {
-			out.WriteInlineString("nil")
 		}
 		proto.DeviceInfoListLock.RUnlock()
+		out.WriteInlineString(result)
+		return nil
+	})
+
+	adminsvr.HandleFunc("hset", func(out *redeo.Responder, in *redeo.Request) error {
+		if len(in.Args) == 0 {
+			out.WriteInlineString("nil")
+			return nil
+		}
+
+		if len(in.Args) != 3 {
+			out.WriteInlineString("bad args")
+			return nil
+		}
+
+		imei := proto.Str2Num(in.Args[0], 10)
+		fieldName := in.Args[1]
+		newValue := in.Args[2]
+		result := "failed"
+
+		proto.DeviceInfoListLock.RLock()
+		device, ok := (*proto.DeviceInfoList)[imei]
+		if ok {
+			switch fieldName {
+			case proto.ModelFieldName:
+				newModel := proto.ParseDeviceModel(newValue)
+				if newModel >= 0 {
+					if newModel != proto.DM_GT06 {
+						delete(*proto.DeviceInfoList, imei)
+					}else{
+						device.Model = newModel
+					}
+					result = "ok"
+				}
+			}
+		}
+		proto.DeviceInfoListLock.RUnlock()
+
+		if ok == false {
+			if fieldName == proto.ModelFieldName {
+				newModel := proto.ParseDeviceModel(newValue)
+				if newModel >= 0 {
+					if newModel == proto.DM_GT06 {
+						ok2 := proto.LoadDeviceInfoFromDB(svrctx.Get().MySQLPool)
+						if ok2 {
+							result = "ok"
+						}
+					}
+				}
+			}
+		}
+
+		out.WriteInlineString(result)
+
 		return nil
 	})
 

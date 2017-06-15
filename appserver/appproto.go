@@ -49,7 +49,10 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 	switch cmd{
 	case proto.LoginCmdName:
 		params := msg["data"].(map[string]interface{})
-		return login(c, params["username"].(string), params["password"].(string))
+		return login(c, params["username"].(string), params["password"].(string), false)
+	case proto.RegisterCmdName:
+		params := msg["data"].(map[string]interface{})
+		return login(c, params["username"].(string), params["password"].(string), true)
 
 	case proto.HearbeatCmdName:
 		//datas := msg["data"].(map[string]interface{})
@@ -130,11 +133,18 @@ func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 	return true
 }
 
-func login(c *AppConnection, username, password string) bool {
-	resp, err := http.PostForm("http://127.0.0.1/tracker/web/index.php?r=app/auth/login",
-		url.Values{"username": {username}, "password": {password}})
+func login(c *AppConnection, username, password string, isRegister bool) bool {
+	urlRequest := "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+	reqType := "login"
+	if isRegister {
+		reqType = "register"
+	}
+
+	urlRequest += reqType
+
+	resp, err := http.PostForm(urlRequest, url.Values{"username": {username}, "password": {password}})
 	if err != nil {
-		logging.Log("app login failed, " + err.Error())
+		logging.Log("app " + reqType + "failed, " + err.Error())
 		return false
 	}
 
@@ -149,7 +159,7 @@ func login(c *AppConnection, username, password string) bool {
 	var itf interface{}
 	err = json.Unmarshal(body, &itf)
 	if err != nil {
-		logging.Log("parse login response as json failed, " + err.Error())
+		logging.Log("parse  " + reqType + " response as json failed, " + err.Error())
 		return false
 	}
 
@@ -165,50 +175,67 @@ func login(c *AppConnection, username, password string) bool {
 	//logging.Log("status: " + fmt.Sprint(status))
 	//logging.Log("accessToken: " + fmt.Sprint(accessToken))
 	//logging.Log("devices: " + fmt.Sprint(devices))
-	if status != nil && accessToken != nil && devices != nil {
-		c.user.AccessToken = accessToken.(string)
-		c.user.Logined = true
-		c.user.Name = username
-		c.user.PasswordMD5 = password
+	if status != nil && accessToken != nil {
+		if isRegister == false {
+			if devices != nil {
+				c.user.AccessToken = accessToken.(string)
+				c.user.Logined = true
+				c.user.Name = username
+				c.user.PasswordMD5 = password
 
-		addConnChan <- c
+				addConnChan <- c
 
-		//devicesLocationURL := "http://184.107.50.180:8012/GetMultiWatchData?systemno="
-		locations := []proto.LocationData{}
-		for _, d := range devices.([]interface{}) {
-			device := d.(map[string]interface {})
-			imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
-			logging.Log("device: " + fmt.Sprint(imei))
-			c.imeis = append(c.imeis, imei)
-			locations = append(locations, svrctx.GetDeviceData(imei, svrctx.Get().PGPool))
+				//devicesLocationURL := "http://184.107.50.180:8012/GetMultiWatchData?systemno="
+				locations := []proto.LocationData{}
+				for _, d := range devices.([]interface{}) {
+					device := d.(map[string]interface{})
+					imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
+					logging.Log("device: " + fmt.Sprint(imei))
+					c.imeis = append(c.imeis, imei)
+					locations = append(locations, svrctx.GetDeviceData(imei, svrctx.Get().PGPool))
 
-			//devicesLocationURL += device["IMEI"].(string)[4:]
-			//
-			//if i < len(devices.([]interface{})) - 1 {
-			//	devicesLocationURL += "|"
-			//}
+					//devicesLocationURL += device["IMEI"].(string)[4:]
+					//
+					//if i < len(devices.([]interface{})) - 1 {
+					//	devicesLocationURL += "|"
+					//}
+				}
+
+				jsonLocations, _ := json.Marshal(locations)
+				appServerChan <- &proto.AppMsgData{Cmd: proto.LoginAckCmdName,
+					Data: (fmt.Sprintf("{\"user\": %s, \"location\": %s}", string(body), string(jsonLocations))), Conn: c}
+
+				//logging.Log("devicesLocationURL: " + devicesLocationURL)
+				//
+				//respLocation, err := http.Get(devicesLocationURL)
+				//if err != nil {
+				//	logging.Log("get devicesLocationURL failed" + err.Error())
+				//}
+				//
+				//defer respLocation.Body.Close()
+
+				//bodyLocation, err := ioutil.ReadAll(respLocation.Body)
+				//if err != nil {
+				//	logging.Log("response has err, " + err.Error())
+				//}
+				//
+				//logging.Log("bodyLocation: " +  string(bodyLocation))
+			} else {
+				appServerChan <- &proto.AppMsgData{Cmd: proto.LoginAckCmdName,
+					Data: (fmt.Sprintf("{\"user\": %s, \"location\": []}", string(body))), Conn: c}
+			}
+		} else {
+			appServerChan <- &proto.AppMsgData{Cmd: proto.RegisterAckCmdName,
+				Data: (fmt.Sprintf("{\"user\": %s, \"location\": []}", string(body))), Conn: c}
 		}
-
-		jsonLocations , _ := json.Marshal(locations)
-
-		//logging.Log("devicesLocationURL: " + devicesLocationURL)
-		//
-		//respLocation, err := http.Get(devicesLocationURL)
-		//if err != nil {
-		//	logging.Log("get devicesLocationURL failed" + err.Error())
-		//}
-		//
-		//defer respLocation.Body.Close()
-
-		//bodyLocation, err := ioutil.ReadAll(respLocation.Body)
-		//if err != nil {
-		//	logging.Log("response has err, " + err.Error())
-		//}
-		//
-		//logging.Log("bodyLocation: " +  string(bodyLocation))
-
-		appServerChan <- &proto.AppMsgData{Cmd: proto.LoginAckCmdName,
-			Data: (fmt.Sprintf("{\"user\": %s, \"location\": %s}", string(body), string(jsonLocations))), Conn: c}
+	}else{
+		if isRegister{
+			appServerChan <- &proto.AppMsgData{Cmd: proto.RegisterAckCmdName,
+				Data: "{\"status\": -1}", Conn: c}
+		}else{
+			appServerChan <- &proto.AppMsgData{Cmd: proto.LoginAckCmdName,
+				Data: "{\"status\": -1}", Conn: c}
+		}
 	}
 
 	return true

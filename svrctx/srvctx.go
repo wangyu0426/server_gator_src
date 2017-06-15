@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
-	"crypto/md5"
-	"crypto/sha1"
+	//"crypto/md5"
+	//"crypto/sha1"
 	"../proto"
 	"../logging"
 	"github.com/jackc/pgx"
@@ -13,6 +13,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"os"
 	"encoding/json"
+	"io/ioutil"
 )
 
 type  DBConfig struct {
@@ -25,7 +26,7 @@ type  DBConfig struct {
 }
 
 type ServerContext struct {
-	WaitLock      *sync.WaitGroup
+	WaitLock      *sync.WaitGroup  `json:"-"`
 	ProcessName   string
 	MasterListenAddrPort string
 	BindAddr      string
@@ -51,14 +52,14 @@ type ServerContext struct {
 	DbMysqlConfig      DBConfig
 	DbPgsqlConfig      DBConfig
 
-	PGPool *pgx.ConnPool
-	MySQLPool *sql.DB
+	PGPool *pgx.ConnPool  `json:"-"`
+	MySQLPool *sql.DB  `json:"-"`
 	UseGoogleMap  bool
 	IsDebug  bool
 
-	AppServerChan chan *proto.AppMsgData
-	TcpServerChan chan *proto.MsgData
-	ServerExit chan struct{}
+	AppServerChan chan *proto.AppMsgData  `json:"-"`
+	TcpServerChan chan *proto.MsgData `json:"-"`
+	ServerExit chan struct{} `json:"-"`
 }
 
 var serverCtx ServerContext
@@ -74,56 +75,71 @@ var AppPhotoTaskTableLock = &sync.RWMutex{}
 
 func init()  {
 	fmt.Println("server contextinit...")
-	serverCtx.ProcessName = "go-server"
-	serverCtx.MasterListenAddrPort = "localhost:9015"
 
-	serverCtx.BindAddr = "0.0.0.0"
-	serverCtx.Port = 7015
+	//serverCtx.ProcessName = "go-server"
+	//serverCtx.MasterListenAddrPort = "localhost:9015"
+	//
+	//serverCtx.BindAddr = "0.0.0.0"
+	//serverCtx.Port = 7016
+	//
+	//serverCtx.HttpServerName = "http://120.25.214.188"  //"http://192.168.3.97"
+	//serverCtx.WSPort = 8015
+	//serverCtx.HttpUploadURL = "/api/upload"
+	//serverCtx.HttpStaticURL = "/static"
+	//serverCtx.HttpStaticDir = "./static"
+	//serverCtx.HttpStaticAvatarDir = "/upload/avatar/"
+	//
+	//serverCtx.AcceptTimeout = 30
+	//serverCtx.RecvTimeout = 30
+	//serverCtx.MaxDeviceIdleTimeSecs = 60
+	//
+	//serverCtx.RedisAddr = "127.0.0.1"
+	//serverCtx.RedisPort = 6379
+	//serverCtx.RedisPassword = ""
+	//serverCtx.RedisDeviceMQKeyPrefix = "mq:device:"
+	//serverCtx.RedisAppMQKeyPrefix = "mq:app:"
+	//
+	//hs := sha1.New()
+	//hs.Write([]byte("service.gatorcn.com"))
+	//serverCtx.PasswordSalt = fmt.Sprintf("%x", hs.Sum(nil))
+	//
+	//m := md5.New()
+	//m.Write([]byte("com.gatorcn.service"))
+	//serverCtx.SessionSecret = fmt.Sprintf("%x",m.Sum(nil))
+	//serverCtx.DbMysqlConfig = DBConfig{
+	//	DBHost:"127.0.0.1",
+	//	DBPort:3306,
+	//	DBName:"gpsbaseinfo",
+	//	DBUser:"root",
+	//	DBPasswd:"",
+	//	DBPoolMaxConn: 1024,
+	//}
+	//
+	//serverCtx.DbPgsqlConfig = DBConfig{
+	//	DBHost:"127.0.0.1",
+	//	DBPort:5432,
+	//	DBName:"gator_db",
+	//	DBUser:"postgres",
+	//	DBPasswd:"",
+	//	DBPoolMaxConn: 1024,
+	//}
+	//
+	//serverCtx.UseGoogleMap = true
+	//serverCtx.IsDebug = true
+
+	confJson, err0 := ioutil.ReadFile("config.json")
+	if err0 != nil {
+		fmt.Println("read server config file failed, ", err0.Error())
+		os.Exit(-1)
+	}
+
+	err0 = json.Unmarshal(confJson, &serverCtx)
+	if err0 != nil {
+		fmt.Println("parse config file failed, ", err0.Error())
+		os.Exit(-1)
+	}
 
 	serverCtx.HttpServerName = "http://192.168.3.97"
-	serverCtx.WSPort = 8015
-	serverCtx.HttpUploadURL = "/api/upload"
-	serverCtx.HttpStaticURL = "/static"
-	serverCtx.HttpStaticDir = "./static"
-	serverCtx.HttpStaticAvatarDir = "/upload/avatar/"
-
-	serverCtx.AcceptTimeout = 30
-	serverCtx.RecvTimeout = 30
-	serverCtx.MaxDeviceIdleTimeSecs = 60
-
-	serverCtx.RedisAddr = "127.0.0.1"
-	serverCtx.RedisPort = 6379
-	serverCtx.RedisPassword = ""
-	serverCtx.RedisDeviceMQKeyPrefix = "mq:device:"
-	serverCtx.RedisAppMQKeyPrefix = "mq:app:"
-
-	hs := sha1.New()
-	hs.Write([]byte("service.gatorcn.com"))
-	serverCtx.PasswordSalt = fmt.Sprintf("%x", hs.Sum(nil))
-
-	m := md5.New()
-	m.Write([]byte("com.gatorcn.service"))
-	serverCtx.SessionSecret = fmt.Sprintf("%x",m.Sum(nil))
-	serverCtx.DbMysqlConfig = DBConfig{
-		DBHost:"127.0.0.1",
-		DBPort:3306,
-		DBName:"gpsbaseinfo",
-		DBUser:"root",
-		DBPasswd:"1234",
-		DBPoolMaxConn: 1024,
-	}
-
-	serverCtx.DbPgsqlConfig = DBConfig{
-		DBHost:"127.0.0.1",
-		DBPort:5432,
-		DBName:"gator_db",
-		DBUser:"postgres",
-		DBPasswd:"",
-		DBPoolMaxConn: 1024,
-	}
-
-	serverCtx.UseGoogleMap = true
-	serverCtx.IsDebug = true
 
 	//创建postgresql连接池
 	var err error
@@ -161,6 +177,15 @@ func init()  {
 	}
 	serverCtx.MySQLPool.SetMaxOpenConns(serverCtx.DbMysqlConfig.DBPoolMaxConn)
 	fmt.Println(fmt.Sprintf("connect mysql db %s OK", serverCtx.DbMysqlConfig.DBName))
+
+	//confString, err2 := json.Marshal(&serverCtx)
+	//if err2 != nil {
+	//	fmt.Println("make json for server ctx failed, ", err2.Error())
+	//	os.Exit(1)
+	//}
+	//
+	//ioutil.WriteFile("config.json", confString, 0666)
+	//os.Exit(1)
 
 	proto.LoadDeviceInfoFromDB(serverCtx.MySQLPool)
 
