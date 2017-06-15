@@ -40,6 +40,7 @@ const (
 	MSG_HEADER_VER   =  0x0100  //普通消息头部版本
 	MSG_HEADER_VER_EX  = 0x0101  //支持分片和断点续传功能的增强型消息头部版本
 	MSG_HEADER_PUSH_CACHE = 0x0102  //此消息头部版本用于通知ManagerLoop推送缓存中的数据给手表
+	MSG_HEADER_ACK_PARSED = 0x0103  //此消息头部版本用于通知ManagerLoop已收到ack消息
 	SHARDING_SIZE  = 700     //分片大小为700字节，这是一个比较合适的经验值。
 )
 
@@ -55,6 +56,9 @@ const (
 	DRT_FETCH_MINICHAT    // 同BP11，手表获取语音微聊
 	DRT_FETCH_AGPS        	  // 同BP32，手表获取AGPS数据
 	DRT_HEART_BEAT       	  // 同BP33，手表发送状态数据
+
+	//确认消息类型
+	DRT_SYNC_TIME_ACK       // 同BP03，手表请求对时ACK
 
 	DRT_MAX
 )
@@ -75,6 +79,8 @@ const (
 	 CMD_AP14
 	 CMD_AP30
 	 CMD_AP31
+
+	 CMD_ACK
  )
 
 
@@ -90,6 +96,8 @@ var commands = []string{
 	"BP11",
 	"BP32",
 	"BP33",
+
+	"BP03",
 }
 
 /*普通的消息头部*/
@@ -730,7 +738,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		" w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, " +
 		" w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2," +
 		" w.HideTimer3, pm.model, c.name from watchinfo w join device d on w.recid=d.recid join productmodel pm  " +
-		" on d.modelid=pm.recid join companies c on d.companyid=c.recid ")
+		" on d.modelid=pm.recid join companies c on d.companyid=c.recid where pm.model='GT06' ")
 	if err != nil {
 		fmt.Println("LoadDeviceInfoFromDB failed,", err.Error())
 		os.Exit(1)
@@ -794,6 +802,8 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 
 		(*tmpDeviceInfoList)[deviceInfo.Imei] = deviceInfo
 	}
+
+	fmt.Println("deviceinfo list len: ", len(*tmpDeviceInfoList))
 
 	DeviceInfoListLock.Lock()
 	DeviceInfoList = tmpDeviceInfoList

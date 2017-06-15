@@ -260,6 +260,17 @@ func (service *GT06Service)makeReplyMsg(requireAck bool, data []byte, id uint64)
 	return &msg
 }
 
+
+func (service *GT06Service)makeAckParsedMsg(id uint64) *MsgData{
+	msg := MsgData{}
+	msg.Header.Header.Version = MSG_HEADER_ACK_PARSED
+	msg.Header.Header.Imei = service.imei
+	msg.Header.Header.Cmd = service.cmd
+	msg.Header.Header.ID = id
+
+	return &msg
+}
+
 func (service *GT06Service)PreDoRequest() bool  {
 	service.wifiZoneIndex = -1
 	service.needSendLocation = false
@@ -293,8 +304,11 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		return false
 	}
 
-
-	if service.cmd == DRT_SYNC_TIME {  //BP00 对时
+	if service.cmd == DRT_SYNC_TIME_ACK {
+		msgIdForAck := Str2Num(string(msg.Data[0: 16]), 16)
+		resp := &ResponseItem{CMD_ACK,  service.makeAckParsedMsg(msgIdForAck)}
+		service.rspList = append(service.rspList, resp)
+	}else if service.cmd == DRT_SYNC_TIME {  //BP00 对时
 		madeData, id := service.makeSyncTimeReplyMsg()
 		resp := &ResponseItem{CMD_AP03,  service.makeReplyMsg(true, madeData, id)}
 		service.rspList = append(service.rspList, resp)

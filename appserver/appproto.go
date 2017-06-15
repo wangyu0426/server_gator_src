@@ -131,7 +131,7 @@ func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 }
 
 func login(c *AppConnection, username, password string) bool {
-	resp, err := http.PostForm("http://service.gatorcn.com/tracker/web/index.php?r=app/auth/login",
+	resp, err := http.PostForm("http://127.0.0.1/tracker/web/index.php?r=app/auth/login",
 		url.Values{"username": {username}, "password": {password}})
 	if err != nil {
 		logging.Log("app login failed, " + err.Error())

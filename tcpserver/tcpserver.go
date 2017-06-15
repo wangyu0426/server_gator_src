@@ -22,7 +22,7 @@ const (
 var addConnChan chan *Connection
 var delConnChan chan *Connection
 var TcpClientTable = map[uint64]*Connection{}
-var DevicePushCache = map[uint64][]*proto.MsgData{}
+var DevicePushCache = map[uint64]*[]*proto.MsgData{}
 
 func init()  {
 	logging.Log("tcpserver init")
@@ -30,6 +30,9 @@ func init()  {
 	delConnChan = make(chan *Connection, 1024)
 }
 
+func isCmdsMatched(reqCmd, ackCmd uint16) bool {
+	return true
+}
 
 //for managing connection, 对内负责管理tcp连接对象，对外为APP server提供通信接口
 func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
@@ -63,7 +66,8 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				return
 			}
 
-			if msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE {
+			//if msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE {
+			if len(msg.Data) == 0 { //没有数据，表示这是一个通知的消息
 				logging.Log(fmt.Sprintf("msg to notify to push cached data to device %d ",  msg.Header.Header.Imei))
 			}else {
 				//if msg.Header.Header.From == proto.MsgFromAppToAppServer {
@@ -72,15 +76,15 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				//	//logging.Log("msg from tcp: " + string(msg.Data))
 				//}
 
-				cache, ok1 := DevicePushCache[msg.Header.Header.Imei]
+				_, ok1 := DevicePushCache[msg.Header.Header.Imei]
 				if ok1 == false {
-					DevicePushCache[msg.Header.Header.Imei] = []*proto.MsgData{}
+					DevicePushCache[msg.Header.Header.Imei] = &[]*proto.MsgData{}
 				}
 
-				DevicePushCache[msg.Header.Header.Imei] = append(DevicePushCache[msg.Header.Header.Imei], msg)
+				*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], msg)
 				//}else{
 				//	cache = append(cache, msg)
-				logging.Log(fmt.Sprintf("[%d] cache --  count: %d", msg.Header.Header.Imei, len(cache)))
+				logging.Log(fmt.Sprintf("[%d] cache --  count: %d", msg.Header.Header.Imei, len(*DevicePushCache[msg.Header.Header.Imei])))
 			}
 
 			c, ok2 := TcpClientTable[msg.Header.Header.Imei]
@@ -89,25 +93,38 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				if (c.lastActiveTime - time.Now().Unix()) <= int64(serverCtx.MaxDeviceIdleTimeSecs) {
 					//如果60秒内有数据，则认为连接良好
 					cache, ok3 := DevicePushCache[msg.Header.Header.Imei]
-					if (ok3 == false || cache == nil) && msg.Header.Header.Version != proto.MSG_HEADER_PUSH_CACHE  {
-						logging.Log(fmt.Sprintf("[%d] oh my god", msg.Header.Header.Imei ))
+					if (ok3 == false) {
+						logging.Log(fmt.Sprintf("[%d] no data cached to send", msg.Header.Header.Imei ))
 					}else{
-						logging.Log(fmt.Sprintf("[%d] cache --////--  count: %d", msg.Header.Header.Imei, len(cache)))
-						for i, cachedMsg := range cache {
+						logging.Log(fmt.Sprintf("[%d] cache --////--  count: %d", msg.Header.Header.Imei, len(*cache)))
+						tempCache := []*proto.MsgData{}
+						for _, cachedMsg := range *cache {
 							if cachedMsg.Header.Header.Status == 0 {
 								//0， 不需要手表回复确认，直接发送完并删除
 								c.responseChan <- cachedMsg
-								cache = append(cache[:i], cache[i+1:]...)
 							}else if cachedMsg.Header.Header.Status == 1 {
 								//1, 消息尚未发送，且需要确认，则首先发出消息，并将status置2,
 								c.responseChan <- cachedMsg
 								cachedMsg.Header.Header.Status = 2
-							}else {
+								tempCache = append(tempCache, cachedMsg)
+							}else if cachedMsg.Header.Header.Status == 2 {
 								//2, 消息已经发送，并处于等待手表确认的状态
+								if msg.Header.Header.Version == proto.MSG_HEADER_ACK_PARSED &&
+									msg.Header.Header.Imei == cachedMsg.Header.Header.Imei &&
+									msg.Header.Header.ID == cachedMsg.Header.Header.ID {
+								}else{ //未收到确认，继续发送
+									c.responseChan <- cachedMsg
+									tempCache = append(tempCache, cachedMsg)
+								}
+							}else{
+								tempCache = append(tempCache, cachedMsg)
 							}
 
 							logging.Log("send app data to write routine")
 						}
+
+						*cache = tempCache
+						logging.Log(fmt.Sprintf("[%d] cache --/ ack parse /--  count: %d", msg.Header.Header.Imei, len(*cache)))
 					}
 				}else{
 					logging.Log(fmt.Sprintf("[%d] device idle no data over %d seconds",
