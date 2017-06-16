@@ -14,6 +14,33 @@ func AdminServerLoop(exitServerFunc func())  {
 		return nil
 	})
 
+	adminsvr.HandleFunc("reload", func(out *redeo.Responder, in *redeo.Request) error {
+		if len(in.Args) == 0 {
+			out.WriteInlineString("nil")
+			return nil
+		}
+
+		if len(in.Args) != 1 {
+			out.WriteInlineString("bad args")
+			return nil
+		}
+
+		fileName := in.Args[0]
+		result := "nil"
+
+		switch fileName {
+		case proto.ReloadEPOFileName:
+			err := proto.LoadEPOFromFile(true)
+			if err == nil {
+				result = "ok"
+			}
+		default:
+		}
+
+		out.WriteInlineString(result)
+		return nil
+	})
+
 	adminsvr.HandleFunc("hget", func(out *redeo.Responder, in *redeo.Request) error {
 		if len(in.Args) == 0 {
 			out.WriteInlineString("nil")

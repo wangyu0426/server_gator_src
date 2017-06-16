@@ -284,7 +284,11 @@ func getAppClientsByImei(msg *proto.AppMsgData)  map[string]*AppConnection {
 			return nil
 		}
 
-		url := "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + msg.AccessToken
+		url := "http://127.0.0.1/tracker/web/index.php?r=app/service/devices&access-token=" + msg.AccessToken
+		if svrctx.Get().IsDebugLocal {
+			url = "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + msg.AccessToken
+		}
+
 		logging.Log("url: " + url)
 		resp, err := http.Get(url)
 		if err != nil {

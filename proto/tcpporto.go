@@ -233,9 +233,9 @@ func HandleTcpRequest(reqCtx RequestContext)  bool{
 	}
 
 	ret = service.DoRequest(reqCtx.Msg)
-	if ret == false {
-		return false
-	}
+	//if ret == false {
+	//	return false
+	//}
 
 	msgReplyList := service.DoResponse()
 	if msgReplyList  == nil {
@@ -324,7 +324,11 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		}
 
 		logging.Log(fmt.Sprintf("%d|%s", service.imei, szVersion)) // report version
-	}  else if service.cmd == DRT_SEND_LOCATION {
+	}else if service.cmd == DRT_SEND_COST {
+		logging.Log(fmt.Sprintf("%d|%s", service.imei, string(msg.Data))) // report cost
+	}else if service.cmd == DRT_SEND_TEL_STATICS {
+		logging.Log(fmt.Sprintf("%d|%s", service.imei, string(msg.Data))) // report telephone use statics
+	}else if service.cmd == DRT_SEND_LOCATION {
 		//BP30 上报定位和报警等数据
 		resp := &ResponseItem{CMD_AP30, service.makeReplyMsg(false,
 			[]byte(fmt.Sprintf("(0019%dAP30)", service.imei)), makeId())}
@@ -392,7 +396,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		bufOffset++
 		ret = true
 		if service.reqCtx.IsDebug {
-			ret = service.ProcessMicChatForDebug(msg.Data[bufOffset: ])
+			ret = service.ProcessMicChat(msg.Data[bufOffset: ])
 		}else{
 			ret = service.ProcessMicChat(msg.Data[bufOffset: ])
 		}
@@ -715,6 +719,17 @@ func (service *GT06Service)makeDeviceLoginReplyMsg() []byte {
 	return []byte(size + body)
 }
 
+func (service *GT06Service)makeDeviceChatAckMsg(phone, datatime, milisecs,
+		blockCount, blockIndex string,  success int) []byte {
+	//(003D357593060153353AP34,13026618172,170413163300,2710,6,1,1)
+	body := fmt.Sprintf("%015dAP34,%s,%s,%s,%s,%s,%d)", service.imei, phone, datatime, milisecs,
+		blockCount, blockIndex, success)
+	size := fmt.Sprintf("(%04X", 5 + len(body))
+
+	return []byte(size + body)
+}
+
+
 func (service *GT06Service)makeChatDataReplyMsg(voiceFile, phone string, datatime uint64) []*ResponseItem {
 	//(03B5357593060153353AP12,1,170413163300,6,1,900,数据)
 
@@ -736,7 +751,7 @@ func (service *GT06Service)makeChatDataReplyMsg(voiceFile, phone string, datatim
 func (service *GT06Service)shardData(cmd, phone string, datatime uint64, data []byte) []*ResponseItem {
 	resps := []*ResponseItem{}
 	bufOffset, iReadLen := 0, len(data)
-	blockSize := 700
+	blockSize := DATA_BLOCK_SIZE
 	packCount := int(iReadLen / blockSize + 1)
 	if iReadLen % blockSize == 0 {
 		packCount = iReadLen / blockSize
@@ -912,6 +927,101 @@ func (service *GT06Service)  NotifyAppWithNewLocation() bool  {
 	return true
 }
 
+//
+//func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
+//	//需要断点续传的支持
+//	if len(pszMsg) == 0 {
+//		return false
+//	}
+//
+//	//(03BA357593060153353BP34,
+//	// 123456789,170413163300,2710,6,1,900,数据)
+//	fields := strings.SplitN(string(pszMsg), ",", 7)
+//	if len(fields) != 7 || len(fields[6]) == 0 {
+//		logging.Log("mini chat data bad length")
+//		return false
+//	}
+//
+//	ret := true
+//	timestamp :=  Str2Num(fields[1], 10)
+//	milisecs := int(Str2Num(fields[2], 16))
+//	fileId := uint64(timestamp * 10000) + uint64(milisecs)
+//	blockIndex := int(Str2Num(fields[4], 10))
+//	blockSize := Str2Num(fields[5], 10)
+//	DeviceChatTaskTableLock.Lock()
+//	chatTasks, found :=DeviceChatTaskTable[service.imei]
+//	if !found {
+//		if blockIndex != 0 {
+//			ret = false
+//		}else{
+//			chat := &ChatTask{}
+//			chat.Info.DateTime = timestamp
+//			chat.Info.Receiver = fields[0]
+//			chat.Info.VoiceMilisecs = milisecs
+//			chat.Data.Imei = service.imei
+//			chat.Data.Cmd = StringCmd(DRT_SEND_MINICHAT)
+//			chat.Data.blockSizeField = int(blockSize)
+//			if uint64(len(fields[6]) -  1) == blockSize || uint64(len(fields[6])) == blockSize { //完整
+//				chat.Data.BlockSize = int(blockSize)
+//				chat.Data.nextIndex = blockIndex + 1
+//			}else { //包不完整
+//				chat.Data.BlockSize = len(fields[6])
+//				chat.Data.nextIndex = blockIndex
+//				ret = false
+//			}
+//			chat.Data.BlockCount = int(Str2Num(fields[3], 10))
+//			chat.Data.BlockIndex = blockIndex
+//			chat.Data.Phone = fields[0]
+//			chat.Data.Time = timestamp
+//			chat.Data.Data = make([]byte, chat.Data.BlockCount * DATA_BLOCK_SIZE)
+//			copy(chat.Data.Data[0: ], fields[6][0:chat.Data.BlockSize])
+//			chat.Data.recvSized = chat.Data.BlockSize
+//
+//			chatTasks = map[uint64]*ChatTask{}
+//			chatTasks[fileId] = chat
+//			DeviceChatTaskTable[service.imei] = chatTasks
+//		}
+//	}else{
+//		chat, _ := chatTasks[fileId]
+//		if blockIndex == chat.Data.nextIndex {
+//			if chat.Data.nextIndex == chat.Data.BlockIndex { //包不完整，继续接收上一次包的数据
+//				if chat.Data.BlockSize + int(blockSize) > chat.Data.blockSizeField {
+//					ret = false
+//				}else if chat.Data.BlockSize + int(blockSize) == chat.Data.blockSizeField {//刚好完整
+//				}else {//继续不完整。。。
+//					ret = false
+//				}
+//			}else {//新包
+//
+//			}
+//		}else {//包index不匹配
+//			ret = false
+//		}
+//	}
+//
+//	DeviceChatTaskTableLock.Unlock()
+//
+//	//// for test
+//	//{
+//	//	data := make([]byte, 200*1024)
+//	//	offset := 0
+//	//	for  _, respCmd := range service.rspList {
+//	//		if respCmd.rspCmdType == CMD_AP12 {
+//	//			fields := strings.SplitN(string(respCmd.data), ",", 7)
+//	//			size := int(Str2Num(fields[5], 10))
+//	//			copy(data[offset: offset + size], fields[6][0: size])
+//	//			offset += size
+//	//		}
+//	//	}
+//	//
+//	//	//收到所有数据以后，写入语音文件
+//	//	ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
+//	//}
+//
+//	return ret
+//}
+
+
 func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 	//需要断点续传的支持
 	if len(pszMsg) == 0 {
@@ -919,103 +1029,14 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 	}
 
 	//(03BA357593060153353BP34,
-	// 123456789,170413163300,2710,6,1,900,数据)
+	// 123456789,170413163300,2710,6,1,700,数据)
 	fields := strings.SplitN(string(pszMsg), ",", 7)
-	if len(fields) != 7 || len(fields[6]) == 0 {
-		logging.Log("mini chat data bad length")
-		return false
-	}
-
-	ret := true
-	timestamp :=  Str2Num(fields[1], 10)
-	milisecs := int(Str2Num(fields[2], 16))
-	fileId := uint64(timestamp * 10000) + uint64(milisecs)
-	blockIndex := int(Str2Num(fields[4], 10))
-	blockSize := Str2Num(fields[5], 10)
-	DeviceChatTaskTableLock.Lock()
-	chatTasks, found :=DeviceChatTaskTable[service.imei]
-	if !found {
-		if blockIndex != 0 {
-			ret = false
-		}else{
-			chat := &ChatTask{}
-			chat.Info.DateTime = timestamp
-			chat.Info.Receiver = fields[0]
-			chat.Info.VoiceMilisecs = milisecs
-			chat.Data.Imei = service.imei
-			chat.Data.Cmd = StringCmd(DRT_SEND_MINICHAT)
-			chat.Data.blockSizeField = int(blockSize)
-			if uint64(len(fields[6]) -  1) == blockSize || uint64(len(fields[6])) == blockSize { //完整
-				chat.Data.BlockSize = int(blockSize)
-				chat.Data.nextIndex = blockIndex + 1
-			}else { //包不完整
-				chat.Data.BlockSize = len(fields[6])
-				chat.Data.nextIndex = blockIndex
-				ret = false
-			}
-			chat.Data.BlockCount = int(Str2Num(fields[3], 10))
-			chat.Data.BlockIndex = blockIndex
-			chat.Data.Phone = fields[0]
-			chat.Data.Time = timestamp
-			chat.Data.Data = make([]byte, chat.Data.BlockCount * DATA_BLOCK_SIZE)
-			copy(chat.Data.Data[0: ], fields[6][0:chat.Data.BlockSize])
-			chat.Data.recvSized = chat.Data.BlockSize
-
-			chatTasks = map[uint64]*ChatTask{}
-			chatTasks[fileId] = chat
-			DeviceChatTaskTable[service.imei] = chatTasks
+	if len(fields) != 7{ //字段个数不对
+		if len(fields) >= 5 { //已经收到了时间和包序号，可以作出回复了
+			resp := &ResponseItem{CMD_AP34,  service.makeReplyMsg(false, service.makeDeviceChatAckMsg(
+				fields[0], fields[1], fields[2], fields[3],fields[4], 0), makeId())}
+			service.rspList = append(service.rspList, resp)
 		}
-	}else{
-		chat, _ := chatTasks[fileId]
-		if blockIndex == chat.Data.nextIndex {
-			if chat.Data.nextIndex == chat.Data.BlockIndex { //包不完整，继续接收上一次包的数据
-				if chat.Data.BlockSize + int(blockSize) > chat.Data.blockSizeField {
-					ret = false
-				}else if chat.Data.BlockSize + int(blockSize) == chat.Data.blockSizeField {//刚好完整
-				}else {//继续不完整。。。
-					ret = false
-				}
-			}else {//新包
-
-			}
-		}else {//包index不匹配
-			ret = false
-		}
-	}
-
-	DeviceChatTaskTableLock.Unlock()
-
-	//// for test
-	//{
-	//	data := make([]byte, 200*1024)
-	//	offset := 0
-	//	for  _, respCmd := range service.rspList {
-	//		if respCmd.rspCmdType == CMD_AP12 {
-	//			fields := strings.SplitN(string(respCmd.data), ",", 7)
-	//			size := int(Str2Num(fields[5], 10))
-	//			copy(data[offset: offset + size], fields[6][0: size])
-	//			offset += size
-	//		}
-	//	}
-	//
-	//	//收到所有数据以后，写入语音文件
-	//	ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
-	//}
-
-	return ret
-}
-
-
-func (service *GT06Service) ProcessMicChatForDebug(pszMsg []byte) bool {
-	//需要断点续传的支持
-	if len(pszMsg) == 0 {
-		return false
-	}
-
-	//(03BA357593060153353BP34,
-	// 123456789,170413163300,2710,6,1,900,数据)
-	fields := strings.SplitN(string(pszMsg), ",", 7)
-	if len(fields) != 7 || len(fields[6]) == 0 {
 		logging.Log("mini chat data bad length")
 		return false
 	}
@@ -1026,32 +1047,54 @@ func (service *GT06Service) ProcessMicChatForDebug(pszMsg []byte) bool {
 	timestamp :=  Str2Num(fields[1], 10)
 	milisecs := int(Str2Num(fields[2], 16))
 	fileId := uint64(timestamp * 10000) + uint64(milisecs)
+	blockCount := int(Str2Num(fields[3], 10))
 	blockIndex := int(Str2Num(fields[4], 10))
 	blockSize := Str2Num(fields[5], 10)
 
+	//字段个数正确的时候，错误的情况处理：
+	if len(fields[6]) !=  int(blockSize + 1) { //数据接收不完整,+1表示包含包结尾的右括号')'
+		resp := &ResponseItem{CMD_AP34,  service.makeReplyMsg(false, service.makeDeviceChatAckMsg(
+			fields[0], fields[1], fields[2], fields[3],fields[4], 0), makeId())}
+		service.rspList = append(service.rspList, resp)
+
+		logging.Log("mini chat data bad length")
+		return false
+	}
+
+	//以下是数据完整的处理,
+	//首先查找当前任务是否已经存在
 	isFoundTable, isFoundTask := false, false
 	DeviceChatTaskTableLock.Lock()
 	chat := &ChatTask{}
 	chatTasks, isFoundTable :=DeviceChatTaskTable[service.imei]
-	if isFoundTable {
+	if isFoundTable { //首先查找是否存在该IMEI对应的任务字典，
+		// 如存在则再查找该微聊对应的任务字典是否存在，不存在，则创建
 		chat, isFoundTask = chatTasks[fileId]
 		if isFoundTask == false {
 			chat = &ChatTask{}
 			chatTasks[fileId] = chat
 		}
-	}else{
+	}else{//IMEI对应的任务字典不存在，则创建，同时创建该微聊对应的任务字典
 		chatTasks = map[uint64]*ChatTask{}
 		chatTasks[fileId] = chat
 		DeviceChatTaskTable[service.imei] = chatTasks
 	}
 
+	//如果任务表不存在，并且当前包序号不是第一包，则出错
 	if isFoundTask == false && blockIndex != 1{
 		DeviceChatTaskTableLock.Unlock()
+		resp := &ResponseItem{CMD_AP34,  service.makeReplyMsg(false, service.makeDeviceChatAckMsg(
+			fields[0], fields[1], fields[2], fields[3], "1", 0), makeId())}
+		service.rspList = append(service.rspList, resp)
 		return false
 	}
 
+	//如任务表存在，但当前包序号不是任务需要接收的包，则出错
 	if isFoundTask == true && (blockIndex != chat.Data.nextIndex){
 		DeviceChatTaskTableLock.Unlock()
+		resp := &ResponseItem{CMD_AP34,  service.makeReplyMsg(false, service.makeDeviceChatAckMsg(
+			fields[0], fields[1], fields[2], fields[3], Num2Str(uint64(chat.Data.BlockIndex), 10), 1), makeId())}
+		service.rspList = append(service.rspList, resp)
 		return false
 	}
 
@@ -1066,7 +1109,7 @@ func (service *GT06Service) ProcessMicChatForDebug(pszMsg []byte) bool {
 		chat.Data.BlockSize = int(blockSize)
 		chat.Data.nextIndex = blockIndex + 1
 
-		chat.Data.BlockCount = int(Str2Num(fields[3], 10))
+		chat.Data.BlockCount = blockCount
 		chat.Data.BlockIndex = blockIndex
 		chat.Data.Phone = fields[0]
 		chat.Data.Time = timestamp
@@ -1091,12 +1134,15 @@ func (service *GT06Service) ProcessMicChatForDebug(pszMsg []byte) bool {
 				fileFinished = true
 				fileData = chat.Data.Data[0: chat.Data.recvSized]
 			}
-		}else {//包index不匹配
-			ret = false
 		}
 	}
 
 	DeviceChatTaskTableLock.Unlock()
+
+	resp := &ResponseItem{CMD_AP34,  service.makeReplyMsg(false, service.makeDeviceChatAckMsg(
+		fields[0], fields[1], fields[2], fields[3], fields[4], 1), makeId())}
+	service.rspList = append(service.rspList, resp)
+
 
 	if fileFinished {
 		filePathDir := fmt.Sprintf("/usr/share/nginx/html/tracker/web/upload/minichat/watch/%d",
@@ -1104,10 +1150,14 @@ func (service *GT06Service) ProcessMicChatForDebug(pszMsg []byte) bool {
 		os.MkdirAll(filePathDir, 0755)
 		filePath := fmt.Sprintf("%s/%d.amr", filePathDir, fileId)
 		ioutil.WriteFile(filePath, fileData[0: ], 0666)
-		DeviceChatTaskTableLock.Lock()
-		chatTasks, _ :=DeviceChatTaskTable[service.imei]
-		delete(chatTasks, fileId)
-		DeviceChatTaskTableLock.Unlock()
+
+		//DeviceChatTaskTableLock.Lock()
+		//chatTasks, _ :=DeviceChatTaskTable[service.imei]
+		//delete(chatTasks, fileId)
+		//DeviceChatTaskTableLock.Unlock()
+
+		//通知APP有新的微聊信息。。。
+		//service.NotifyAppWithNewLocation()
 	}
 
 	//// for test

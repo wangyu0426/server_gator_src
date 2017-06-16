@@ -134,7 +134,10 @@ func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 }
 
 func login(c *AppConnection, username, password string, isRegister bool) bool {
-	urlRequest := "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+	urlRequest := "http://127.0.0.1/tracker/web/index.php?r=app/auth/"
+	if svrctx.Get().IsDebugLocal {
+		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+	}
 	reqType := "login"
 	if isRegister {
 		reqType = "register"
@@ -306,6 +309,26 @@ func queryIsAdmin(imei, userName string) (bool, bool, string, error) {
 	}
 
 	if usersCount == 0 {
+		if deviceRecId == "" {
+			//没有人添加过，此时要查询出设备recid
+			strSQL := fmt.Sprintf("select recid from watchinfo where imei='%s' ", imei)
+			logging.Log("SQL: " + strSQL)
+			rowsDeviceRecid, err := svrctx.Get().MySQLPool.Query(strSQL)
+			if err != nil {
+				logging.Log(fmt.Sprintf("[%s] query watchinfo recid  in db failed, %s", imei, err.Error()))
+				return false, false, "", err
+			}
+
+			for rowsDeviceRecid.Next(){
+				err = rowsDeviceRecid.Scan(&deviceRecId)
+				if err != nil {
+					logging.Log(fmt.Sprintf("[%s] query watchinfo recid  scan result failed, %s", imei, err.Error()))
+					return false, false, "", err
+				}
+				break
+			}
+		}
+
 		return true, matched, deviceRecId, nil
 	}else {
 		return false, matched, deviceRecId, nil
@@ -425,7 +448,6 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 				proto.DeviceInfoListLock.Lock()
 				deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 				if ok && deviceInfo != nil {
-					deviceInfo.VerifyCode = newVerifycode
 					for i := 0; i < len(deviceInfo.Family); i++ {
 						if len(deviceInfo.Family[i].Phone) == 0 {//空号码，没有被使用
 							deviceInfo.Family[i].Phone = params.MySimID
@@ -449,8 +471,8 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 							"PhoneNumbers='%s', TimeZone='%s', VerifyCode='%s'  where IMEI='%s' ", params.OwnerName, params.DeviceSimCountryCode,
 							phoneNumbers, params.TimeZone, newVerifycode, params.Imei)
 					} else {
-						strSqlUpdateDeviceInfo = fmt.Sprintf("update watchinfo set PhoneNumbers='%s', VerifyCode='%s' ",
-							phoneNumbers, newVerifycode)
+						strSqlUpdateDeviceInfo = fmt.Sprintf("update watchinfo set PhoneNumbers='%s', VerifyCode='%s'   where IMEI='%s' ",
+							phoneNumbers, newVerifycode, params.Imei)
 					}
 
 					logging.Log("SQL: " + strSqlUpdateDeviceInfo)
@@ -460,6 +482,13 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 						result.ErrCode = 500
 						result.ErrMsg = "server failed to update db"
 					}else{
+						proto.DeviceInfoListLock.Lock()
+						deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+						if ok && deviceInfo != nil {
+							deviceInfo.VerifyCode = newVerifycode
+						}
+						proto.DeviceInfoListLock.Unlock()
+
 						strSqlInsertDeviceUser :=  fmt.Sprintf("insert into vehiclesinuser (userid, vehid, FamilyNumber, Name, " +
 							"CountryCode)  values('%s', '%s', '%s', '%s', '%s') ", params.UserId, deviceRecId, params.MySimID,
 							params.MyName, params.MySimCountryCode )

@@ -56,6 +56,7 @@ type ServerContext struct {
 	MySQLPool *sql.DB  `json:"-"`
 	UseGoogleMap  bool
 	IsDebug  bool
+	IsDebugLocal  bool
 
 	AppServerChan chan *proto.AppMsgData  `json:"-"`
 	TcpServerChan chan *proto.MsgData `json:"-"`
@@ -139,7 +140,11 @@ func init()  {
 		os.Exit(-1)
 	}
 
-	serverCtx.HttpServerName = "http://192.168.3.97"
+	if serverCtx.IsDebugLocal {
+		serverCtx.HttpServerName = "http://192.168.3.97"
+	}
+
+	fmt.Println("serverCtx.HttpServerName: ", serverCtx.HttpServerName)
 
 	//创建postgresql连接池
 	var err error

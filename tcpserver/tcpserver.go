@@ -248,13 +248,13 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 
 		msg := &proto.MsgData{}
 		msg.Header.Header.Version = proto.MSG_HEADER_VER_EX
-		msg.Header.Header.Size = bufSize
+		msg.Header.Header.Size = dataSize
 		msg.Header.Header.From = proto.MsgFromDeviceToTcpServer
 		msg.Header.Header.ID = proto.NewMsgID()
 		msg.Header.Header.Imei = imei
 		msg.Header.Header.Cmd = proto.IntCmd(cmd)
 		msg.Data = make([]byte, n)
-		copy(msg.Data, dataBuf[0: n]) //不包含头部24字节
+		copy(msg.Data, dataBuf[0: n]) //不包含头部28字节
 		if  msg.Header.Header.Cmd ==  proto.DRT_SEND_MINICHAT {
 			msg.Header.Header.Status = 1
 		}else{

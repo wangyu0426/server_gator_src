@@ -48,6 +48,8 @@ const (
 	DRT_MIN = iota
 
 	DRT_SYNC_TIME       // 同BP00，手表请求对时
+	DRT_SEND_COST       // 同BP17，手表上报账户费用、余额信息
+	DRT_SEND_TEL_STATICS      // 同BP24，手表上报短信条数、通话时长
 	DRT_SEND_LOCATION      // 同BP30，手表上报定位(报警)数据
 	DRT_DEVICE_LOGIN    	   // 同BP31，手表登录服务器
 	DRT_DEVICE_ACK	    	   // 同BP04，手表对服务器请求的应答
@@ -79,6 +81,7 @@ const (
 	 CMD_AP14
 	 CMD_AP30
 	 CMD_AP31
+	 CMD_AP34
 
 	 CMD_ACK
  )
@@ -88,6 +91,8 @@ const (
 var commands = []string{
 	"",
 	"BP00",
+	"BP17",
+	"BP24",
 	"BP30",
 	"BP31",
 	"BP04",
@@ -273,6 +278,8 @@ const (
 	MAX_FAMILY_MEMBER_NUM = 13
 )
 
+var	ReloadEPOFileName 		= "epo"
+
 var	ModelFieldName 			= "Model"
 
 var	AvatarFieldName 			= "Avatar"
@@ -313,6 +320,7 @@ var AddDeviceOKAckCmdName  	= AddDeviceCmdName + CmdOKTail +  CmdAckTail
 
 var DeleteDeviceCmdName  			= "delete-device"
 var DeleteDeviceAckCmdName  		= DeleteDeviceCmdName + CmdAckTail
+
 
 type SafeZone struct {
 	ZoneID int32
@@ -517,7 +525,7 @@ func init()  {
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()
-	LoadEPOFromFile()
+	LoadEPOFromFile(false)
 	//utcNow := time.Now().UTC()
 	//iCurrentGPSHour := utc_to_gps_hour(utcNow.Year(), int(utcNow.Month()),utcNow.Day(), utcNow.Hour())
 	//segment := (uint32(iCurrentGPSHour) - StartGPSHour) / 6
@@ -632,16 +640,24 @@ func GetTimeZone(uiIP uint32) int32 {
 	return 0
 }
 
-func LoadEPOFromFile()  {
+func LoadEPOFromFile(reload bool) error {
 
 	mtk30,err := os.Open("./EPO/MTK30.EPO")
 	if err != nil {
+		if reload {
+			return err
+		}
+
 		panic(err)
 	}
 	defer mtk30.Close()
 
 	epo36h, err := os.OpenFile("./EPO/36H.EPO", os.O_CREATE | os.O_WRONLY | os.O_TRUNC, 0666)
 	if err != nil {
+		if reload {
+			return err
+		}
+
 		panic(err)
 	}
 	defer epo36h.Close()
@@ -666,6 +682,8 @@ func LoadEPOFromFile()  {
 	EpoInfoListLock.Lock()
 	EPOInfoList = tmpEPOInfoList
 	EpoInfoListLock.Unlock()
+
+	return nil
 }
 
 func parseUint8Array(data interface{}) string {

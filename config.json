@@ -37,5 +37,6 @@
     },
 
     "UseGoogleMap":true,
-    "IsDebug":true
+    "IsDebug":true,
+    "IsDebugLocal":true
 }
