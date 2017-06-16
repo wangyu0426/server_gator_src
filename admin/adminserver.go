@@ -7,6 +7,18 @@ import (
 	"../proto"
 )
 
+func init()  {
+	//cmd := "cmd"
+	//switch cmd {
+	//case "cmd":
+	//	fmt.Println("1")
+	//	break
+	//	fmt.Println("2")
+	//}
+	//
+	//fmt.Println("3")
+}
+
 func AdminServerLoop(exitServerFunc func())  {
 	adminsvr := redeo.NewServer(&redeo.Config{Addr:  svrctx.Get().MasterListenAddrPort})
 	adminsvr.HandleFunc("ping", func(out *redeo.Responder, _ *redeo.Request) error {
@@ -14,12 +26,75 @@ func AdminServerLoop(exitServerFunc func())  {
 		return nil
 	})
 
-	adminsvr.HandleFunc("reload", func(out *redeo.Responder, in *redeo.Request) error {
-		if len(in.Args) == 0 {
-			out.WriteInlineString("nil")
+	adminsvr.HandleFunc("test", func(out *redeo.Responder, in *redeo.Request) error {
+		//"test cmd data"
+		//"test epo imei"
+		//"test voice imei filename"
+		//"test photo imei filename"
+
+		if len(in.Args) != 2 && len(in.Args) != 3 {
+			out.WriteInlineString("bad args")
 			return nil
 		}
 
+		testType := in.Args[0]
+		result := "ok"
+
+		switch testType {
+		case "cmd":
+			data := in.Args[1]
+			//(003B357593060153353AP01221.18.79.110#123,0000000000000001)
+			if data[0] != '(' || data[len(data) - 1] != ')' {
+				result = "bad data format, must begin with ( and end with )"
+				break
+			}
+
+			size := proto.Str2Num(data[1: 5], 16)
+			if int(size) != len(data) {
+				result = "bad data len"
+				break
+			}
+
+			imei := proto.Str2Num(data[5: 20], 10)
+			cmd := data[20: 24]
+			id := uint64(0)
+			requireAck := false
+			if cmd == "AP01" ||  //set server ip, port
+				cmd == "AP02" ||
+				cmd == "AP03" ||
+				cmd == "AP05" ||
+				cmd == "AP06" ||
+				cmd == "AP07" ||
+				cmd == "AP08" ||
+				cmd == "AP09" ||
+				cmd == "AP05" ||
+				cmd == "AP14" ||
+				cmd == "AP15" ||
+				cmd == "AP16" ||
+				cmd == "AP18" ||
+				cmd == "AP19" ||
+				cmd == "AP20" ||
+				cmd == "AP21" ||
+				cmd == "AP22" ||
+				cmd == "AP24" ||
+				cmd == "AP25"{
+				id = proto.Str2Num(data[len(data) - 17: len(data) - 1], 16)
+				requireAck = true
+			}
+
+			fmt.Println(imei, cmd, id)
+			svrctx.Get().TcpServerChan <- proto.MakeReplyMsg(imei, requireAck, []byte(data), id)
+		case "epo":
+		case "voice":
+		case "photo":
+		default:
+		}
+
+		out.WriteInlineString(result)
+		return nil
+	})
+
+	adminsvr.HandleFunc("reload", func(out *redeo.Responder, in *redeo.Request) error {
 		if len(in.Args) != 1 {
 			out.WriteInlineString("bad args")
 			return nil

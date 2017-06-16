@@ -249,6 +249,17 @@ func HandleTcpRequest(reqCtx RequestContext)  bool{
 	return true
 }
 
+func MakeReplyMsg(imei uint64, requireAck bool, data []byte, id uint64) *MsgData{
+	msg := MsgData{}
+	msg.Data = data
+	msg.Header.Header.Imei = imei
+	msg.Header.Header.ID = id
+	if requireAck {
+		msg.Header.Header.Status = 1
+	}
+	return &msg
+}
+
 func (service *GT06Service)makeReplyMsg(requireAck bool, data []byte, id uint64) *MsgData{
 	msg := MsgData{}
 	msg.Data = data
@@ -282,14 +293,14 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	logging.Log("Get Input Msg: " + string(msg.Data))
 	logging.Log(fmt.Sprintf("imei: %d cmd: %s; go routines: %d", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd), runtime.NumGoroutine()))
 
-	DeviceInfoListLock.RLock()
-	_, ok := (*DeviceInfoList)[msg.Header.Header.Imei]
-	if ok == false {
-		DeviceInfoListLock.RUnlock()
-		logging.Log(fmt.Sprintf("invalid deivce, imei: %d cmd: %s", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd)))
-		return false
-	}
-	DeviceInfoListLock.RUnlock()
+	//DeviceInfoListLock.RLock()
+	//_, ok := (*DeviceInfoList)[msg.Header.Header.Imei]
+	//if ok == false {
+	//	DeviceInfoListLock.RUnlock()
+	//	logging.Log(fmt.Sprintf("invalid deivce, imei: %d cmd: %s", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd)))
+	//	return false
+	//}
+	//DeviceInfoListLock.RUnlock()
 
 	ret := true
 	bufOffset := uint32(0)
@@ -304,7 +315,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		return false
 	}
 
-	if service.cmd == DRT_SYNC_TIME_ACK {
+	if service.cmd == DRT_SYNC_TIME_ACK {//增加更多的命令类型匹配对应的确认消息
 		msgIdForAck := Str2Num(string(msg.Data[0: 16]), 16)
 		resp := &ResponseItem{CMD_ACK,  service.makeAckParsedMsg(msgIdForAck)}
 		service.rspList = append(service.rspList, resp)
