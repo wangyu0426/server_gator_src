@@ -46,6 +46,7 @@ type RequestContext struct {
 	IP uint32
 	Port int
 	AvatarUploadDir string
+	MinichatUploadDir string
 	Pgpool *pgx.ConnPool
 	MysqlPool *sql.DB
 	WritebackChan chan *MsgData
@@ -278,15 +279,9 @@ func MakeReplyMsg(imei uint64, requireAck bool, data []byte, id uint64) *MsgData
 	return &msg
 }
 
+
 func (service *GT06Service)makeReplyMsg(requireAck bool, data []byte, id uint64) *MsgData{
-	msg := MsgData{}
-	msg.Data = data
-	msg.Header.Header.Imei = service.imei
-	msg.Header.Header.ID = id
-	if requireAck {
-		msg.Header.Header.Status = 1
-	}
-	return &msg
+	return MakeReplyMsg(service.imei, requireAck, data, id)
 }
 
 
@@ -892,6 +887,11 @@ func (service *GT06Service)makeDataBlockReplyMsg(block *DataBlock) []byte {
 }
 
 func (service *GT06Service)makeFileNumReplyMsg(fileType, chatNum int) []byte {
+	return MakeFileNumReplyMsg(service.imei, fileType, chatNum)
+}
+
+
+func MakeFileNumReplyMsg(imei uint64, fileType, chatNum int) []byte {
 	//(001B357593060153353AP1102)
 	cmd := ""
 	switch fileType {
@@ -902,7 +902,7 @@ func (service *GT06Service)makeFileNumReplyMsg(fileType, chatNum int) []byte {
 
 	}
 
-	body := fmt.Sprintf("%015dAP11,%s,%02d)", service.imei, cmd, chatNum)
+	body := fmt.Sprintf("%015dAP11,%s,%02d)", imei, cmd, chatNum)
 	size := fmt.Sprintf("(%04X", 5 + len(body))
 
 	return []byte(size + body)
@@ -1461,8 +1461,13 @@ func (service *GT06Service) ProcessRspAGPSAck(pszMsg []byte) bool {
 	}
 
 	//service.rspList = append(service.rspList, ...)
-	service.rspList = append(service.rspList, service.shardData("AP13", "", 0, epoTask.Data, int(blockIndex + 1))[0])
-	epoTask.BlockIndex = int(blockIndex + 1)
+	if int(blockIndex) == epoTask.BlockCount {
+		delete(EPOTaskTable, service.imei)
+	}else{
+		service.rspList = append(service.rspList, service.shardData("AP13", "", 0, epoTask.Data, int(blockIndex + 1))[0])
+		epoTask.BlockIndex = int(blockIndex + 1)
+	}
+
 	EPOTaskTableLock.Unlock()
 
 	// for test
@@ -1509,7 +1514,7 @@ func (service *GT06Service) ProcessPushMicChatAck(pszMsg []byte) bool {
 		return false
 	}
 
-	//timeId := Str2Num(fields[1], 10)
+	timeId := Str2Num(fields[1], 10)
 	blockCount := int(Str2Num(fields[2], 10))
 	blockIndex := int(Str2Num(fields[3], 10))
 	lastBlockOk := (fields[4][0] - '0')
@@ -1528,6 +1533,14 @@ func (service *GT06Service) ProcessPushMicChatAck(pszMsg []byte) bool {
 	AppSendChatListLock.Lock()
 	chatTask, ok  := AppSendChatList[service.imei]
 	if ok && chatTask != nil && len(*chatTask) > 0 {
+		if timeId != Str2Num((*chatTask)[0].Info.Content, 10) {
+			AppSendChatListLock.Unlock()
+			logging.Log(fmt.Sprintf("[%d] time id  is not matched, %d != %s",
+				service.imei, timeId, (*chatTask)[0].Info.Content))
+
+			return false
+		}
+
 		if  (*chatTask)[0].Data.BlockIndex != int(blockIndex){
 			AppSendChatListLock.Unlock()
 			logging.Log(fmt.Sprintf("[%d] block count or index is not invalid, %d, %d for %d, %d",
@@ -1536,12 +1549,20 @@ func (service *GT06Service) ProcessPushMicChatAck(pszMsg []byte) bool {
 
 			return false
 		}
-		service.rspList = append(service.rspList, service.shardData("AP12", (*chatTask)[0].Data.Phone,
-			(*chatTask)[0].Data.Time, (*chatTask)[0].Data.Data, blockIndex + 1)[0])
-		(*chatTask)[0].Data.BlockIndex = blockIndex + 1
+
 		if(blockIndex == (*chatTask)[0].Data.BlockCount) {
 			//确认完毕，删除该微聊
-			(*chatTask) = (*chatTask)[1:]
+			if len(*chatTask) > 1 {
+				(*chatTask) = (*chatTask)[1:]
+			}else{
+				AppSendChatList[service.imei] = &[]*ChatTask{}
+			}
+			//service.needSendChatNum = true
+		}else{
+			service.needSendChatNum = false
+			service.rspList = append(service.rspList, service.shardData("AP12", (*chatTask)[0].Data.Phone,
+				(*chatTask)[0].Data.Time, (*chatTask)[0].Data.Data, blockIndex + 1)[0])
+			(*chatTask)[0].Data.BlockIndex = blockIndex + 1
 		}
 	}
 	AppSendChatListLock.Unlock()
@@ -1612,12 +1633,17 @@ func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
 			return false
 		}
 
-		service.rspList = append(service.rspList, service.shardData("AP23", (*appNewPhotoList)[0].Info.member.Phone,
-			(*appNewPhotoList)[0].Data.Time, (*appNewPhotoList)[0].Data.Data, blockIndex + 1)[0])
-		(*appNewPhotoList)[0].Data.BlockIndex = blockIndex + 1
 		if(blockIndex == (*appNewPhotoList)[0].Data.BlockCount) {
 			//确认完毕，删除该新头像通知信息
-			(*appNewPhotoList) = (*appNewPhotoList)[1:]
+			if len(*appNewPhotoList) > 1 {
+				(*appNewPhotoList) = (*appNewPhotoList)[1:]
+			}else{
+				AppNewPhotoList[service.imei] = &[]*PhotoSettingTask{}
+			}
+		}else{
+			service.rspList = append(service.rspList, service.shardData("AP23", (*appNewPhotoList)[0].Info.member.Phone,
+				(*appNewPhotoList)[0].Data.Time, (*appNewPhotoList)[0].Data.Data, blockIndex + 1)[0])
+			(*appNewPhotoList)[0].Data.BlockIndex = blockIndex + 1
 		}
 	}
 	AppNewPhotoListLock.Unlock()
@@ -1715,7 +1741,9 @@ func (service *GT06Service) ProcessRspChat() bool {
 	if service.reqCtx.GetChatDataFunc != nil {
 		chatData := service.reqCtx.GetChatDataFunc(service.imei, 0)
 		if len(chatData) > 0 {
-			voiceFileName :=fmt.Sprintf("/usr/share/nginx/html/tracker/web/upload/minichat/app/%d/%s.amr",
+			//voiceFileName :=fmt.Sprintf("/usr/share/nginx/html/tracker/web/upload/minichat/app/%d/%s.amr",
+			//	service.imei, chatData[0].Content)
+			voiceFileName :=fmt.Sprintf("%s%d/%s.amr", service.reqCtx.MinichatUploadDir,
 				service.imei, chatData[0].Content)
 
 			voice, chatReplyMsg := service.makeChatDataReplyMsg(voiceFileName,

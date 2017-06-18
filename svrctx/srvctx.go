@@ -260,6 +260,19 @@ func IsPhoneNumberInFamilyList(imei uint64, phone string) bool {
 	return isInvalid
 }
 
+
+func PushChatNum(imei uint64) bool {
+	chatData := GetChatData(imei, -1)
+	if len(chatData) > 0 {
+		//通知终端有聊天信息
+		serverCtx.TcpServerChan <- proto.MakeReplyMsg(imei, false,
+			proto.MakeFileNumReplyMsg(imei, proto.ChatContentVoice, len(chatData)),
+			proto.NewMsgID())
+	}
+
+	return true
+}
+
 func AddChatData(imei uint64, chatData proto.ChatInfo) {
 	chatTask := proto.ChatTask{Info: chatData}
 	proto.AppSendChatListLock.Lock()
@@ -271,6 +284,8 @@ func AddChatData(imei uint64, chatData proto.ChatInfo) {
 		*proto.AppSendChatList[imei] = append(*proto.AppSendChatList[imei], &chatTask)
 	}
 	proto.AppSendChatListLock.Unlock()
+
+	PushChatNum(imei)
 }
 
 func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
