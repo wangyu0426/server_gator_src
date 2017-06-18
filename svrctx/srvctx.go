@@ -220,31 +220,37 @@ func Get() *ServerContext {
 }
 
 
-func GetChatData(imei uint64)  []proto.ChatInfo {
+func GetChatData(imei uint64, index int)  []proto.ChatInfo {
 	chatData := []proto.ChatInfo{}
-	DeviceTableLock.RLock()
-	device, ok := DeviceTable[imei]
+	proto.AppSendChatListLock.RLock()
+	chatList, ok := proto.AppSendChatList[imei]
 	if ok {
-		if len(device.ChatCache) > 0 {
-			for _, chat := range device.ChatCache {
-				chatData = append(chatData, chat)
+		if len(*chatList) > 0 {
+			for i, chat := range *chatList {
+				if index == -1 ||  index == i {
+					chatData = append(chatData, (*chat).Info)
+				}
+
+				if index == i {
+					break
+				}
 			}
 		}
 	}
-	DeviceTableLock.RUnlock()
+	proto.AppSendChatListLock.RUnlock()
 
 	return chatData
 }
 
 func AddChatData(imei uint64, chatData proto.ChatInfo) {
-	DeviceTableLock.Lock()
-	_, ok := DeviceTable[imei]
+	chatTask := proto.ChatTask{Info: chatData}
+	proto.AppSendChatListLock.RLock()
+	chatList, ok := proto.AppSendChatList[imei]
 	if ok {
-		DeviceTable[imei].ChatCache = append(DeviceTable[imei].ChatCache, chatData)
+		*chatList = append(*chatList, &chatTask)
 	}else {
-		DeviceTable[imei] = &proto.DeviceCache{}
-		DeviceTable[imei].Imei = imei
-		DeviceTable[imei].ChatCache = append(DeviceTable[imei].ChatCache, chatData)
+		proto.AppSendChatList[imei] = &[]*proto.ChatTask{}
+		*proto.AppSendChatList[imei] = append(*proto.AppSendChatList[imei], &chatTask)
 	}
 	DeviceTableLock.Unlock()
 }

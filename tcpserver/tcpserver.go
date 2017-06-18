@@ -321,6 +321,7 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 			}
 
 			proto.HandleTcpRequest(proto.RequestContext{IsDebug: serverCtx.IsDebug, IP: c.IP, Port: c.Port,
+				AvatarUploadDir: serverCtx.HttpStaticDir + serverCtx.HttpStaticAvatarDir,
 				Pgpool: serverCtx.PGPool,
 				MysqlPool: serverCtx.MySQLPool,
 				WritebackChan: serverCtx.TcpServerChan,

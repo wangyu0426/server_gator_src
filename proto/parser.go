@@ -52,10 +52,12 @@ const (
 	DRT_SEND_TEL_STATICS      // 同BP24，手表上报短信条数、通话时长
 	DRT_SEND_LOCATION      // 同BP30，手表上报定位(报警)数据
 	DRT_DEVICE_LOGIN    	   // 同BP31，手表登录服务器
-	DRT_DEVICE_ACK	    	   // 同BP04，手表对服务器请求的应答
 	DRT_MONITOR_ACK	   // 同BP05，手表对服务器请求电话监听的应答
 	DRT_SEND_MINICHAT      // 同BP34，手表发送语音微聊
-	DRT_FETCH_MINICHAT    // 同BP11，手表获取语音微聊
+	DRT_FETCH_FILE		  // 同BP11，手表获取语音微聊或亲情号图片
+	DRT_PUSH_MINICHAT_ACK         // 同BP12，手表回复微聊确认包
+	DRT_EPO_ACK			  // 同BP13，手表回复epo数据确认包
+	DRT_PUSH_PHOTO_ACK         // 同BP23，手表回复头像确认包
 	DRT_FETCH_AGPS        	  // 同BP32，手表获取AGPS数据
 	DRT_HEART_BEAT       	  // 同BP33，手表发送状态数据
 
@@ -78,6 +80,7 @@ const (
 	 CMD_AP11
 	 CMD_AP12
 	 CMD_AP13
+	 CMD_AP23
 	 CMD_AP14
 	 CMD_AP30
 	 CMD_AP31
@@ -95,10 +98,12 @@ var commands = []string{
 	"BP24",
 	"BP30",
 	"BP31",
-	"BP04",
 	"BP05",
 	"BP34",
 	"BP11",
+	"BP12",
+	"BP13",
+	"BP23",
 	"BP32",
 	"BP33",
 
@@ -345,6 +350,7 @@ type FamilyMember struct {
 	Phone string
 	Name string
 	Avatar string
+	//NewAvatar bool
 	Type int
 	Index int
 }
@@ -522,6 +528,11 @@ func init()  {
 	//fmt.Println(DM_MIN , DM_WH01, DM_GT03, DM_GTI3 , DM_GT06, DM_MAX)
 	//fmt.Println(DRT_MIN,  DRT_SYNC_TIME)
 	//fmt.Println(MsgFromDeviceToTcpServer, CMD_AP00,  DEVICE_DATA_LOCATION,  ChatFromDeviceToApp,)
+	//now := time.Now()
+	//fmt.Println(now.UnixNano(),  now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), now.Second(), now.Nanosecond())
+	//fmt.Println(now.UnixNano(),  now.Format("20060102150405"), now.Nanosecond())
+	//id := fmt.Sprintf("%s%d", now.Format("20060102150405"), now.Nanosecond())
+	//fmt.Println(now.UnixNano(),  id[2:18])
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()

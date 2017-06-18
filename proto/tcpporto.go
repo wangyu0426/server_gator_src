@@ -45,6 +45,7 @@ type RequestContext struct {
 	IsDebug bool
 	IP uint32
 	Port int
+	AvatarUploadDir string
 	Pgpool *pgx.ConnPool
 	MysqlPool *sql.DB
 	WritebackChan chan *MsgData
@@ -52,7 +53,7 @@ type RequestContext struct {
 	Msg *MsgData
 	GetDeviceDataFunc  func (imei uint64, pgpool *pgx.ConnPool)  LocationData
 	SetDeviceDataFunc  func (imei uint64, updateType int, deviceData LocationData)
-	GetChatDataFunc  func (imei uint64)  []ChatInfo
+	GetChatDataFunc  func (imei uint64, index int)  []ChatInfo
 	AddChatDataFunc  func (imei uint64, chatData ChatInfo)
 }
 
@@ -128,16 +129,24 @@ const (
 	ChatFromDeviceToApp = iota
 	ChatFromAppToDevice
 )
+const (
+	ChatContentVoice = iota
+	ChatContentPhoto
+	ChatContentVideo
+	ChatContentText
+	ChatContentHyperLink
+)
+
 
 type ChatInfo struct {
-	DateTime uint64
+	DateTime uint64 //客户端的发送时间
 	VoiceMilisecs int
 	SenderType uint8
 	Sender string
 	ReceiverType uint8
 	Receiver string
 	ContentType uint8
-	Content string
+	Content string //如contentType是文件类型，则Content是以时间戳id命名的文件名
 	Flags  int
 }
 
@@ -174,7 +183,7 @@ type DeviceCache struct {
 	Imei uint64
 	CurrentLocation LocationData
 	AlarmCache []LocationData
-	ChatCache []ChatInfo
+	//ChatCache []ChatInfo
 	ResponseCache []ResponseItem
 }
 
@@ -188,6 +197,9 @@ type GT06Service struct {
 	needSendChatNum bool
 	needSendChat bool
 	reqChatInfoNum int
+	needSendPhotoNum bool
+	needSendPhoto bool
+	reqPhotoInfoNum int
 	getSameWifi bool
 	wifiInfoList [MAX_WIFI_NUM]WIFIInfo
 	wiFiNum uint16
@@ -222,8 +234,14 @@ const EARTH_RADIUS = 6378.137
 var DeviceChatTaskTable = map[uint64]map[uint64]*ChatTask{}
 var DeviceChatTaskTableLock = &sync.RWMutex{}
 
-var EPOTaskTable = map[uint64]map[uint64]*DataBlock{}
+var EPOTaskTable = map[uint64]*DataBlock{}
 var EPOTaskTableLock = &sync.RWMutex{}
+
+var AppSendChatList = map[uint64]*[]*ChatTask{}
+var AppSendChatListLock = &sync.RWMutex{}
+
+var AppNewPhotoList = map[uint64]*[]*PhotoSettingTask{}
+var AppNewPhotoListLock = &sync.RWMutex{}
 
 func HandleTcpRequest(reqCtx RequestContext)  bool{
 	service := &GT06Service{reqCtx: reqCtx}
@@ -285,6 +303,8 @@ func (service *GT06Service)makeAckParsedMsg(id uint64) *MsgData{
 func (service *GT06Service)PreDoRequest() bool  {
 	service.wifiZoneIndex = -1
 	service.needSendLocation = false
+	service.needSendChatNum = true
+	service.needSendPhotoNum = true
 	return true
 }
 
@@ -293,14 +313,14 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	logging.Log("Get Input Msg: " + string(msg.Data))
 	logging.Log(fmt.Sprintf("imei: %d cmd: %s; go routines: %d", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd), runtime.NumGoroutine()))
 
-	//DeviceInfoListLock.RLock()
-	//_, ok := (*DeviceInfoList)[msg.Header.Header.Imei]
-	//if ok == false {
-	//	DeviceInfoListLock.RUnlock()
-	//	logging.Log(fmt.Sprintf("invalid deivce, imei: %d cmd: %s", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd)))
-	//	return false
-	//}
-	//DeviceInfoListLock.RUnlock()
+	DeviceInfoListLock.RLock()
+	_, ok := (*DeviceInfoList)[msg.Header.Header.Imei]
+	if ok == false {
+		DeviceInfoListLock.RUnlock()
+		logging.Log(fmt.Sprintf("invalid deivce, imei: %d cmd: %s", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd)))
+		return false
+	}
+	DeviceInfoListLock.RUnlock()
 
 	ret := true
 	bufOffset := uint32(0)
@@ -390,11 +410,11 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		//BP31, 设备登录服务器消息
 		resp := &ResponseItem{CMD_AP31,  service.makeReplyMsg(false, service.makeDeviceLoginReplyMsg(), makeId())}
 		service.rspList = append(service.rspList, resp)
-	}else if service.cmd == DRT_DEVICE_ACK {
-		//BP04, 手表对服务器请求的应答
-		if strings.Contains(string(msg.Data),  "AP11") {
-			service.needSendChatNum = false
-		}
+	//}else if service.cmd == DRT_DEVICE_ACK {
+	//	//BP04, 手表对服务器请求的应答
+	//	if strings.Contains(string(msg.Data),  "AP11") {
+	//		service.needSendChatNum = false
+	//	}
 	}else if service.cmd == DRT_MONITOR_ACK {
 		//BP05, 手表对服务器请求电话监听的应答
 	}else if service.cmd == DRT_SEND_MINICHAT {
@@ -405,28 +425,48 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		}
 
 		bufOffset++
-		ret = true
-		if service.reqCtx.IsDebug {
-			ret = service.ProcessMicChat(msg.Data[bufOffset: ])
-		}else{
-			ret = service.ProcessMicChat(msg.Data[bufOffset: ])
-		}
-
+		ret = service.ProcessMicChat(msg.Data[bufOffset: ])
 		if ret == false {
 			logging.Log("ProcessMicChat Error")
 			return false
 		}
-	}else if service.cmd == DRT_FETCH_MINICHAT {
-		//BP11, 手表获取未读微聊数目
-		service.needSendChat = true
-		service.needSendChatNum = true
-		service.reqChatInfoNum = 0
-		service.reqChatInfoNum = int(msg.Data[bufOffset] - '0') * 10 + int(msg.Data[bufOffset + 1]- '0')
+	}else if service.cmd == DRT_PUSH_MINICHAT_ACK {
+		//BP12,手表发送微聊确认包
+		bufOffset++
+		ret = service.ProcessPushMicChatAck(msg.Data[bufOffset: ])
+		if ret == false {
+			logging.Log("ProcessPushMicChatAck Error")
+			return false
+		}
+	}else if service.cmd == DRT_PUSH_PHOTO_ACK {
+		//BP23,手表发送头像确认包
+		bufOffset++
+		ret = service.ProcessPushPhotoAck(msg.Data[bufOffset: ])
+		if ret == false {
+			logging.Log("ProcessPushPhotoAck Error")
+			return false
+		}
+	}else if service.cmd == DRT_FETCH_FILE {
+		//BP11, 手表获取未读微聊或亲情号头像设置数目
+		bufOffset++
+		ret = service.ProcessRspFetchFile(msg.Data[bufOffset: ])
+		if ret == false {
+			logging.Log("ProcessRspFetchFile Error")
+			return false
+		}
 	}else if service.cmd == DRT_FETCH_AGPS {
 		//BP32, 手表请求EPO数据
 		ret = service.ProcessRspAGPSInfo()
 		if ret == false {
 			logging.Log("ProcessRspAGPSInfo Error")
+			return  false
+		}
+	}else if service.cmd == DRT_EPO_ACK {
+		//BP13, 手表回复EPO数据确认包
+		bufOffset++
+		ret = service.ProcessRspAGPSAck(msg.Data[bufOffset: ])
+		if ret == false {
+			logging.Log("ProcessRspAGPSAck Error")
 			return  false
 		}
 	}else if service.cmd == DRT_HEART_BEAT {
@@ -501,6 +541,26 @@ func (service *GT06Service)DoResponse() []*MsgData  {
 
 	if service.needSendChatNum {
 		service.PushChatNum()
+	}
+
+	if service.needSendPhoto {
+		service.ProcessRspPhoto()
+		//data := make([]byte, 200*1024)
+		//offset := 0
+		//for  _, respCmd := range service.rspList {
+		//	if respCmd.rspCmdType == CMD_AP12 {
+		//		fields := strings.SplitN(string(respCmd.data), ",", 7)
+		//		size := int(Str2Num(fields[5], 10))
+		//		copy(data[offset: offset + size], fields[6][0: size])
+		//		offset += size
+		//	}
+		//}
+		//
+		//ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
+	}
+
+	if service.needSendPhoto {
+		service.PushNewPhotoNum()
 	}
 
 	//offset, bufSize := 0, 256
@@ -741,25 +801,26 @@ func (service *GT06Service)makeDeviceChatAckMsg(phone, datatime, milisecs,
 }
 
 
-func (service *GT06Service)makeChatDataReplyMsg(voiceFile, phone string, datatime uint64) []*ResponseItem {
+func (service *GT06Service)makeChatDataReplyMsg(voiceFile, phone string, datatime uint64,
+	index int) ([]byte, []*ResponseItem) {
 	//(03B5357593060153353AP12,1,170413163300,6,1,900,数据)
 
 	//读取语音文件，并分包
 	voice, err := ioutil.ReadFile(voiceFile)
 	if err != nil {
 		logging.Log("read voice file failed, " + voiceFile + "," + err.Error())
-		return nil
+		return nil, nil
 	}
 
 	if len(voice) == 0 {
 		logging.Log("voice file empty, 0 bytes, ")
-		return nil
+		return nil, nil
 	}
 
-	return service.shardData("AP12", phone, datatime, voice)
+	return (voice), service.shardData("AP12", phone, datatime, voice, index)
 }
 
-func (service *GT06Service)shardData(cmd, phone string, datatime uint64, data []byte) []*ResponseItem {
+func (service *GT06Service)shardData(cmd, phone string, datatime uint64, data []byte, index int) []*ResponseItem {
 	resps := []*ResponseItem{}
 	bufOffset, iReadLen := 0, len(data)
 	blockSize := DATA_BLOCK_SIZE
@@ -782,11 +843,15 @@ func (service *GT06Service)shardData(cmd, phone string, datatime uint64, data []
 		intCmd := CMD_AP12
 		if cmd == "AP13" {
 			intCmd = CMD_AP13
+		}else if cmd == "AP23" {
+			intCmd = CMD_AP23
 		}
 
-		resp := &ResponseItem{uint16(intCmd),  service.makeReplyMsg(true,
-			service.makeDataBlockReplyMsg(block), block.MsgId)}
-		resps = append(resps, resp)
+		if index == -1 ||  index == packIndex {
+			resp := &ResponseItem{uint16(intCmd),  service.makeReplyMsg(false,
+				service.makeDataBlockReplyMsg(block), block.MsgId)}
+			resps = append(resps, resp)
+		}
 
 		bufOffset += packSize
 		countLen -= packSize
@@ -806,9 +871,14 @@ func (service *GT06Service)makeDataBlockReplyMsg(block *DataBlock) []byte {
 	}else if block.Cmd == "AP13" {
 		body = fmt.Sprintf("%015d%s,%d,%d,%d,", block.Imei, block.Cmd,
 			block.BlockCount, block.BlockIndex, block.BlockSize)
+	}else if block.Cmd == "AP23" {
+		//(03B2357593060153353AP23,13026618172,6,1,700,数据)
+		body = fmt.Sprintf("%015d%s,%s,%d,%d,%d,", block.Imei, block.Cmd, block.Phone,
+			block.BlockCount, block.BlockIndex, block.BlockSize)
 	}
 
-	tail := fmt.Sprintf(",%016X)", block.MsgId)
+	//tail := fmt.Sprintf(",%016X)", block.MsgId)
+	tail := ")"
 	sizeNum := 5 + len(body) + len(block.Data) + len(tail)
 	size := fmt.Sprintf("(%04X", sizeNum)
 
@@ -821,9 +891,18 @@ func (service *GT06Service)makeDataBlockReplyMsg(block *DataBlock) []byte {
 	return data
 }
 
-func (service *GT06Service)makeChatNumReplyMsg(chatNum int) []byte {
+func (service *GT06Service)makeFileNumReplyMsg(fileType, chatNum int) []byte {
 	//(001B357593060153353AP1102)
-	body := fmt.Sprintf("%015dAP11%02d)", service.imei, chatNum)
+	cmd := ""
+	switch fileType {
+	case ChatContentVoice:
+		cmd = "AP12"
+	case ChatContentPhoto:
+		cmd = "AP23"
+
+	}
+
+	body := fmt.Sprintf("%015dAP11,%s,%02d)", service.imei, cmd, chatNum)
 	size := fmt.Sprintf("(%04X", 5 + len(body))
 
 	return []byte(size + body)
@@ -833,6 +912,12 @@ func makeId()  (uint64) {
 	id := time.Now().UnixNano() / int64(time.Millisecond ) * 10
 	//fmt.Println("make id: ", uint64(id))
 	return uint64(id)
+}
+
+func MakeTimestampIdString()  string {
+	now := time.Now()
+	id := fmt.Sprintf("%s%d", now.Format("20060102150405"), now.Nanosecond())
+	return id[2:18]
 }
 
 func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool {
@@ -1231,15 +1316,47 @@ func utc_to_gps_hour (iYr, iMo, iDay, iHr int)  int {
 	return  (iDaysElapsed * 24 + iHr)
 }
 
+func (service *GT06Service) ProcessRspFetchFile(pszMsg []byte) bool {
+	//(00250103357593060153353BP11,AP12,01)  chat
+	//(00250103357593060153353BP11,AP23,01)  photo
+	fields := strings.SplitN(string(pszMsg), ",", 2)
+	if len(fields) != 2 {
+		logging.Log(fmt.Sprintf("[%d] cmd field count %d is bad", service.imei, len(fields)))
+		return false
+	}
+
+	if fields[0] != "AP12" && fields[0] != "AP23" {
+		logging.Log(fmt.Sprintf("[%d] cmd type %s is bad", service.imei, fields[0]))
+		return false
+	}
+
+	fileNum := Str2Num(fields[1][0:2], 10)
+	if fileNum  != 1  {
+		logging.Log(fmt.Sprintf("[%d] require file count  %d is bad", service.imei, fileNum))
+		return false
+	}
+
+	if fields[0] ==  "AP12" { //chat
+		service.needSendChat = true
+		service.needSendChatNum = false
+		service.reqChatInfoNum = int(fileNum)
+	}else if  fields[0] ==  "AP23" {
+		//photo
+		service.needSendPhoto = true
+		service.needSendPhotoNum = false
+		service.reqPhotoInfoNum = int(fileNum)
+	}
+
+	return true
+}
 
 func (service *GT06Service) ProcessRspAGPSInfo() bool {
-	//需要断点续传的支持
 	utcNow := time.Now().UTC()
 	iCurrentGPSHour := utc_to_gps_hour(utcNow.Year(), int(utcNow.Month()),utcNow.Day(), utcNow.Hour())
 	segment := (uint32(iCurrentGPSHour) - StartGPSHour) / 6
 	if service.reqCtx.IsDebug == false && ( (segment < 0) || (segment >= MTKEPO_SEGMENT_NUM)) {
 		logging.Log(fmt.Sprintf("[%d] EPO segment invalid, %d", service.imei, segment))
-		return false
+		//return false
 	}
 
 	iReadLen := MTKEPO_DATA_ONETIME * MTKEPO_RECORD_SIZE * MTKEPO_SV_NUMBER
@@ -1252,7 +1369,33 @@ func (service *GT06Service) ProcessRspAGPSInfo() bool {
 	}
 	EpoInfoListLock.RUnlock()
 
-	service.rspList = append(service.rspList, service.shardData("AP13", "", 0, data)...)
+	//接收到epo请求，首先清空之前的任务表，
+	// 然后重建任务表，并发送第一包
+	isFoundTask := false
+	//epoData := &ChatTask{}
+	EPOTaskTableLock.Lock()
+	epoTask, isFoundTask := EPOTaskTable[service.imei]
+	if isFoundTask == false { //首先查找是否存在该IMEI对应的任务，
+		// 不存在，则创建
+		epoTask = &DataBlock{}
+		EPOTaskTable[service.imei] = epoTask
+	}
+
+	//如存在，则直接覆盖之前的任务状态和数据
+	epoTask.Imei = service.imei
+	epoTask.Cmd = StringCmd(DRT_FETCH_AGPS)
+	epoTask.BlockIndex = 1
+
+	epoTask.BlockCount = GetBlockCount(len(data))
+	epoTask.BlockSize = GetBlockSize(len(data), 1)
+
+	epoTask.Data = data
+	epoTask.recvSized = 0
+
+	EPOTaskTableLock.Unlock()
+
+	//service.rspList = append(service.rspList, ...)
+	service.rspList = append(service.rspList, service.shardData("AP13", "", 0, data, 1)[0])
 
 	// for test
 	//{
@@ -1274,37 +1417,332 @@ func (service *GT06Service) ProcessRspAGPSInfo() bool {
 	return true
 }
 
-func (service *GT06Service) ProcessRspChat() bool {
-	//需要断点续传的支持
-	if service.reqCtx.GetChatDataFunc != nil {
-		chatData := service.reqCtx.GetChatDataFunc(service.imei)
-		for _, chat := range chatData {
-			if chat.Flags == 0 {  //未读
-				voiceFileName :=fmt.Sprintf("/usr/share/nginx/html/tracker/web/upload/minichat/app/%d/%d.amr",
-					service.imei, chat.DateTime)
 
-				service.rspList = append(service.rspList, service.makeChatDataReplyMsg(voiceFileName, chat.Sender, chat.DateTime)...)
-			}
-		}
+func (service *GT06Service) ProcessRspAGPSAck(pszMsg []byte) bool {
+	isFoundTask := false
+	//epoData := &ChatTask{}
+	EPOTaskTableLock.Lock()
+	epoTask, isFoundTask := EPOTaskTable[service.imei]
+	if isFoundTask == false { //首先查找是否存在该IMEI对应的任务，
+		// 不存在，则出错，此时任务应该仍然存在，并且尚未完成
+		EPOTaskTableLock.Unlock()
+		return false
 	}
 
+	//如存在，则继续之前的任务状态和数据发送
+	//首先解析出包序号和确认状态
+	fields := strings.SplitN(string(pszMsg), ",", 3)
+	if len(fields) != 3 {
+		//字段个数不对
+		EPOTaskTableLock.Unlock()
+		return false
+	}
+
+	if len(fields[2]) != 2 || (fields[2][0] != '0' && fields[2][0] != '1') {
+		EPOTaskTableLock.Unlock()
+		return false
+	}
+
+	blockCount := Str2Num(fields[0], 10)
+	blockIndex := Str2Num(fields[1], 10)
+	if blockCount <= 0 || blockIndex <= 0 || blockCount < blockIndex {
+		EPOTaskTableLock.Unlock()
+		return false
+	}
+
+	//service.rspList = append(service.rspList, ...)
+	service.rspList = append(service.rspList, service.shardData("AP13", "", 0, epoTask.Data, int(blockIndex + 1))[0])
+	EPOTaskTableLock.Unlock()
+
 	// for test
-	//voiceFileName := "/home/work/Documents/test.txt"
-	//service.rspList = append(service.rspList, service.makeChatDataReplyMsg(voiceFileName, "123456789", 170526134505)...)
+	//{
+	//	data := make([]byte, 200 * 1024)
+	//	offset := 0
+	//	for _, respCmd := range service.rspList {
+	//		if respCmd.rspCmdType == CMD_AP13 {
+	//			//(03A6357593060153353AP13,7,1,900,数据)
+	//			fields := strings.SplitN(string(respCmd.data), ",", 5)
+	//			size := int(Str2Num(fields[3], 10))
+	//			copy(data[offset: offset + size], fields[4][0: size])
+	//			offset += size
+	//		}
+	//	}
+	//
+	//	ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
+	//}
+
+	return true
+}
+
+func ProcessPushMicChat(voiceFile string, imei uint64, phone string) bool {
+	//这里只推送未接收的微聊的
+
+	return true
+}
+
+func (service *GT06Service) ProcessPushMicChatAck(pszMsg []byte) bool {
+	//(03BF357593060153353AP12,13026618172,170413163300,6,1,700,数据)
+	//(包长度 IMEI AP12,手机号,时间戳id,包总数,包序号,数据长度,数据)
+	//(003C0103357593060153353BP12,
+	// 13026618172,1704131633251234,6,1,0)
+	//首先解析出包状态信息，如时间戳id，序号和确认状态
+	fields := strings.SplitN(string(pszMsg), ",", 5)
+	if len(fields) != 5 {
+		//字段个数不对
+		logging.Log(fmt.Sprintf("[%d] cmd field count %d is bad", service.imei, len(fields)))
+		return false
+	}
+
+	if len(fields[4]) == 0 || len(fields[4]) != 2 || (fields[4][0] != '0' && fields[4][0] != '1') {
+		logging.Log(fmt.Sprintf("[%d] the ack status %s is bad", service.imei, fields[4]))
+		return false
+	}
+
+	//timeId := Str2Num(fields[1], 10)
+	blockCount := int(Str2Num(fields[2], 10))
+	blockIndex := int(Str2Num(fields[3], 10))
+	lastBlockOk := (fields[4][0] - '0')
+	if blockCount <= 0 || blockIndex <= 0 || blockCount < blockIndex {
+		logging.Log(fmt.Sprintf("[%d] block count,  index  %d is bad", service.imei, blockCount, blockIndex))
+		return false
+	}
+
+	if lastBlockOk != 1 {
+		logging.Log(fmt.Sprintf("[%d] last block failed,  status is  %d, %s", service.imei, lastBlockOk,  fields[4]))
+		return false
+	}
+
+	//状态都OK了，继续发送下一包
+	//同时修改分包信息
+	AppSendChatListLock.Lock()
+	chatTask, ok  := AppSendChatList[service.imei]
+	if ok && chatTask != nil && len(*chatTask) > 0 {
+		service.rspList = append(service.rspList, service.shardData("AP12", (*chatTask)[0].Data.Phone,
+			(*chatTask)[0].Data.Time, (*chatTask)[0].Data.Data, blockIndex + 1)[0])
+		(*chatTask)[0].Data.BlockIndex = blockIndex + 1
+		if(blockIndex == (*chatTask)[0].Data.BlockCount) {
+			//确认完毕，删除该微聊
+			(*chatTask) = (*chatTask)[1:]
+		}
+	}
+	AppSendChatListLock.Unlock()
+
+	// for test
+	//{
+	//	data := make([]byte, 200 * 1024)
+	//	offset := 0
+	//	for _, respCmd := range service.rspList {
+	//		if respCmd.rspCmdType == CMD_AP13 {
+	//			//(03A6357593060153353AP13,7,1,900,数据)
+	//			fields := strings.SplitN(string(respCmd.data), ",", 5)
+	//			size := int(Str2Num(fields[3], 10))
+	//			copy(data[offset: offset + size], fields[4][0: size])
+	//			offset += size
+	//		}
+	//	}
+	//
+	//	ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
+	//}
+
+	return true
+}
+
+
+func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
+	//失败：(002F0103357593060153353BP23,
+	// 13026618172,6,1,0)
+	//首先解析出包状态信息，亲情号，序号和确认状态
+	fields := strings.SplitN(string(pszMsg), ",", 4)
+	if len(fields) != 4 {
+		//字段个数不对
+		logging.Log(fmt.Sprintf("[%d] cmd field count %d is bad", service.imei, len(fields)))
+		return false
+	}
+
+	if len(fields[3]) == 0 || len(fields[3]) != 2 || (fields[3][0] != '0' && fields[3][0] != '1') {
+		logging.Log(fmt.Sprintf("[%d] the ack status %s is bad", service.imei, fields[3]))
+		return false
+	}
+
+	logging.Log(fmt.Sprintf("[%d] recv photo of phone number %s ", service.imei, fields[0]))
+
+	blockCount := int(Str2Num(fields[1], 10))
+	blockIndex := int(Str2Num(fields[2], 10))
+	lastBlockOk := (fields[3][0] - '0')
+	if blockCount <= 0 || blockIndex <= 0 || blockCount < blockIndex {
+		logging.Log(fmt.Sprintf("[%d] block count,  index  %d is bad", service.imei, blockCount, blockIndex))
+		return false
+	}
+
+	if lastBlockOk != 1 {
+		logging.Log(fmt.Sprintf("[%d] last block failed,  status is  %d, %s", service.imei, lastBlockOk,  fields[4]))
+		return false
+	}
+
+	//状态都OK了，继续发送下一包
+	//同时修改分包信息
+	AppNewPhotoListLock.Lock()
+	appNewPhotoList, ok := AppNewPhotoList[service.imei]
+	if ok && appNewPhotoList != nil && len(*appNewPhotoList) > 0 {
+		service.rspList = append(service.rspList, service.shardData("AP23", (*appNewPhotoList)[0].Info.member.Phone,
+			(*appNewPhotoList)[0].Data.Time, (*appNewPhotoList)[0].Data.Data, blockIndex + 1)[0])
+		(*appNewPhotoList)[0].Data.BlockIndex = blockIndex + 1
+		if(blockIndex == (*appNewPhotoList)[0].Data.BlockCount) {
+			//确认完毕，删除该新头像通知信息
+			(*appNewPhotoList) = (*appNewPhotoList)[1:]
+		}
+	}
+	AppNewPhotoListLock.Unlock()
+
+	// for test
+	//{
+	//	data := make([]byte, 200 * 1024)
+	//	offset := 0
+	//	for _, respCmd := range service.rspList {
+	//		if respCmd.rspCmdType == CMD_AP13 {
+	//			//(03A6357593060153353AP13,7,1,900,数据)
+	//			fields := strings.SplitN(string(respCmd.data), ",", 5)
+	//			size := int(Str2Num(fields[3], 10))
+	//			copy(data[offset: offset + size], fields[4][0: size])
+	//			offset += size
+	//		}
+	//	}
+	//
+	//	ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
+	//}
+
+	return true
+}
+
+func (service *GT06Service) ProcessRspPhoto() bool {
+	//目前每次只下载一个图片文件，并且同一个亲情号只对应一份头像图片
+	//并且对于BP11命令永远都是从头开始发送文件的第一包
+	//发送之前首先创建任务表，如果已存在任务表，则直接覆盖
+
+	AppNewPhotoListLock.Lock()
+	appNewPhotoList, ok := AppNewPhotoList[service.imei]
+	if ok && appNewPhotoList != nil && len(*appNewPhotoList) > 0 {
+		avatarFileName :=fmt.Sprintf("%s%d/%s.jpg", service.reqCtx.AvatarUploadDir, service.imei, (*appNewPhotoList)[0].Info.Content)
+
+		//读取图片文件，发送第一包
+		photo, err := ioutil.ReadFile(avatarFileName)
+		if err != nil {
+			AppNewPhotoListLock.Unlock()
+			logging.Log("read photo file failed, " + avatarFileName + "," + err.Error())
+			return false
+		}
+
+		if len(photo) == 0 {
+			AppNewPhotoListLock.Unlock()
+			logging.Log("photo file empty, 0 bytes, ")
+			return false
+		}
+
+		service.rspList = append(service.rspList,
+			service.shardData("AP12", (*appNewPhotoList)[0].Info.member.Phone, makeId(), photo, 1)[0])
+
+		//修改分包信息
+		(*appNewPhotoList)[0].Data.Imei = service.imei
+		(*appNewPhotoList)[0].Data.Cmd = StringCmd(DRT_FETCH_FILE)
+		(*appNewPhotoList)[0].Data.Phone = (*appNewPhotoList)[0].Info.member.Phone
+		(*appNewPhotoList)[0].Data.Time = Str2Num((*appNewPhotoList)[0].Info.Content, 10)
+		(*appNewPhotoList)[0].Data.BlockCount = GetBlockCount(len(photo))
+		(*appNewPhotoList)[0].Data.BlockSize = GetBlockSize(len(photo), 1)
+		(*appNewPhotoList)[0].Data.BlockIndex =1
+		(*appNewPhotoList)[0].Data.Data = photo
+	}
+	AppSendChatListLock.Unlock()
+
+	return true
+}
+
+func GetBlockCount(totalSize int) int {
+	if totalSize % DATA_BLOCK_SIZE == 0 {
+		return (totalSize / DATA_BLOCK_SIZE)
+	}else{
+		return (totalSize / DATA_BLOCK_SIZE  + 1)
+	}
+}
+
+func GetBlockSize(totalSize, blockIndex int) int{
+	if totalSize == 0 || blockIndex == 0 {
+		return 0
+	}
+
+	if blockIndex <= (totalSize / DATA_BLOCK_SIZE) {
+		return DATA_BLOCK_SIZE
+	}else{
+		if blockIndex == (totalSize / DATA_BLOCK_SIZE + 1) {
+			return (totalSize - (blockIndex - 1) * DATA_BLOCK_SIZE)
+		}else{
+			return 0
+		}
+	}
+}
+
+func (service *GT06Service) ProcessRspChat() bool {
+	//目前每次只下载一条微聊文件
+	//并且对于BP11命令永远都是从头开始发送第一个微聊文件的第一包
+	//发送之前首先创建任务表，如果已存在任务表，则直接覆盖
+	if service.reqCtx.GetChatDataFunc != nil {
+		chatData := service.reqCtx.GetChatDataFunc(service.imei, 0)
+		if len(chatData) > 0 {
+			voiceFileName :=fmt.Sprintf("/usr/share/nginx/html/tracker/web/upload/minichat/app/%d/%s.amr",
+				service.imei, chatData[0].Content)
+
+			voice, chatReplyMsg := service.makeChatDataReplyMsg(voiceFileName,
+				chatData[0].Sender, Str2Num(chatData[0].Content, 10), 1)
+			if chatReplyMsg == nil || len(chatReplyMsg) == 0 {
+				return false
+			}
+
+			service.rspList = append(service.rspList, chatReplyMsg[0])
+			//修改分包信息
+			AppSendChatListLock.Lock()
+			chatTask, ok  := AppSendChatList[service.imei]
+			if ok && chatTask != nil && len(*chatTask) > 0 {
+				(*chatTask)[0].Data.Imei = service.imei
+				(*chatTask)[0].Data.Cmd = StringCmd(DRT_FETCH_FILE)
+				(*chatTask)[0].Data.Phone = chatData[0].Sender
+				(*chatTask)[0].Data.Time = Str2Num(chatData[0].Content, 10)
+				(*chatTask)[0].Data.BlockCount = GetBlockCount(len(voice))
+				(*chatTask)[0].Data.BlockSize = GetBlockSize(len(voice), 1)
+				(*chatTask)[0].Data.BlockIndex =1
+				(*chatTask)[0].Data.Data = voice
+			}
+			AppSendChatListLock.Unlock()
+		}
+	}
 
 	return true
 }
 
 func (service *GT06Service) PushChatNum() bool {
 	if service.reqCtx.GetChatDataFunc != nil {
-		chatData := service.reqCtx.GetChatDataFunc(service.imei)
+		chatData := service.reqCtx.GetChatDataFunc(service.imei, -1)
 		if len(chatData) > 0 {
 			//通知终端有聊天信息
 			resp := &ResponseItem{CMD_AP11,  service.makeReplyMsg(false,
-				service.makeChatNumReplyMsg(len(chatData)), makeId())}
+				service.makeFileNumReplyMsg(ChatContentVoice, len(chatData)), makeId())}
 			service.rspList = append(service.rspList, resp)
 		}
 	}
+
+	return true
+}
+
+func (service *GT06Service) PushNewPhotoNum() bool {
+	newAvatars := 0
+	AppNewPhotoListLock.RLock()
+	newPhotoList, ok := AppNewPhotoList[service.imei]
+	if ok {
+		newAvatars = len(*newPhotoList)
+	}
+	AppNewPhotoListLock.RUnlock()
+
+	resp := &ResponseItem{CMD_AP11,  service.makeReplyMsg(false,
+		service.makeFileNumReplyMsg(ChatContentPhoto, newAvatars), makeId())}
+	service.rspList = append(service.rspList, resp)
 
 	return true
 }

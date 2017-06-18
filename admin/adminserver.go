@@ -28,7 +28,7 @@ func AdminServerLoop(exitServerFunc func())  {
 
 	adminsvr.HandleFunc("test", func(out *redeo.Responder, in *redeo.Request) error {
 		//"test cmd data"
-		//"test epo imei"
+		//"test epo imei" -- 不需要做推送测试，因为epo是手表主动请求的
 		//"test voice imei filename"
 		//"test photo imei filename"
 
@@ -67,7 +67,7 @@ func AdminServerLoop(exitServerFunc func())  {
 				cmd == "AP07" ||
 				cmd == "AP08" ||
 				cmd == "AP09" ||
-				cmd == "AP05" ||
+				cmd == "AP10" ||
 				cmd == "AP14" ||
 				cmd == "AP15" ||
 				cmd == "AP16" ||
@@ -80,13 +80,15 @@ func AdminServerLoop(exitServerFunc func())  {
 				cmd == "AP25"{
 				id = proto.Str2Num(data[len(data) - 17: len(data) - 1], 16)
 				requireAck = true
+			}else if cmd == "AP04" {
+
 			}
 
 			fmt.Println(imei, cmd, id)
 			svrctx.Get().TcpServerChan <- proto.MakeReplyMsg(imei, requireAck, []byte(data), id)
-		case "epo":
-		case "voice":
-		case "photo":
+		//case "epo": //AP13 EPO
+		case "voice": //AP12 微聊
+		case "photo": //AP23 亲情号码图片设置
 		default:
 		}
 

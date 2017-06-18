@@ -113,7 +113,9 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			return
 		}
 
-		err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir + fileInfo.Filename, fileData, 0666)
+		os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir +  imei, 0755)
+
+		err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir +  imei + "/" + fileInfo.Filename, fileData, 0666)
 		if err4 != nil {
 			result.ErrCode = 500
 			result.ErrMsg = "server failed to save the uploaded  file"
@@ -123,12 +125,12 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 		settings := make([]proto.SettingParam, 1)
 		settings[0].FieldName = fieldname
-		settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir +  fileInfo.Filename
+		settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir +  imei + "/"  +  fileInfo.Filename
 
 		ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
 		if ret {
 			result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
-				svrctx.Get().HttpStaticAvatarDir +  fileInfo.Filename)
+				svrctx.Get().HttpStaticAvatarDir +  imei + "/" +  fileInfo.Filename)
 			fmt.Println(fileInfo.Filename)
 			ctx.JSON(200, result)
 		}else{
