@@ -127,10 +127,35 @@ func AdminServerLoop(exitServerFunc func())  {
 			svrctx.AddChatData(imei, chat)
 
 		case "photo": //AP23 亲情号码图片设置
-			if len(in.Args) != 4 {
-				out.WriteInlineString("bad args count")
-				return nil
+			imei := proto.Str2Num(in.Args[1], 10)
+			phone := in.Args[2]
+			filename := in.Args[3]
+			if svrctx.IsPhoneNumberInFamilyList(imei, phone) == false {
+				result = fmt.Sprintf("phone number %s is not in the family phone list of %d", phone, imei)
+				break
 			}
+
+			photoInfo := proto.PhotoSettingInfo{}
+			photoInfo.Member.Phone = phone
+			photoInfo.ContentType = proto.ChatContentPhoto
+			photoInfo.Content = proto.MakeTimestampIdString()
+
+			photo, err := ioutil.ReadFile(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir +
+				filename + ".jpg")
+			if err != nil {
+				result = "read photo file error: " + err.Error()
+				break
+			}
+
+			os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir + in.Args[1], 0755)
+			err = ioutil.WriteFile(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir + in.Args[1] + "/" +
+				photoInfo.Content + ".jpg", photo, 0755)
+			if err != nil {
+				result = "upload new photo file error: " + err.Error()
+				break
+			}
+
+			svrctx.AddPhotoData(imei, photoInfo)
 
 		default:
 		}

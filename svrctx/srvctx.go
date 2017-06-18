@@ -243,6 +243,28 @@ func GetChatData(imei uint64, index int)  []proto.ChatInfo {
 	return chatData
 }
 
+func GetPhotoData(imei uint64, index int)  []proto.PhotoSettingInfo {
+	photosData := []proto.PhotoSettingInfo{}
+	proto.AppNewPhotoListLock.RLock()
+	photoList, ok := proto.AppNewPhotoList[imei]
+	if ok {
+		if len(*photoList) > 0 {
+			for i, photo := range *photoList {
+				if index == -1 ||  index == i {
+					photosData = append(photosData, (*photo).Info)
+				}
+
+				if index == i {
+					break
+				}
+			}
+		}
+	}
+	proto.AppNewPhotoListLock.RUnlock()
+
+	return photosData
+}
+
 func IsPhoneNumberInFamilyList(imei uint64, phone string) bool {
 	isInvalid := false
 	proto.DeviceInfoListLock.RLock()
@@ -260,6 +282,17 @@ func IsPhoneNumberInFamilyList(imei uint64, phone string) bool {
 	return isInvalid
 }
 
+func PushPhotoNum(imei uint64) bool {
+	photoData := GetPhotoData(imei, -1)
+	if len(photoData) > 0 {
+		//通知终端有新的图片设置信息
+		serverCtx.TcpServerChan <- proto.MakeReplyMsg(imei, false,
+			proto.MakeFileNumReplyMsg(imei, proto.ChatContentPhoto, len(photoData)),
+			proto.NewMsgID())
+	}
+
+	return true
+}
 
 func PushChatNum(imei uint64) bool {
 	chatData := GetChatData(imei, -1)
@@ -271,6 +304,21 @@ func PushChatNum(imei uint64) bool {
 	}
 
 	return true
+}
+
+func AddPhotoData(imei uint64, photoData proto.PhotoSettingInfo) {
+	photoTask := proto.PhotoSettingTask{Info: photoData}
+	proto.AppNewPhotoListLock.Lock()
+	photoList, ok := proto.AppNewPhotoList[imei]
+	if ok {
+		*photoList = append(*photoList, &photoTask)
+	}else {
+		proto.AppNewPhotoList[imei] = &[]*proto.PhotoSettingTask{}
+		*proto.AppNewPhotoList[imei] = append(*proto.AppNewPhotoList[imei], &photoTask)
+	}
+	proto.AppNewPhotoListLock.Unlock()
+
+	PushPhotoNum(imei)
 }
 
 func AddChatData(imei uint64, chatData proto.ChatInfo) {

@@ -154,7 +154,7 @@ type ChatInfo struct {
 
 type PhotoSettingInfo struct {
 	Sender string
-	member FamilyMember
+	Member FamilyMember
 	ContentType uint8
 	Content string
 	Flags  int
@@ -554,7 +554,7 @@ func (service *GT06Service)DoResponse() []*MsgData  {
 		//ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
 	}
 
-	if service.needSendPhoto {
+	if service.needSendPhotoNum {
 		service.PushNewPhotoNum()
 	}
 
@@ -1615,7 +1615,7 @@ func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
 	}
 
 	if lastBlockOk != 1 {
-		logging.Log(fmt.Sprintf("[%d] last block failed,  status is  %d, %s", service.imei, lastBlockOk,  fields[4]))
+		logging.Log(fmt.Sprintf("[%d] last block failed,  status is  %d, %s", service.imei, lastBlockOk,  fields[3]))
 		return false
 	}
 
@@ -1627,7 +1627,7 @@ func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
 		if  (*appNewPhotoList)[0].Data.BlockIndex != int(blockIndex){
 			AppNewPhotoListLock.Unlock()
 			logging.Log(fmt.Sprintf("[%d] block count or index is not invalid, %d, %d for %d, %d",
-				blockCount, blockIndex,
+				service.imei,  blockCount, blockIndex,
 				(*appNewPhotoList)[0].Data.BlockCount, (*appNewPhotoList)[0].Data.BlockIndex))
 
 			return false
@@ -1640,10 +1640,13 @@ func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
 			}else{
 				AppNewPhotoList[service.imei] = &[]*PhotoSettingTask{}
 			}
+			logging.Log(fmt.Sprintf("[%d] block count %d is all finished", service.imei, blockIndex))
 		}else{
-			service.rspList = append(service.rspList, service.shardData("AP23", (*appNewPhotoList)[0].Info.member.Phone,
+			service.rspList = append(service.rspList, service.shardData("AP23",
+				(*appNewPhotoList)[0].Info.Member.Phone,
 				(*appNewPhotoList)[0].Data.Time, (*appNewPhotoList)[0].Data.Data, blockIndex + 1)[0])
 			(*appNewPhotoList)[0].Data.BlockIndex = blockIndex + 1
+			service.needSendChatNum = false
 		}
 	}
 	AppNewPhotoListLock.Unlock()
@@ -1693,19 +1696,19 @@ func (service *GT06Service) ProcessRspPhoto() bool {
 		}
 
 		service.rspList = append(service.rspList,
-			service.shardData("AP12", (*appNewPhotoList)[0].Info.member.Phone, makeId(), photo, 1)[0])
+			service.shardData("AP23", (*appNewPhotoList)[0].Info.Member.Phone, makeId(), photo, 1)[0])
 
 		//修改分包信息
 		(*appNewPhotoList)[0].Data.Imei = service.imei
 		(*appNewPhotoList)[0].Data.Cmd = StringCmd(DRT_FETCH_FILE)
-		(*appNewPhotoList)[0].Data.Phone = (*appNewPhotoList)[0].Info.member.Phone
+		(*appNewPhotoList)[0].Data.Phone = (*appNewPhotoList)[0].Info.Member.Phone
 		(*appNewPhotoList)[0].Data.Time = Str2Num((*appNewPhotoList)[0].Info.Content, 10)
 		(*appNewPhotoList)[0].Data.BlockCount = GetBlockCount(len(photo))
 		(*appNewPhotoList)[0].Data.BlockSize = GetBlockSize(len(photo), 1)
 		(*appNewPhotoList)[0].Data.BlockIndex =1
 		(*appNewPhotoList)[0].Data.Data = photo
 	}
-	AppSendChatListLock.Unlock()
+	AppNewPhotoListLock.Unlock()
 
 	return true
 }
@@ -1796,9 +1799,11 @@ func (service *GT06Service) PushNewPhotoNum() bool {
 	}
 	AppNewPhotoListLock.RUnlock()
 
-	resp := &ResponseItem{CMD_AP11,  service.makeReplyMsg(false,
-		service.makeFileNumReplyMsg(ChatContentPhoto, newAvatars), makeId())}
-	service.rspList = append(service.rspList, resp)
+	if newAvatars > 0 {
+		resp := &ResponseItem{CMD_AP11,  service.makeReplyMsg(false,
+			service.makeFileNumReplyMsg(ChatContentPhoto, newAvatars), makeId())}
+		service.rspList = append(service.rspList, resp)
+	}
 
 	return true
 }
