@@ -32,7 +32,7 @@
         "DBPort":5432,
         "DBName":"gator_db",
         "DBUser":"postgres",
-        "DBPasswd":"",
+        "DBPasswd":"1234",
         "DBPoolMaxConn":1024
     },
 
