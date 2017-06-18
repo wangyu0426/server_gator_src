@@ -1445,13 +1445,24 @@ func (service *GT06Service) ProcessRspAGPSAck(pszMsg []byte) bool {
 
 	blockCount := Str2Num(fields[0], 10)
 	blockIndex := Str2Num(fields[1], 10)
-	if blockCount <= 0 || blockIndex <= 0 || blockCount < blockIndex {
+	lastBlockOk := (fields[2][0] - '0')
+	if blockCount <= 0 || blockIndex <= 0 || blockCount < blockIndex || epoTask.BlockIndex != int(blockIndex){
 		EPOTaskTableLock.Unlock()
+		logging.Log(fmt.Sprintf("[%d] block count or index is not invalid, %d, %d for %d, %d",
+			service.imei,  blockCount, blockIndex, epoTask.BlockCount, epoTask.BlockIndex))
+
+		return false
+	}
+
+	if lastBlockOk != 1 {
+		EPOTaskTableLock.Unlock()
+		logging.Log(fmt.Sprintf("[%d] last block ask is not ok ", service.imei, lastBlockOk))
 		return false
 	}
 
 	//service.rspList = append(service.rspList, ...)
 	service.rspList = append(service.rspList, service.shardData("AP13", "", 0, epoTask.Data, int(blockIndex + 1))[0])
+	epoTask.BlockIndex = int(blockIndex + 1)
 	EPOTaskTableLock.Unlock()
 
 	// for test
@@ -1517,6 +1528,14 @@ func (service *GT06Service) ProcessPushMicChatAck(pszMsg []byte) bool {
 	AppSendChatListLock.Lock()
 	chatTask, ok  := AppSendChatList[service.imei]
 	if ok && chatTask != nil && len(*chatTask) > 0 {
+		if  (*chatTask)[0].Data.BlockIndex != int(blockIndex){
+			AppSendChatListLock.Unlock()
+			logging.Log(fmt.Sprintf("[%d] block count or index is not invalid, %d, %d for %d, %d",
+				blockCount, blockIndex,
+				(*chatTask)[0].Data.BlockCount, (*chatTask)[0].Data.BlockIndex))
+
+			return false
+		}
 		service.rspList = append(service.rspList, service.shardData("AP12", (*chatTask)[0].Data.Phone,
 			(*chatTask)[0].Data.Time, (*chatTask)[0].Data.Data, blockIndex + 1)[0])
 		(*chatTask)[0].Data.BlockIndex = blockIndex + 1
@@ -1584,6 +1603,15 @@ func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
 	AppNewPhotoListLock.Lock()
 	appNewPhotoList, ok := AppNewPhotoList[service.imei]
 	if ok && appNewPhotoList != nil && len(*appNewPhotoList) > 0 {
+		if  (*appNewPhotoList)[0].Data.BlockIndex != int(blockIndex){
+			AppNewPhotoListLock.Unlock()
+			logging.Log(fmt.Sprintf("[%d] block count or index is not invalid, %d, %d for %d, %d",
+				blockCount, blockIndex,
+				(*appNewPhotoList)[0].Data.BlockCount, (*appNewPhotoList)[0].Data.BlockIndex))
+
+			return false
+		}
+
 		service.rspList = append(service.rspList, service.shardData("AP23", (*appNewPhotoList)[0].Info.member.Phone,
 			(*appNewPhotoList)[0].Data.Time, (*appNewPhotoList)[0].Data.Data, blockIndex + 1)[0])
 		(*appNewPhotoList)[0].Data.BlockIndex = blockIndex + 1

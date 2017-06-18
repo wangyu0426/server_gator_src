@@ -37,6 +37,7 @@ type ServerContext struct {
 	HttpStaticURL string
 	HttpStaticDir string
 	HttpStaticAvatarDir string
+	HttpStaticMinichatDir string
 	AcceptTimeout time.Duration
 	RecvTimeout   time.Duration
 	MaxDeviceIdleTimeSecs int
@@ -242,9 +243,26 @@ func GetChatData(imei uint64, index int)  []proto.ChatInfo {
 	return chatData
 }
 
+func IsPhoneNumberInFamilyList(imei uint64, phone string) bool {
+	isInvalid := false
+	proto.DeviceInfoListLock.RLock()
+	device, ok := (*proto.DeviceInfoList)[imei]
+	if ok && device != nil {
+		for _, member := range device.Family{
+			if member.Phone == phone {
+				isInvalid = true
+				break
+			}
+		}
+	}
+	proto.DeviceInfoListLock.RUnlock()
+
+	return isInvalid
+}
+
 func AddChatData(imei uint64, chatData proto.ChatInfo) {
 	chatTask := proto.ChatTask{Info: chatData}
-	proto.AppSendChatListLock.RLock()
+	proto.AppSendChatListLock.Lock()
 	chatList, ok := proto.AppSendChatList[imei]
 	if ok {
 		*chatList = append(*chatList, &chatTask)
@@ -252,7 +270,7 @@ func AddChatData(imei uint64, chatData proto.ChatInfo) {
 		proto.AppSendChatList[imei] = &[]*proto.ChatTask{}
 		*proto.AppSendChatList[imei] = append(*proto.AppSendChatList[imei], &chatTask)
 	}
-	DeviceTableLock.Unlock()
+	proto.AppSendChatListLock.Unlock()
 }
 
 func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {

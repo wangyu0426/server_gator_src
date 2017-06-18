@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"../svrctx"
 	"../proto"
+	"../logging"
+	"io/ioutil"
+	"os"
 )
 
 func init()  {
@@ -29,19 +32,19 @@ func AdminServerLoop(exitServerFunc func())  {
 	adminsvr.HandleFunc("test", func(out *redeo.Responder, in *redeo.Request) error {
 		//"test cmd data"
 		//"test epo imei" -- 不需要做推送测试，因为epo是手表主动请求的
-		//"test voice imei filename"
-		//"test photo imei filename"
-
-		if len(in.Args) != 2 && len(in.Args) != 3 {
-			out.WriteInlineString("bad args")
-			return nil
-		}
+		//"test voice imei phone filename"
+		//"test photo imei phone filename"
 
 		testType := in.Args[0]
 		result := "ok"
 
 		switch testType {
 		case "cmd":
+			if len(in.Args) != 2 {
+				out.WriteInlineString("bad args count")
+				return nil
+			}
+
 			data := in.Args[1]
 			//(003B357593060153353AP01221.18.79.110#123,0000000000000001)
 			if data[0] != '(' || data[len(data) - 1] != ')' {
@@ -88,7 +91,47 @@ func AdminServerLoop(exitServerFunc func())  {
 			svrctx.Get().TcpServerChan <- proto.MakeReplyMsg(imei, requireAck, []byte(data), id)
 		//case "epo": //AP13 EPO
 		case "voice": //AP12 微聊
+			if len(in.Args) != 4 {
+				out.WriteInlineString("bad args count")
+				return nil
+			}
+
+			imei := proto.Str2Num(in.Args[1], 10)
+			phone := in.Args[2]
+			filename := in.Args[3]
+			if svrctx.IsPhoneNumberInFamilyList(imei, phone) == false {
+				result = fmt.Sprintf("phone number %s is not in the family phone list of %d", phone, imei)
+				break
+			}
+
+			chat := proto.ChatInfo{}
+			chat.Sender = phone
+			chat.ContentType = proto.ChatContentVoice
+			chat.Content = proto.MakeTimestampIdString()
+			chat.DateTime = proto.Str2Num(chat.Content[0:12], 10)
+
+			voice, err := ioutil.ReadFile(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticMinichatDir + filename + ".amr")
+			if err != nil {
+				result = "read voice file error: " + err.Error()
+				break
+			}
+
+			os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticMinichatDir + in.Args[1], 0755)
+			err = ioutil.WriteFile(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticMinichatDir + in.Args[1] + "/" +
+				chat.Content + ".amr", voice, 0755)
+			if err != nil {
+				result = "upload new voice file error: " + err.Error()
+				break
+			}
+
+			svrctx.AddChatData(imei, chat)
+
 		case "photo": //AP23 亲情号码图片设置
+			if len(in.Args) != 4 {
+				out.WriteInlineString("bad args count")
+				return nil
+			}
+
 		default:
 		}
 
@@ -204,7 +247,7 @@ func AdminServerLoop(exitServerFunc func())  {
 	})
 
 	adminsvr.HandleFunc("shutdown", func(out *redeo.Responder, _ *redeo.Request) error {
-		fmt.Println("Server shutdown by redis command line")
+		logging.Log("Server shutdown by redis command line")
 		if exitServerFunc != nil {
 			exitServerFunc()
 		}

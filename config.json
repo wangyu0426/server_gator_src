@@ -9,6 +9,7 @@
     "HttpStaticURL":"/static",
     "HttpStaticDir":"./static",
     "HttpStaticAvatarDir":"/upload/avatar/",
+    "HttpStaticMinichatDir":"/upload/minichat/",
     "AcceptTimeout":30,
     "RecvTimeout":30,
     "MaxDeviceIdleTimeSecs":60,
