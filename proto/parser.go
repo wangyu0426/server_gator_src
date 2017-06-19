@@ -48,8 +48,6 @@ const (
 	DRT_MIN = iota
 
 	DRT_SYNC_TIME       // 同BP00，手表请求对时
-	DRT_SEND_COST       // 同BP17，手表上报账户费用、余额信息
-	DRT_SEND_TEL_STATICS      // 同BP24，手表上报短信条数、通话时长
 	DRT_SEND_LOCATION      // 同BP30，手表上报定位(报警)数据
 	DRT_DEVICE_LOGIN    	   // 同BP31，手表登录服务器
 	DRT_MONITOR_ACK	   // 同BP05，手表对服务器请求电话监听的应答
@@ -62,7 +60,25 @@ const (
 	DRT_HEART_BEAT       	  // 同BP33，手表发送状态数据
 
 	//确认消息类型
+	DRT_SET_IP_PORT_ACK       // 同BP01，手表设置服务器IP端口的ACK
+	DRT_SET_APN_ACK             // 同BP02，手表设置APN的ACK
 	DRT_SYNC_TIME_ACK       // 同BP03，手表请求对时ACK
+	DRT_VOICE_MONITOR_ACK       // 同BP05	，手表设置监听的ACK
+	DRT_SET_PHONE_NUMBERS_ACK       // 同BP06	，手表设置亲情号的ACK
+	DRT_CLEAR_PHONE_NUMBERS_ACK       // 同BP07	，手表清空亲情号的ACK
+	DRT_SET_REBOOT_ENABLE_ACK       // 同BP08	，手表设置是否能重启的ACK
+	DRT_SET_TIMER_ALARM_ACK       // 同BP09	，手表设置是否能重启的ACK
+	DRT_SET_MUTE_ENABLE_ACK       // 同BP10	，手表设置是否静音的ACK
+	DRT_FETCH_LOCATION__ACK       // 同BP14	，手表下载定位数据的ACK
+	DRT_SET_POWEROFF_ENABLE_ACK       // 同BP15	，手表设置是否能关机的ACK
+	DRT_ACTIVE_SOS_ACK       // 同BP16	，手表设置激活sos的ACK
+	DRT_SET_OWNER_NAME_ACK       // 同BP18	，手表设置名字的ACK
+	DRT_SET_USE_DST_ACK       // 同BP19	，手表设置夏令时的ACK
+	DRT_SET_LANG_ACK       // 同BP20	，手表设置语言的ACK
+	DRT_SET_VOLUME_ACK       // 同BP21	，手表设置音量的ACK
+	DRT_SET_AIRPLANE_MODE_ACK       // 同BP22	，手表设置隐身模式的ACK
+	DRT_QUERY_TEL_USE_ACK       	// 同BP24	，手表对服务器查询短信条数的ACK
+	DRT_DELETE_PHONE_PHOTO_ACK       	// 同BP25	，手表对删除亲情号图片的ACK
 
 	DRT_MAX
 )
@@ -94,8 +110,6 @@ const (
 var commands = []string{
 	"",
 	"BP00",
-	"BP17",
-	"BP24",
 	"BP30",
 	"BP31",
 	"BP05",
@@ -107,7 +121,25 @@ var commands = []string{
 	"BP32",
 	"BP33",
 
+	"BP01",
+	"BP02",
 	"BP03",
+	"BP05",
+	"BP06",
+	"BP07",
+	"BP08",
+	"BP09",
+	"BP10",
+	"BP14",
+	"BP15",
+	"BP16",
+	"BP18",
+	"BP19",
+	"BP20",
+	"BP21",
+	"BP22",
+	"BP24",
+	"BP25",
 }
 
 /*普通的消息头部*/
