@@ -940,31 +940,21 @@ func ParseSinglePhoneNumberString(phone string, i int)  FamilyMember{
 		return member
 	}
 
-	fields := strings.SplitAfter(phone, "|")
-	//fmt.Println(m, len(fields), fields)
-	if len(fields) >= 1 && len(fields[0]) > 0 && fields[0] != "|"{
-		if fields[0][len(fields[0]) - 1] == '|' {
-			member.Phone = string(fields[0][0: len(fields[0]) - 2])
-		}else {
-			member.Phone = fields[0]
-		}
+	fields := strings.SplitN(phone, "|", 3)
+	if len(fields) == 0 {
+		return member
 	}
 
-	if len(fields) >= 2 && len(fields[1]) > 0 && fields[1] != "|" {
-		if fields[1][len(fields[1]) - 1] == '|' {
-			member.Type = int(Str2Num(string(fields[1][0: len(fields[1]) - 2]), 10))
-		}else {
-			member.Type = int(Str2Num(fields[1], 10))
-		}
+	if len(fields) >= 1 {
+		member.Phone = fields[0]
 	}
 
-	if len(fields) >= 3 && len(fields[2]) > 0 && fields[2] != "|" {
-		//fmt.Println("fields2: ", fields, fields[2], len(fields[2]))
-		if fields[2][len(fields[2]) - 1] == '|' {
-			member.Name = string(fields[2][0: len(fields[2]) - 2])
-		}else {
-			member.Name = fields[2]
-		}
+	if len(fields) >= 2 {
+		member.Type = int(Str2Num(fields[1], 10))
+	}
+
+	if len(fields) >= 3 {
+		member.Name = fields[2]
 	}
 
 	member.Index = i + 1

@@ -271,11 +271,14 @@ func IsPhoneNumberInFamilyList(imei uint64, phone string) bool {
 	device, ok := (*proto.DeviceInfoList)[imei]
 	if ok && device != nil {
 		for _, member := range device.Family{
+			logging.Log(fmt.Sprintf("[%d]member phone %s, to match %s", imei, member.Phone,  phone))
 			if member.Phone == phone {
 				isInvalid = true
 				break
 			}
 		}
+	}else{
+		logging.Log(fmt.Sprintf("[%d] not found phone %s", imei, phone))
 	}
 	proto.DeviceInfoListLock.RUnlock()
 

@@ -261,12 +261,12 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 			msg.Header.Header.Status = 0
 		}
 
-		//首先通知ManagerLoop, 将上次缓存的未发送的数据发送给手表
-		msgNotify := &proto.MsgData{}
-		msgNotify.Header.Header.Version = proto.MSG_HEADER_PUSH_CACHE
-		//logging.Log("MSG_HEADER_PUSH_CACHE, imei: " + proto.Num2Str(imei, 10))
-		msgNotify.Header.Header.Imei = imei
-		serverCtx.TcpServerChan <- msgNotify
+		////首先通知ManagerLoop, 将上次缓存的未发送的数据发送给手表
+		//msgNotify := &proto.MsgData{}
+		//msgNotify.Header.Header.Version = proto.MSG_HEADER_PUSH_CACHE
+		////logging.Log("MSG_HEADER_PUSH_CACHE, imei: " + proto.Num2Str(imei, 10))
+		//msgNotify.Header.Header.Imei = imei
+		//serverCtx.TcpServerChan <- msgNotify
 
 		// 包可能接收未完整，但此时可以开始进行业务逻辑处理
 		// 目前所有头部信息都已准备好，业务处理模块只需处理与断点续传相关逻辑

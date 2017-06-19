@@ -192,6 +192,8 @@ type GT06Service struct {
 	imei uint64
 	msgSize uint64
 	cmd uint16
+	isCmdForAck bool
+	msgAckId uint64
 	old LocationData
 	cur LocationData
 	needSendLocation bool
@@ -257,12 +259,18 @@ func HandleTcpRequest(reqCtx RequestContext)  bool{
 	//}
 
 	msgReplyList := service.DoResponse()
-	if msgReplyList  == nil {
-		return false
-	}
-
-	for _, msg := range msgReplyList {
-		reqCtx.WritebackChan <- msg
+	if msgReplyList  != nil && len(msgReplyList) > 0 {
+		for _, msg := range msgReplyList {
+			reqCtx.WritebackChan <- msg
+		}
+	}else{
+		ret = false
+		//通知ManagerLoop, 将上次缓存的未发送的数据发送给手表
+		msgNotify := &MsgData{}
+		msgNotify.Header.Header.Version = MSG_HEADER_PUSH_CACHE
+		//logging.Log("MSG_HEADER_PUSH_CACHE, imei: " + proto.Num2Str(imei, 10))
+		msgNotify.Header.Header.Imei = service.imei
+		reqCtx.WritebackChan <- msgNotify
 	}
 
 	return true
@@ -300,6 +308,8 @@ func (service *GT06Service)PreDoRequest() bool  {
 	service.needSendLocation = false
 	service.needSendChatNum = true
 	service.needSendPhotoNum = true
+	service.isCmdForAck = false
+
 	return true
 }
 
@@ -350,12 +360,16 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		service.cmd == DRT_QUERY_TEL_USE_ACK      || 	// 同BP24	，手表对服务器查询短信条数的ACK -- 这个命令格式需另外处理
 		service.cmd == DRT_DELETE_PHONE_PHOTO_ACK  {     	// 同BP25	，手表对删除亲情号图片的ACK{
 
+		service.isCmdForAck = true
+
 		if service.cmd == DRT_QUERY_TEL_USE_ACK {
 			msgIdForAck := Str2Num(string(msg.Data[1: 17]), 16)
+			service.msgAckId = msgIdForAck
 			resp := &ResponseItem{CMD_ACK,  service.makeAckParsedMsg(msgIdForAck)}
 			service.rspList = append(service.rspList, resp)
 		}else {
 			msgIdForAck := Str2Num(string(msg.Data[0: 16]), 16)
+			service.msgAckId = msgIdForAck
 			lastAckOK := Str2Num(string(msg.Data[16: 17]), 10)
 			if lastAckOK == 1 {
 				resp := &ResponseItem{CMD_ACK,  service.makeAckParsedMsg(msgIdForAck)}
@@ -778,6 +792,7 @@ func (service *GT06Service)makeSyncTimeReplyMsg() ([]byte, uint64) {
 
 	if timezone < 0 {
 		c = 'w'
+		timezone = -timezone
 	}
 
 	id := makeId()
@@ -2242,7 +2257,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 				}
 			}
 
-			logging.Log(fmt.Sprintf("device %d, m_iAlarmStatu=%d, parsed location:  m_DateTime=%d, m_lng=%d, m_lat=%d",
+			logging.Log(fmt.Sprintf("device %d, m_iAlarmStatu=%d, parsed location:  m_DateTime=%f, m_lng=%d, m_lat=%f",
 				service.imei,  service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
 
 			return true
