@@ -1,3 +1,4 @@
+alter table watchinfo add COLUMN ContactAvatar VARCHAR(2560) NOT NULL;
 http://127.0.0.1/tracker/web/index.php?r=app/auth/alarm&systemno=93060571398&data=170525082654,22577586,113861071,30,4,6,0,1,baoanlu,
 
 mac os下制作iso U盘刻录
@@ -1700,9 +1701,10 @@ AP10(for device QingJingMoShi)
 
 configuration: --enable-libmp3lame --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-version3 --enable-shared
 
+
 root
-LMyu19^uaHQ#S4IIqnYhoFTf
+5dKZtmY5%E%#QGPRgT6USUA0
 
 
 work
-zNPPv6EE6bTMc93z9d@iKzc2
+HSsn0E^usMcLkszKO@yqlHX$

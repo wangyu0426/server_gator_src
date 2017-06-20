@@ -190,7 +190,7 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 
 				//devicesLocationURL := "http://184.107.50.180:8012/GetMultiWatchData?systemno="
 				locations := []proto.LocationData{}
-				for _, d := range devices.([]interface{}) {
+				for i, d := range devices.([]interface{}) {
 					device := d.(map[string]interface{})
 					imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
 					logging.Log("device: " + fmt.Sprint(imei))
@@ -202,11 +202,25 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 					//if i < len(devices.([]interface{})) - 1 {
 					//	devicesLocationURL += "|"
 					//}
+
+					deviceInfoResult := proto.DeviceInfoResult{}
+					//json.Unmarshal([]byte(proto.MakeStructToJson(d)), &deviceInfoResult)
+					//fmt.Println("deviceinfoResult: ", deviceInfoResult)
+
+					proto.DeviceInfoListLock.RLock()
+					deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+					if ok && deviceInfo != nil {
+						deviceInfoResult = proto.MakeDeviceInfoResult(deviceInfo)
+						loginData["devices"].([]interface{})[i] = deviceInfoResult
+						fmt.Println("deviceinfoResult: ", proto.MakeStructToJson(&deviceInfoResult))
+					}
+					proto.DeviceInfoListLock.RUnlock()
 				}
 
 				jsonLocations, _ := json.Marshal(locations)
 				appServerChan <- &proto.AppMsgData{Cmd: proto.LoginAckCmdName,
-					Data: (fmt.Sprintf("{\"user\": %s, \"location\": %s}", string(body), string(jsonLocations))), Conn: c}
+					Data: (fmt.Sprintf("{\"user\": %s, \"location\": %s}",
+						proto.MakeStructToJson(&loginData), string(jsonLocations))), Conn: c}
 
 				//logging.Log("devicesLocationURL: " + devicesLocationURL)
 				//

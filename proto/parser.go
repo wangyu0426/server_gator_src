@@ -431,6 +431,7 @@ type DeviceInfo struct {
 
 type DeviceInfoResult struct {
 	IMEI,
+	Model,
 	OwnerName,
 	PhoneNumbers,
 	AlarmEmail,
@@ -777,6 +778,7 @@ func Bool2UInt8(b bool)   uint8 {
 func MakeDeviceInfoResult(deviceInfo *DeviceInfo) DeviceInfoResult {
 	result := DeviceInfoResult{}
 	result.IMEI = Num2Str(deviceInfo.Imei, 10)
+	result.Model = ModelNameList[deviceInfo.Model]
 	result.OwnerName = deviceInfo.OwnerName
 	result.PhoneNumbers = makeDeviceFamilyPhoneNumbers(&deviceInfo.Family)
 	result.TimeZone = makeDBTimeZoneString(deviceInfo.TimeZone)
