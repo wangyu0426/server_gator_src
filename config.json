@@ -1,6 +1,6 @@
 {
     "ProcessName":"go-server",
-    "MasterListenAddrPort":"localhost:9015",
+    "MasterListenAddrPort":"0.0.0.0:9015",
     "BindAddr":"0.0.0.0",
     "Port":7016,
     "HttpServerName":"http://120.25.214.188",

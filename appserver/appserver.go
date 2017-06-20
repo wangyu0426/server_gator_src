@@ -89,33 +89,47 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		uploadType := ctx.FormValue("type")
 		fmt.Println(uploadType)
 
-		_,fileInfo, err1 := ctx.FormFile(uploadType)
-		if err1 != nil {
-			result.ErrCode = 500
-			ctx.JSON(500, result)
-			return
-		}
+		//_,fileInfo, err1 := ctx.FormFile(uploadType)
+		//if err1 != nil {
+		//	result.ErrCode = 500
+		//	ctx.JSON(500, result)
+		//	return
+		//}
+		//
+		//file,err2 :=fileInfo.Open()
+		//if err2 != nil {
+		//	result.ErrCode = 500
+		//	result.ErrMsg = "server failed to open the uploaded  file"
+		//	ctx.JSON(500, result)
+		//	return
+		//}
+		//
+		//defer file.Close()
+		//fileData, err3 :=ioutil.ReadAll(file)
+		//if err3 != nil {
+		//	result.ErrCode = 500
+		//	result.ErrMsg = "server failed to read the data of  the uploaded  file"
+		//	ctx.JSON(500, result)
+		//	return
+		//}
 
-		file,err2 :=fileInfo.Open()
-		if err2 != nil {
+		fileData, err :=base64Decode([]byte(ctx.FormValue(uploadType)))
+		if err!= nil {
 			result.ErrCode = 500
-			result.ErrMsg = "server failed to open the uploaded  file"
-			ctx.JSON(500, result)
-			return
-		}
-
-		defer file.Close()
-		fileData, err3 :=ioutil.ReadAll(file)
-		if err3 != nil {
-			result.ErrCode = 500
-			result.ErrMsg = "server failed to read the data of  the uploaded  file"
+			result.ErrMsg = "upload bad data"
 			ctx.JSON(500, result)
 			return
 		}
 
 		os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir +  imei, 0755)
+		fileName := ""
+		if uploadType == "contactAvatar" {
+			contactIndex := ctx.FormValue("index")
+			fileName += "contact_" + contactIndex + "_"
+		}
+		fileName += proto.MakeTimestampIdString() + ".jpg"
 
-		err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir +  imei + "/" + fileInfo.Filename, fileData, 0666)
+		err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir +  imei + "/" + fileName, fileData, 0666)
 		if err4 != nil {
 			result.ErrCode = 500
 			result.ErrMsg = "server failed to save the uploaded  file"
@@ -124,14 +138,25 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		}
 
 		settings := make([]proto.SettingParam, 1)
+		if uploadType == "contactAvatar" {
+			settings[0].Index = int(proto.Str2Num(ctx.FormValue("index"), 10))
+		}
 		settings[0].FieldName = fieldname
-		settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir +  imei + "/"  +  fileInfo.Filename
+		settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir +  imei + "/"  +  fileName
 
 		ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
 		if ret {
+			if uploadType == "contactAvatar" {
+				photoInfo := proto.PhotoSettingInfo{}
+				photoInfo.Member.Phone = ctx.FormValue("phone")
+				photoInfo.ContentType = proto.ChatContentPhoto
+				photoInfo.Content = proto.MakeTimestampIdString()
+				svrctx.AddPhotoData(proto.Str2Num(imei, 10), photoInfo)
+			}
+
 			result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
-				svrctx.Get().HttpStaticAvatarDir +  imei + "/" +  fileInfo.Filename)
-			fmt.Println(fileInfo.Filename)
+				svrctx.Get().HttpStaticAvatarDir +  imei + "/" +  fileName)
+			fmt.Println(fileName)
 			ctx.JSON(200, result)
 		}else{
 			result.ErrCode = 500

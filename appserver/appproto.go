@@ -409,6 +409,11 @@ func makeFamilyPhoneNumbers(family *[proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMem
 	return phoneNumbers
 }
 
+
+func makeContactAvatars(family *[proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember) string {
+	return proto.MakeStructToJson(family)
+}
+
 func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 	// error code:  -1 表示验证码不正确
 	// error code:  -2 表示验该用户已经关注了手表
@@ -518,23 +523,23 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 			AccessToken: params.AccessToken,
 		}
 
-		setting := proto.SettingParam{proto.PhoneNumbersFieldName, "", phoneNumbers,
+		setting := proto.SettingParam{proto.PhoneNumbersFieldName, "", phoneNumbers, 0,
 			//fmt.Sprintf("%s|%d|%s",  params.MySimID, params.PhoneType, params.MyName),
 		}
 
 		newSettings.Settings = append(newSettings.Settings, setting)
 
 		if isAdmin {
-			setting = proto.SettingParam{proto.OwnerNameFieldName, "", params.OwnerName}
+			setting = proto.SettingParam{proto.OwnerNameFieldName, "", params.OwnerName, 0}
 			newSettings.Settings = append(newSettings.Settings, setting)
 
-			setting = proto.SettingParam{proto.CountryCodeFieldName, "", params.DeviceSimCountryCode}
+			setting = proto.SettingParam{proto.CountryCodeFieldName, "", params.DeviceSimCountryCode, 0}
 			newSettings.Settings = append(newSettings.Settings, setting)
 
-			setting = proto.SettingParam{proto.SimIDFieldName, "", params.DeviceSimID}
+			setting = proto.SettingParam{proto.SimIDFieldName, "", params.DeviceSimID, 0}
 			newSettings.Settings = append(newSettings.Settings, setting)
 
-			setting = proto.SettingParam{proto.TimeZoneFieldName, "", params.TimeZone}
+			setting = proto.SettingParam{proto.TimeZoneFieldName, "", params.TimeZone, 0}
 			newSettings.Settings = append(newSettings.Settings, setting)
 		}
 
@@ -617,25 +622,48 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 			case proto.CountryCodeFieldName:
 				deviceInfo.CountryCode = setting.NewValue
 			case proto.PhoneNumbersFieldName:
-				phoneNumbers = makeFamilyPhoneNumbers(&deviceInfo.Family)
-				for i := 0; i < len(deviceInfo.Family); i++ {
-					curPhone := proto.ParseSinglePhoneNumberString(setting.CurValue, i)
-					newPhone := proto.ParseSinglePhoneNumberString(setting.NewValue, i)
-					//fullPhoneNnumber := "00" + deviceInfo.Family[i].CountryCode + deviceInfo.Family[i].Phone
-					if len(curPhone.Phone) == 0 { //之前没有号码，直接寻找一个空位就可以了
-						if len(deviceInfo.Family[i].Phone) == 0 {
-							deviceInfo.Family[i] = newPhone
-							break
+				if setting.NewValue == "delete"{
+					newContacts := [proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember{}
+					count := 0
+					for i := 0; i < len(deviceInfo.Family); i++ {
+						if i + 1 != setting.Index {
+							newContacts[count] = deviceInfo.Family[i]
+							count++
 						}
-					}else{ //之前有号码，那么这里是修改号码，需要匹配之前的号码
-						if deviceInfo.Family[i].Phone == curPhone.Phone {
-							deviceInfo.Family[i] = newPhone
-							break
+					}
+
+					deviceInfo.Family = newContacts
+				}else{
+					for i := 0; i < len(deviceInfo.Family); i++ {
+						curPhone := proto.ParseSinglePhoneNumberString(setting.CurValue, i)
+						newPhone := proto.ParseSinglePhoneNumberString(setting.NewValue, i)
+						//fullPhoneNnumber := "00" + deviceInfo.Family[i].CountryCode + deviceInfo.Family[i].Phone
+						if len(curPhone.Phone) == 0 { //之前没有号码，直接寻找一个空位就可以了
+							if len(deviceInfo.Family[i].Phone) == 0 {
+								deviceInfo.Family[i] = newPhone
+								break
+							}
+						}else{ //之前有号码，那么这里是修改号码，需要匹配之前的号码
+							if deviceInfo.Family[i].Phone == curPhone.Phone || deviceInfo.Family[i].Index == curPhone.Index {
+								deviceInfo.Family[i] = newPhone
+								break
+							}
 						}
 					}
 				}
 
+				phoneNumbers = makeFamilyPhoneNumbers(&deviceInfo.Family)
 				settings[index].NewValue = phoneNumbers
+
+			case proto.ContactAvatarsFieldName:
+				for i, m := range deviceInfo.Family {
+					if m.Index == setting.Index {
+						deviceInfo.Family[i].Avatar = setting.NewValue
+						break
+					}
+				}
+
+				settings[index].NewValue = fmt.Sprintf("{\"ContactAvatars\": %s}", makeContactAvatars(&deviceInfo.Family))
 			default:
 			}
 		}

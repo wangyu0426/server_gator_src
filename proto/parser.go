@@ -50,7 +50,6 @@ const (
 	DRT_SYNC_TIME       // 同BP00，手表请求对时
 	DRT_SEND_LOCATION      // 同BP30，手表上报定位(报警)数据
 	DRT_DEVICE_LOGIN    	   // 同BP31，手表登录服务器
-	DRT_MONITOR_ACK	   // 同BP05，手表对服务器请求电话监听的应答
 	DRT_SEND_MINICHAT      // 同BP34，手表发送语音微聊
 	DRT_FETCH_FILE		  // 同BP11，手表获取语音微聊或亲情号图片
 	DRT_PUSH_MINICHAT_ACK         // 同BP12，手表回复微聊确认包
@@ -112,7 +111,6 @@ var commands = []string{
 	"BP00",
 	"BP30",
 	"BP31",
-	"BP05",
 	"BP34",
 	"BP11",
 	"BP12",
@@ -261,6 +259,7 @@ type SettingParam struct {
 	FieldName string 		`json:"fieldname"`
 	CurValue string 		`json:"curvalue"`
 	NewValue string 		`json:"newvalue"`
+	Index int
 }
 
 type DeviceSettingParams struct {
@@ -328,6 +327,7 @@ var	LangFieldName 			= "Lang"
 var	UseDSTFieldName 			= "UseDST"
 var	ChildPowerOffFieldName 	= "ChildPowerOff"
 var PhoneNumbersFieldName 	= "PhoneNumbers"
+var ContactAvatarsFieldName 	= "ContactAvatar"
 var CountryCodeFieldName	= "CountryCode"
 
 var CmdOKTail 				= "-ok"
@@ -378,13 +378,16 @@ type SafeZone struct {
 }
 
 type FamilyMember struct {
-	CountryCode string
-	Phone string
-	Name string
-	Avatar string
-	//NewAvatar bool
-	Type int
-	Index int
+	CountryCode string `json:"countryCode"`
+	Phone string `json:"phone"`
+	Name string `json:"name"`
+	Avatar string `json:"avatar"`
+	Type int `json:"type"`
+	Index int `json:"index"`
+}
+
+type ContactAvatars struct {
+	ContactAvatars[] FamilyMember
 }
 
 type HideiTimer struct {
@@ -565,6 +568,17 @@ func init()  {
 	//fmt.Println(now.UnixNano(),  now.Format("20060102150405"), now.Nanosecond())
 	//id := fmt.Sprintf("%s%d", now.Format("20060102150405"), now.Nanosecond())
 	//fmt.Println(now.UnixNano(),  id[2:18])
+	//avatar := "http://service.gatorcn.com/xxx/xxx/upload/avatar/aaaaa.jpg"
+	//s:=strings.SplitN(avatar, "upload/avatar/", 2)
+	//fmt.Println(MakeStructToJson(&FamilyMember{}))
+	//f1 := [MAX_FAMILY_MEMBER_NUM]FamilyMember{}
+	//f2 := [MAX_FAMILY_MEMBER_NUM]FamilyMember{}
+	//f1[0].Phone = "123"
+	//f1[1].Phone = "234"
+	//fmt.Println(f1)
+	//f2[0] = f1[0]
+	//f1 = f2
+	//fmt.Println(f1)
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()
@@ -802,7 +816,7 @@ func MakeDeviceInfoResult(deviceInfo *DeviceInfo) DeviceInfoResult {
 }
 
 func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
-	rows, err := dbpool.Query("select w.IMEI, w.OwnerName, w.PhoneNumbers, w.TimeZone, w.CountryCode, w.Avatar, d.SimID," +
+	rows, err := dbpool.Query("select w.IMEI, w.OwnerName, w.PhoneNumbers, w.ContactAvatar,  w.TimeZone, w.CountryCode, w.Avatar, d.SimID," +
 		" w.ChildPowerOff, w.UseDST, w.SocketModeOff, w.Volume, w.Lang, w.VerifyCode, w.Fence1,w.Fence2, w.Fence3," +
 		" w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, " +
 		" w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2," +
@@ -817,6 +831,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		IMEI      		,
 		OwnerName  		,
 		PhoneNumbers   	,
+		ContactAvatar 	,
 		TimeZone		,
 		CountryCode 		,
 		Avatar 			,
@@ -841,7 +856,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 	tmpDeviceInfoList := &map[uint64]*DeviceInfo{}
 	for rows.Next() {
 		deviceInfo := &DeviceInfo{}
-		err := rows.Scan(&IMEI, &OwnerName, &PhoneNumbers, &TimeZone, &CountryCode, &Avatar, &SimID,
+		err := rows.Scan(&IMEI, &OwnerName, &PhoneNumbers, &ContactAvatar, &TimeZone, &CountryCode, &Avatar, &SimID,
 			&ChildPowerOff, &UseDST, &SocketModeOff, &Volume, &Lang, &VerifyCode, &Fences[0], &Fences[1], &Fences[2],
 			&Fences[3], &Fences[4], &Fences[5], &Fences[6], &Fences[7], &Fences[8], &Fences[9], &WatchAlarms[0], &WatchAlarms[1],
 			&WatchAlarms[2], &WatchAlarms[3], &WatchAlarms[4], &HideSelf, &HideTimers[0], &HideTimers[1], &HideTimers[2],
@@ -852,6 +867,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		deviceInfo.Imei = Str2Num(parseUint8Array(IMEI), 10)
 		deviceInfo.OwnerName = parseUint8Array(OwnerName)
 		ParseFamilyMembers(parseUint8Array(PhoneNumbers), &deviceInfo.Family)
+		ParseContactAvatars(parseUint8Array(ContactAvatar), &deviceInfo.Family)
 		deviceInfo.TimeZone  = ParseTimeZone(parseUint8Array(TimeZone))
 		deviceInfo.CountryCode = parseUint8Array(CountryCode)
 		deviceInfo.Avatar = parseUint8Array(Avatar)
@@ -960,6 +976,24 @@ func ParseSinglePhoneNumberString(phone string, i int)  FamilyMember{
 	member.Index = i + 1
 
 	return member
+}
+
+
+func ParseContactAvatars(contactAvatars string, familyMemberList *[MAX_FAMILY_MEMBER_NUM]FamilyMember)  {
+	avatars := ContactAvatars{}
+	err := json.Unmarshal([]byte(contactAvatars), &avatars)
+	if err != nil {
+		fmt.Println("parse contact avatars failed, ", err.Error())
+		return
+	}
+
+	for i, m := range avatars.ContactAvatars {
+		if i >= MAX_FAMILY_MEMBER_NUM  || m.Index > MAX_FAMILY_MEMBER_NUM {
+			break
+		}
+
+		familyMemberList[i].Avatar = m.Avatar
+	}
 }
 
 func ParseFamilyMembers(PhoneNumbers string, familyMemberList *[MAX_FAMILY_MEMBER_NUM]FamilyMember)  {

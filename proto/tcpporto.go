@@ -448,8 +448,6 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	//	if strings.Contains(string(msg.Data),  "AP11") {
 	//		service.needSendChatNum = false
 	//	}
-	}else if service.cmd == DRT_MONITOR_ACK {
-		//BP05, 手表对服务器请求电话监听的应答
 	}else if service.cmd == DRT_SEND_MINICHAT {
 		//BP34,手表发送微聊
 		if len(msg.Data) <= 2 {
@@ -481,6 +479,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		}
 	}else if service.cmd == DRT_FETCH_FILE {
 		//BP11, 手表获取未读微聊或亲情号头像设置数目
+		logging.Log("ProcessRspFetchFile 1")
 		bufOffset++
 		ret = service.ProcessRspFetchFile(msg.Data[bufOffset: ])
 		if ret == false {
@@ -557,6 +556,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 
 func (service *GT06Service)DoResponse() []*MsgData  {
 	if service.needSendChat {
+		logging.Log(fmt.Sprint("ProcessRspFetchFile 4, ", service.needSendChat))
 		service.ProcessRspChat()
 		//data := make([]byte, 200*1024)
 		//offset := 0
@@ -577,6 +577,8 @@ func (service *GT06Service)DoResponse() []*MsgData  {
 	}
 
 	if service.needSendPhoto {
+		logging.Log(fmt.Sprint("ProcessRspFetchFile 5, ", service.needSendPhoto,
+			service.needSendPhotoNum, service.reqPhotoInfoNum))
 		service.ProcessRspPhoto()
 		//data := make([]byte, 200*1024)
 		//offset := 0
@@ -1379,11 +1381,15 @@ func (service *GT06Service) ProcessRspFetchFile(pszMsg []byte) bool {
 		service.needSendChat = true
 		service.needSendChatNum = false
 		service.reqChatInfoNum = int(fileNum)
+		logging.Log(fmt.Sprint("ProcessRspFetchFile 2, ", service.needSendChat,
+			service.needSendChatNum, service.reqChatInfoNum))
 	}else if  fields[0] ==  "AP23" {
 		//photo
 		service.needSendPhoto = true
 		service.needSendPhotoNum = false
 		service.reqPhotoInfoNum = int(fileNum)
+		logging.Log(fmt.Sprint("ProcessRspFetchFile 3, ", service.needSendPhoto,
+			service.needSendPhotoNum, service.reqPhotoInfoNum))
 	}
 
 	return true
