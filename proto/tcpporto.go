@@ -718,10 +718,30 @@ func makeDeviceFamilyPhoneNumbers(family *[MAX_FAMILY_MEMBER_NUM]FamilyMember) s
 	return phoneNumbers
 }
 
+func makeHideTimerReplyMsgString(imei, id uint64) string {
+	//(006A357593060153353AP22,1,1,0900,1000,127,1,1032,1100,127,1,1400,1500,62,1,1530,1600,62,0000000000000017)
+	body := fmt.Sprintf("%015dAP22,1,", imei)
+	tail := fmt.Sprintf("%016X)", id)
+
+	DeviceInfoListLock.RLock()
+	device, ok := (*DeviceInfoList)[imei]
+	if ok && device != nil {
+		for _, timer := range device.HideTimerList {
+			if len(timer.Begin) > 0{
+				body += fmt.Sprintf("%d,%s,%s,%d,",  timer.Enabled, timer.Begin[0:4], timer.End[0:4], timer.Days)
+			}
+		}
+	}
+	DeviceInfoListLock.RUnlock()
+
+	return (fmt.Sprintf("(%04X", 5 + len(body) + len(tail)) + body + tail)
+}
+
 func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*MsgData  {
 	if len(params.Settings) > 0 {
 		msgList := []*MsgData{}
 		for _, setting := range params.Settings {
+			fmt.Println("MakeSetDeviceConfigReplyMsg:", setting)
 			msg := MsgData{}
 			msg.Header.Header.Imei = imei
 			msg.Header.Header.ID = NewMsgID()
@@ -759,6 +779,61 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 				if ok == false {
 					return nil
 				}
+			case WatchAlarmFieldName + "0":
+				fallthrough
+			case WatchAlarmFieldName + "1":
+				fallthrough
+			case WatchAlarmFieldName + "2":
+				fallthrough
+			case WatchAlarmFieldName + "3":
+				fallthrough
+			case WatchAlarmFieldName + "4":
+				// (0040357593060153353AP09,1,0,127,150728,152900,0000000000000008)
+				body := "'"
+				if setting.NewValue == "delete" {
+					curWatchAlarm := WatchAlarm{}
+					err := json.Unmarshal([]byte(setting.CurValue), &curWatchAlarm)
+					if err != nil {
+						logging.Log(fmt.Sprintf("[%d] bad data of current watch alarm to delete, %s", imei, setting.CurValue))
+						return  nil
+					}else{
+						body = fmt.Sprintf("%015dAP09,%d,%d,%d,%s,%s,%016X)", imei, 0, setting.Index, curWatchAlarm.Days,
+							curWatchAlarm.Date, curWatchAlarm.Time, msg.Header.Header.ID)
+					}
+				}else{
+					newWatchAlarm := WatchAlarm{}
+					err := json.Unmarshal([]byte(setting.NewValue), &newWatchAlarm)
+					if err != nil {
+						logging.Log(fmt.Sprintf("[%d] bad data of new watch alarm to save, %s", imei, setting.NewValue))
+						return  nil
+					}else{
+						body = fmt.Sprintf("%015dAP09,%d,%d,%d,%s,%s,%016X)", imei, 0, setting.Index, newWatchAlarm.Days,
+							newWatchAlarm.Date, newWatchAlarm.Time, msg.Header.Header.ID)
+					}
+				}
+
+				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				logging.Log(fmt.Sprintf("send watch alarm to [%d]:  %s", imei, string(msg.Data)))
+
+			case HideSelfFieldName:
+				if setting.NewValue == "0" {
+					body := fmt.Sprintf("%015dAP22,0,%016X)",  imei, msg.Header.Header.ID)
+					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				}else {
+					msg.Data = []byte(makeHideTimerReplyMsgString(imei, msg.Header.Header.ID))
+				}
+
+				logging.Log(fmt.Sprintf("send hide self settings to [%d]:  %s", imei, string(msg.Data)))
+			case HideTimer0FieldName:
+				fallthrough
+			case HideTimer1FieldName:
+				fallthrough
+			case HideTimer2FieldName:
+				fallthrough
+			case HideTimer3FieldName:
+				msg.Data = []byte(makeHideTimerReplyMsgString(imei, msg.Header.Header.ID))
+				logging.Log(fmt.Sprintf("send hide timer to [%d]:  %s", imei, string(msg.Data)))
+
 			default:
 				return nil
 			}

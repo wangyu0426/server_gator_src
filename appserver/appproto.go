@@ -410,20 +410,6 @@ func makerRandomVerifyCode() string {
 	return string(randChars[0:4])
 }
 
-func makeFamilyPhoneNumbers(family *[proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember) string {
-	phoneNumbers := ""
-	for i := 0; i < len(family); i++ {
-		if  i > 0 {
-			phoneNumbers += ","
-		}
-
-		phoneNumbers += fmt.Sprintf("%s|%d|%s",  family[i].Phone, family[i].Type, family[i].Name)
-	}
-
-	return phoneNumbers
-}
-
-
 func makeContactAvatars(family *[proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember) string {
 	return proto.MakeStructToJson(family)
 }
@@ -483,7 +469,7 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 				}
 				proto.DeviceInfoListLock.Unlock()
 				if isFound {
-					phoneNumbers = makeFamilyPhoneNumbers(&family)
+					phoneNumbers = proto.MakeFamilyPhoneNumbers(&family)
 					if isAdmin {
 						//如果是管理员，则更新手表对应的字段数据，非管理员仅更新关注列表和对应的亲情号
 						strSqlUpdateDeviceInfo = fmt.Sprintf("update watchinfo set OwnerName='%s', CountryCode='%s', " +
@@ -666,7 +652,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 					}
 				}
 
-				phoneNumbers = makeFamilyPhoneNumbers(&deviceInfo.Family)
+				phoneNumbers = proto.MakeFamilyPhoneNumbers(&deviceInfo.Family)
 				settings[index].NewValue = phoneNumbers
 
 			case proto.ContactAvatarsFieldName:
@@ -678,6 +664,44 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 				}
 
 				settings[index].NewValue = fmt.Sprintf("{\"ContactAvatars\": %s}", makeContactAvatars(&deviceInfo.Family))
+			case proto.WatchAlarmFieldName:
+				if setting.Index >=0 && setting.Index < proto.MAX_WATCH_ALARM_NUM {
+					if setting.NewValue == "delete"{
+						deviceInfo.WatchAlarmList[setting.Index] = proto.WatchAlarm{}
+						valulesIsString[index] = false
+						settings[index].NewValue = "null"
+					}else{
+						err := json.Unmarshal([]byte(setting.NewValue), &deviceInfo.WatchAlarmList[setting.Index])
+						if err != nil {
+							proto.DeviceInfoListLock.Unlock()
+							logging.Log(fmt.Sprintf("[%d] bad data for watch alarm setting %d, err(%s) for %s",
+								imei, setting.Index, err.Error(), setting.NewValue))
+							return false
+						}
+					}
+
+					settings[index].FieldName += proto.Num2Str(uint64(setting.Index),10)
+				}else{
+					proto.DeviceInfoListLock.Unlock()
+					logging.Log(fmt.Sprintf("[%d] bad index %d for delete watch alarm", imei, setting.Index))
+					return false
+				}
+			case proto.HideSelfFieldName:
+				deviceInfo.HideTimerOn = (proto.Str2Num(setting.NewValue, 10)) == 1
+			case proto.HideTimer0FieldName:
+				fallthrough
+			case proto.HideTimer1FieldName:
+				fallthrough
+			case proto.HideTimer2FieldName:
+				fallthrough
+			case proto.HideTimer3FieldName:
+				err := json.Unmarshal([]byte(setting.NewValue), &deviceInfo.HideTimerList[setting.Index])
+				if err != nil {
+					proto.DeviceInfoListLock.Unlock()
+					logging.Log(fmt.Sprintf("[%d] bad data for hide timer setting %d, err(%s) for %s",
+						imei, setting.Index, err.Error(), setting.NewValue))
+					return false
+				}
 			default:
 			}
 		}
@@ -711,6 +735,12 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 		case proto.UseDSTFieldName:
 		case proto.ChildPowerOffFieldName:
 		case proto.PhoneNumbersFieldName:
+		case proto.WatchAlarmFieldName:
+		case proto.HideSelfFieldName:
+		case proto.HideTimer0FieldName:
+		case proto.HideTimer1FieldName:
+		case proto.HideTimer2FieldName:
+		case proto.HideTimer3FieldName:
 			//上面都是需要通知手表更新设置的
 
 		case proto.CountryCodeFieldName:
@@ -732,18 +762,20 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 		Imei: proto.Num2Str(imei, 10),
 	}
 
-	for _, isNeed := range isNeedNotifyDevice {
-		if isNeed {
-			//msgNotify := &proto.MsgData{}
-			//msgNotify.Header.Header.Version = proto.MSG_HEADER_VER
-			//msgNotify.Header.Header.Imei = imei
-			//msgNotify.Data = proto.MakeSetDeviceConfigReplyMsg(imei, params)
-			msgNotifyDataList := proto.MakeSetDeviceConfigReplyMsg(imei, params)
-			for _, msgNotify := range msgNotifyDataList  {
-				svrctx.Get().TcpServerChan <- msgNotify
-			}
+	if ret {
+		for _, isNeed := range isNeedNotifyDevice {
+			if isNeed {
+				//msgNotify := &proto.MsgData{}
+				//msgNotify.Header.Header.Version = proto.MSG_HEADER_VER
+				//msgNotify.Header.Header.Imei = imei
+				//msgNotify.Data = proto.MakeSetDeviceConfigReplyMsg(imei, params)
+				msgNotifyDataList := proto.MakeSetDeviceConfigReplyMsg(imei, params)
+				for _, msgNotify := range msgNotifyDataList  {
+					svrctx.Get().TcpServerChan <- msgNotify
+				}
 
-			break
+				break
+			}
 		}
 	}
 
@@ -775,13 +807,13 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 			settingResultJson, _ := json.Marshal(settingResult)
 			result.Data = string([]byte(settingResultJson))
 		}
-
-		jsonData, _ := json.Marshal(&result)
-
-		appServerChan <- &proto.AppMsgData{Cmd: cmdAck, Imei: imei,
-			UserName: params.UserName, AccessToken:params.AccessToken,
-			Data: string(jsonData), Conn: c}
 	}
+
+	jsonData, _ := json.Marshal(&result)
+
+	appServerChan <- &proto.AppMsgData{Cmd: cmdAck, Imei: imei,
+		UserName: params.UserName, AccessToken:params.AccessToken,
+		Data: string(jsonData), Conn: c}
 
 	return ret
 }

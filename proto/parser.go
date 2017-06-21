@@ -328,6 +328,12 @@ var	UseDSTFieldName 			= "UseDST"
 var	ChildPowerOffFieldName 	= "ChildPowerOff"
 var PhoneNumbersFieldName 	= "PhoneNumbers"
 var ContactAvatarsFieldName 	= "ContactAvatar"
+var WatchAlarmFieldName 	= "WatchAlarm"
+var HideSelfFieldName 		= "HideSelf"
+var HideTimer0FieldName 		= "HideTimer0"
+var HideTimer1FieldName 		= "HideTimer1"
+var HideTimer2FieldName 		= "HideTimer2"
+var HideTimer3FieldName 		= "HideTimer3"
 var CountryCodeFieldName	= "CountryCode"
 
 var CmdOKTail 				= "-ok"
@@ -775,12 +781,26 @@ func Bool2UInt8(b bool)   uint8 {
 	return 0
 }
 
+
+func MakeFamilyPhoneNumbers(family *[MAX_FAMILY_MEMBER_NUM]FamilyMember) string {
+	phoneNumbers := ""
+	for i := 0; i < len(family); i++ {
+		if  i > 0 {
+			phoneNumbers += ","
+		}
+
+		phoneNumbers += fmt.Sprintf("%s|%d|%s",  family[i].Phone, family[i].Type, family[i].Name)
+	}
+
+	return phoneNumbers
+}
+
 func MakeDeviceInfoResult(deviceInfo *DeviceInfo) DeviceInfoResult {
 	result := DeviceInfoResult{}
 	result.IMEI = Num2Str(deviceInfo.Imei, 10)
 	result.Model = ModelNameList[deviceInfo.Model]
 	result.OwnerName = deviceInfo.OwnerName
-	result.PhoneNumbers = makeDeviceFamilyPhoneNumbers(&deviceInfo.Family)
+	result.PhoneNumbers = MakeFamilyPhoneNumbers(&deviceInfo.Family)
 	result.TimeZone = makeDBTimeZoneString(deviceInfo.TimeZone)
 	result.CountryCode = deviceInfo.CountryCode
 	result.Avatar = deviceInfo.Avatar
