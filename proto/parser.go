@@ -334,6 +334,8 @@ var HideTimer0FieldName 		= "HideTimer0"
 var HideTimer1FieldName 		= "HideTimer1"
 var HideTimer2FieldName 		= "HideTimer2"
 var HideTimer3FieldName 		= "HideTimer3"
+var FenceFieldName 			= "Fence"
+
 var CountryCodeFieldName	= "CountryCode"
 
 var CmdOKTail 				= "-ok"
@@ -586,6 +588,11 @@ func init()  {
 	//f2[0] = f1[0]
 	//f1 = f2
 	//fmt.Println(f1)
+	//name := "Fence"
+	//switch {
+	//case strings.Contains(name, "Fence"):
+	//	fmt.Println("OK")
+	//}
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()

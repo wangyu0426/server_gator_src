@@ -602,6 +602,28 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 	if ok && deviceInfo != nil {
 		for index, setting := range settings {
+			switch {
+			case strings.Contains(setting.FieldName, proto.FenceFieldName):
+				logging.Log("fence setting")
+				if setting.NewValue == "delete"{
+					deviceInfo.SafeZoneList[setting.Index - 1] = proto.SafeZone{}
+					valulesIsString[index] = false
+					settings[index].NewValue = "null"
+				}else {
+					err := json.Unmarshal([]byte(setting.NewValue), &deviceInfo.SafeZoneList[setting.Index - 1])
+					if err != nil {
+						proto.DeviceInfoListLock.Unlock()
+						logging.Log(fmt.Sprintf("[%d] bad data for fence setting %d, err(%s) for %s",
+							imei, setting.Index, err.Error(), setting.NewValue))
+						return false
+					}
+				}
+				settings[index].FieldName += proto.Num2Str(uint64(setting.Index),10)
+				continue
+			}
+
+			logging.Log("non-fence setting")
+
 			switch setting.FieldName {
 			case proto.AvatarFieldName:
 				deviceInfo.Avatar = setting.NewValue
@@ -745,6 +767,8 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 
 		case proto.CountryCodeFieldName:
 		case proto.SimIDFieldName:
+		case proto.FenceFieldName:
+		case proto.AvatarFieldName:
 			isNeedNotifyDevice[i] = false
 		default:
 			return false
