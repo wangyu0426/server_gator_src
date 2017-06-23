@@ -50,9 +50,23 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 	case proto.LoginCmdName:
 		params := msg["data"].(map[string]interface{})
 		return login(c, params["username"].(string), params["password"].(string), false)
+
 	case proto.RegisterCmdName:
 		params := msg["data"].(map[string]interface{})
 		return login(c, params["username"].(string), params["password"].(string), true)
+
+	case proto.ResetPasswordCmdName:
+		params := msg["data"].(map[string]interface{})
+		return resetPassword(c, params["username"].(string))
+
+	case proto.ModifyPasswordCmdName:
+		params := msg["data"].(map[string]interface{})
+		return modifyPassword(c, params["username"].(string), params["accessToken"].(string),
+			params["oldPassword"].(string), params["newPassword"].(string))
+
+	case proto.FeedbackCmdName:
+		params := msg["data"].(map[string]interface{})
+		return handleFeedback(c, params["username"].(string), params["accessToken"].(string),params["feedback"].(string))
 
 	case proto.HearbeatCmdName:
 		//datas := msg["data"].(map[string]interface{})
@@ -211,6 +225,16 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 					deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 					if ok && deviceInfo != nil {
 						deviceInfoResult = proto.MakeDeviceInfoResult(deviceInfo)
+						deviceInfoResult.Avatar = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort, svrctx.Get().HttpStaticURL +
+							deviceInfoResult.Avatar)
+
+						for i, ava := range deviceInfoResult.ContactAvatar{
+							if len(ava) > 0 {
+								deviceInfoResult.ContactAvatar[i] = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName,
+									svrctx.Get().WSPort, svrctx.Get().HttpStaticURL + ava)
+							}
+						}
+
 						loginData["devices"].([]interface{})[i] = deviceInfoResult
 						fmt.Println("deviceinfoResult: ", proto.MakeStructToJson(&deviceInfoResult))
 					}
@@ -257,6 +281,95 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 
 	return true
 }
+
+//忘记密码，通过服务器重设秘密
+func resetPassword(c *AppConnection, username string) bool {
+	urlRequest := "http://127.0.0.1/tracker/web/index.php?r=app/auth/"
+	if svrctx.Get().IsDebugLocal {
+		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+	}
+
+	reqType := "reset"
+	urlRequest += reqType
+
+	resp, err := http.PostForm(urlRequest, url.Values{"username": {username}})
+	if err != nil {
+		logging.Log("app " + reqType + "failed, " + err.Error())
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logging.Log("response has err, " + err.Error())
+		return false
+	}
+
+	ioutil.WriteFile("error.html",  body, 0666)
+
+	appServerChan <- &proto.AppMsgData{Cmd: proto.ResetPasswordAckCmdName,
+		Data: string(body), Conn: c}
+
+	return true
+}
+
+//有旧密码，重设新密码
+func modifyPassword(c *AppConnection, username, accessToken, oldPasswd, newPasswd  string) bool {
+	requesetURL := "http://127.0.0.1/tracker/web/index.php?r=app/service/modpwd&access-token=" + accessToken
+	if svrctx.Get().IsDebugLocal {
+		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/modpwd&access-token=" + accessToken
+	}
+
+	logging.Log("url: " + requesetURL)
+	resp, err := http.PostForm(requesetURL, url.Values{"oldpwd": {oldPasswd}, "newpwd": {newPasswd}})
+	if err != nil {
+		logging.Log(fmt.Sprintf("user %s modify password  failed, ", username, err.Error()))
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logging.Log("response has err, " + err.Error())
+		return false
+	}
+
+	appServerChan <- &proto.AppMsgData{Cmd: proto.ModifyPasswordAckCmdName,
+		Data: (string(body)), Conn: c}
+
+	return true
+}
+
+
+func handleFeedback(c *AppConnection, username, accessToken, feedback string) bool {
+	requesetURL := "http://127.0.0.1/tracker/web/index.php?r=app/service/feedback&access-token=" + accessToken
+	if svrctx.Get().IsDebugLocal {
+		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/feedback&access-token=" + accessToken
+	}
+
+	logging.Log("url: " + requesetURL)
+	resp, err := http.PostForm(requesetURL, url.Values{"feedback": {feedback}})
+	if err != nil {
+		logging.Log(fmt.Sprintf("user %s send feedback failed, ", username, err.Error()))
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logging.Log("response has err, " + err.Error())
+		return false
+	}
+
+	appServerChan <- &proto.AppMsgData{Cmd: proto.FeedbackAckCmdName,
+		Data: (string(body)), Conn: c}
+
+	return true
+}
+
 
 func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceBaseParams) bool {
 	//url := fmt.Sprintf("http://service.gatorcn.com/tracker/web/index.php?r=app/service/verify-code&SystemNo=%s&access-token=%s",

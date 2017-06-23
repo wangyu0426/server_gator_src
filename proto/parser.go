@@ -347,6 +347,15 @@ var LoginAckCmdName  		= LoginCmdName + CmdAckTail
 var RegisterCmdName  		= "register"
 var RegisterAckCmdName  		= RegisterCmdName + CmdAckTail
 
+var ResetPasswordCmdName  		= "reset-password"
+var ResetPasswordAckCmdName  	= ResetPasswordCmdName + CmdAckTail
+
+var FeedbackCmdName  		= "feedback"
+var FeedbackAckCmdName  	= FeedbackCmdName + CmdAckTail
+
+var ModifyPasswordCmdName  		= "modify-password"
+var ModifyPasswordAckCmdName  	= ModifyPasswordCmdName + CmdAckTail
+
 var HearbeatCmdName  		= "heartbeat"
 var HearbeatAckCmdName  	= HearbeatCmdName + CmdAckTail
 
@@ -474,6 +483,7 @@ type DeviceInfoResult struct {
 	UseDST,
 	SocketModeOff,
 	Volume uint8
+	ContactAvatar [MAX_FAMILY_MEMBER_NUM]string
 }
 
 type WIFIInfo  struct  {
@@ -808,6 +818,11 @@ func MakeDeviceInfoResult(deviceInfo *DeviceInfo) DeviceInfoResult {
 	result.Model = ModelNameList[deviceInfo.Model]
 	result.OwnerName = deviceInfo.OwnerName
 	result.PhoneNumbers = MakeFamilyPhoneNumbers(&deviceInfo.Family)
+
+	for i, m := range deviceInfo.Family {
+		result.ContactAvatar[i] = m.Avatar
+	}
+
 	result.TimeZone = makeDBTimeZoneString(deviceInfo.TimeZone)
 	result.CountryCode = deviceInfo.CountryCode
 	result.Avatar = deviceInfo.Avatar

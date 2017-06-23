@@ -222,6 +222,9 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				//如果是login请求，则与设备无关,无须查表，直接发送数据到APP客户端
 				if msg.Cmd == proto.LoginAckCmdName ||
 					msg.Cmd == proto.RegisterAckCmdName ||
+					msg.Cmd == proto.ResetPasswordAckCmdName ||
+					msg.Cmd == proto.ModifyPasswordAckCmdName ||
+					msg.Cmd == proto.FeedbackAckCmdName ||
 					(msg.Cmd == proto.HearbeatAckCmdName && msg.Conn != nil) ||
 					msg.Conn == proto.VerifyCodeAckCmdName ||
 					msg.Cmd == proto.GetDeviceByImeiAckCmdName ||
@@ -235,6 +238,8 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 					err = (*c.conn).EmitMessage(data)
 					if err != nil {
 						logging.Log("send msg to app failed, " + err.Error())
+					}else{
+						logging.Log("send msg: " + fmt.Sprint(msg))
 					}
 					break
 				}
@@ -244,13 +249,14 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				//那么收到该APP客户端的第一个请求，应该首先读取该客户端关注的手表数据
 
 				subTable := getAppClientsByImei(msg)
-				logging.Log("send msg: " + fmt.Sprint(msg))
 				if subTable != nil {
 					for _, c := range subTable{
 						data, err := json.Marshal(&msg)
 						err =(*c.conn).EmitMessage(data)
 						if err != nil {
 							logging.Log("send msg to app failed, " + err.Error())
+						}else{
+							logging.Log("send msg: " + fmt.Sprint(msg))
 						}
 					}
 				}
