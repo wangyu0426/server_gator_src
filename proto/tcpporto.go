@@ -372,9 +372,12 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			service.msgAckId = msgIdForAck
 			lastAckOK := Str2Num(string(msg.Data[16: 17]), 10)
 			if lastAckOK == 1 {
-				resp := &ResponseItem{CMD_ACK,  service.makeAckParsedMsg(msgIdForAck)}
-				service.rspList = append(service.rspList, resp)
+				//回复成功，通知app成功
+			}else{
+				//回复失败，通知APP失败
 			}
+			resp := &ResponseItem{CMD_ACK,  service.makeAckParsedMsg(msgIdForAck)}
+			service.rspList = append(service.rspList, resp)
 		}
 	}else if service.cmd == DRT_SYNC_TIME {  //BP00 对时
 		madeData, id := service.makeSyncTimeReplyMsg()
