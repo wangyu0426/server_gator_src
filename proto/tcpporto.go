@@ -47,6 +47,7 @@ type RequestContext struct {
 	Port int
 	AvatarUploadDir string
 	MinichatUploadDir string
+	DeviceMinichatBaseUrl string
 	Pgpool *pgx.ConnPool
 	MysqlPool *sql.DB
 	WritebackChan chan *MsgData
@@ -140,14 +141,16 @@ const (
 
 
 type ChatInfo struct {
-	DateTime uint64 //客户端的发送时间
-	VoiceMilisecs int
-	SenderType uint8
-	Sender string
+	Imei  uint64 		`json:"imei"`
+	DateTime uint64      	`json:"datetime"`   //客户端的发送时间
+	FileID uint64 		`json:"fileid"`
+	VoiceMilisecs int		`json:"milisecs"`
+	SenderType uint8	`json:"senderType"`
+	Sender string		`json:"sender"`
 	ReceiverType uint8
 	Receiver string
 	ContentType uint8
-	Content string //如contentType是文件类型，则Content是以时间戳id命名的文件名
+	Content string 		`json:"content"`	//如contentType是文件类型，则Content是以时间戳id命名的文件名
 	Flags  int
 }
 
@@ -1142,6 +1145,16 @@ func (service *GT06Service)  NotifyAppWithNewLocation() bool  {
 	return true
 }
 
+func (service *GT06Service)  NotifyAppWithNewMinichat(chat ChatInfo) bool  {
+	result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
+	result.Minichat = append(result.Minichat, chat)
+
+	service.reqCtx.AppNotifyChan  <- &AppMsgData{Cmd: HearbeatAckCmdName,
+		Imei: service.imei,
+		Data: MakeStructToJson(result), Conn: nil}
+	return true
+}
+
 //
 //func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 //	//需要断点续传的支持
@@ -1278,6 +1291,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 
 	//以下是数据完整的处理,
 	//首先查找当前任务是否已经存在
+	newChatInfo := ChatInfo{}
 	isFoundTable, isFoundTask := false, false
 	DeviceChatTaskTableLock.Lock()
 	chat := &ChatTask{}
@@ -1348,6 +1362,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 			if blockIndex == chat.Data.BlockCount {
 				fileFinished = true
 				fileData = chat.Data.Data[0: chat.Data.recvSized]
+				newChatInfo = chat.Info
 			}
 		}
 	}
@@ -1360,8 +1375,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 
 
 	if fileFinished {
-		filePathDir := fmt.Sprintf("/usr/share/nginx/html/tracker/web/upload/minichat/watch/%d",
-			service.imei)
+		filePathDir := fmt.Sprintf("%s%d", service.reqCtx.MinichatUploadDir + "watch/", service.imei)
 		os.MkdirAll(filePathDir, 0755)
 		filePath := fmt.Sprintf("%s/%d.amr", filePathDir, fileId)
 		ioutil.WriteFile(filePath, fileData[0: ], 0666)
@@ -1372,7 +1386,9 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		//DeviceChatTaskTableLock.Unlock()
 
 		//通知APP有新的微聊信息。。。
-		//service.NotifyAppWithNewLocation()
+		newChatInfo.Content = fmt.Sprintf("%swatch/%d/%d.amr", service.reqCtx.DeviceMinichatBaseUrl,
+			service.imei, fileId)
+		service.NotifyAppWithNewMinichat(newChatInfo)
 	}
 
 	//// for test

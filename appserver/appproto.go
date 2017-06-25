@@ -139,6 +139,22 @@ func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 		result.Locations = append(result.Locations, svrctx.GetDeviceData(proto.Str2Num(imei, 10), svrctx.Get().PGPool))
 	}
 
+	chat := proto.ChatInfo{}
+	DeviceMinichatBaseUrl := fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName,
+		svrctx.Get().WSPort, svrctx.Get().HttpStaticURL + svrctx.Get().HttpStaticMinichatDir)
+
+	chat.Content = fmt.Sprintf("%swatch/%d/%d.mp3", DeviceMinichatBaseUrl,
+		357593060571398, 1706201641546398)
+	chat.FileID = 1706201641546398
+	chat.SenderType = 0
+	chat.VoiceMilisecs = 3000
+	chat.Sender = "357593060571398"
+	chat.DateTime = 170620164154
+	chat.Imei = 357593060571398
+	result.Minichat = append(result.Minichat, chat)
+
+	fmt.Println("heartbeat-ack: ", proto.MakeStructToJson(result))
+
 	appServerChan <- &proto.AppMsgData{Cmd: proto.HearbeatAckCmdName,
 		UserName: params.UserName,
 		AccessToken: params.AccessToken,

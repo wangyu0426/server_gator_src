@@ -213,6 +213,7 @@ type HeartbeatParams struct {
 type HeartbeatResult struct {
 	Timestamp string `json:"timestamp"`
 	Locations []LocationData`json:"locations"`
+	Minichat []ChatInfo`json:"minichat"`
 }
 
 
