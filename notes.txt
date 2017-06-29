@@ -93,3 +93,100 @@ env WINEPREFIX="/home/work/.wine" wine C:\\windows\\command\\start.exe /Unix /ho
 
   git config --global user.email "liuwenkui_ccnu@hotmail.com"
   git config --global user.name "lwk"
+
+
+  /--------------------------------------------------------------------------------
+
+Enter your token from the browser:  macpcdeMac-Pro:pibo macpc$
+macpcdeMac-Pro:pibo macpc$
+macpcdeMac-Pro:pibo macpc$ code-push register
+Please login to Mobile Center in the browser window we've just opened.
+
+Enter your token from the browser:  46b1b412be64d62cdc4820168d37eb2d182f330d
+
+Successfully logged-in. Your session file was written to /Users/macpc/.code-push.config. You can run the code-push logout command at any time to delete this file and terminate your session.
+
+macpcdeMac-Pro:pibo macpc$ code-push access-key list
+┌──────────────────────┬───────────────┐
+│ Name                 │ Created       │
+├──────────────────────┼───────────────┤
+│ macpcdeMac-Pro.local │ 2 minutes ago │
+└──────────────────────┴───────────────┘
+macpcdeMac-Pro:pibo macpc$ code-push access-key ls
+┌──────────────────────┬───────────────┐
+│ Name                 │ Created       │
+├──────────────────────┼───────────────┤
+│ macpcdeMac-Pro.local │ 2 minutes ago │
+└──────────────────────┴───────────────┘
+macpcdeMac-Pro:pibo macpc$ code-push app add 'Gator 3'
+Usage: code-push app add <appName> <os> <platform>
+
+选项：
+  -v, --version  显示版本号  [布尔]
+
+示例：
+  app add MyApp ios react-native      Adds app "MyApp", indicating that it's an iOS React Native app
+  app add MyApp windows react-native  Adds app "MyApp", indicating that it's a Windows React Native app
+  app add MyApp android cordova       Adds app "MyApp", indicating that it's an Android Cordova app
+
+macpcdeMac-Pro:pibo macpc$ code-push app add Gator3
+Usage: code-push app add <appName> <os> <platform>
+
+选项：
+  -v, --version  显示版本号  [布尔]
+
+示例：
+  app add MyApp ios react-native      Adds app "MyApp", indicating that it's an iOS React Native app
+  app add MyApp windows react-native  Adds app "MyApp", indicating that it's a Windows React Native app
+  app add MyApp android cordova       Adds app "MyApp", indicating that it's an Android Cordova app
+
+macpcdeMac-Pro:pibo macpc$ code-push app add 'Gator 3' ios react-native
+[Error]  The app name "Gator 3" isn't valid. It can only contain alphanumeric characters, dashes, periods, or underscores.
+macpcdeMac-Pro:pibo macpc$ code-push app add 'Gator 3' ios react-native
+[Error]  The app name "Gator 3" isn't valid. It can only contain alphanumeric characters, dashes, periods, or underscores.
+macpcdeMac-Pro:pibo macpc$
+macpcdeMac-Pro:pibo macpc$ code-push app add Gator3 ios react-native
+Successfully added the "Gator3" app, along with the following default deployments:
+┌────────────┬──────────────────────────────────────────────────────────────────┐
+│ Name       │ Deployment Key                                                   │
+├────────────┼──────────────────────────────────────────────────────────────────┤
+│ Production │ wlD23xkRxO_tsE-0hXyk5RAEU_bjbf2825ac-f4f2-4046-a50c-3b46aeeb4c05 │
+├────────────┼──────────────────────────────────────────────────────────────────┤
+│ Staging    │ hRirzI6RIRSC6U-orIAHY4Yu3NVPbf2825ac-f4f2-4046-a50c-3b46aeeb4c05 │
+└────────────┴──────────────────────────────────────────────────────────────────┘
+macpcdeMac-Pro:pibo macpc$
+macpcdeMac-Pro:pibo macpc$ code-push app list
+┌────────┬─────────────────────┐
+│ Name   │ Deployments         │
+├────────┼─────────────────────┤
+│ Gator3 │ Production, Staging │
+└────────┴─────────────────────┘
+macpcdeMac-Pro:pibo macpc$ code-push app add pibo ios react-native
+Successfully added the "pibo" app, along with the following default deployments:
+┌────────────┬──────────────────────────────────────────────────────────────────┐
+│ Name       │ Deployment Key                                                   │
+├────────────┼──────────────────────────────────────────────────────────────────┤
+│ Production │ d-3mjRy0LvH5_x1bFufs0AydD8EZbf2825ac-f4f2-4046-a50c-3b46aeeb4c05 │
+├────────────┼──────────────────────────────────────────────────────────────────┤
+│ Staging    │ JhoMD4dUBAnLEY4gDnhWDfKoGdBrbf2825ac-f4f2-4046-a50c-3b46aeeb4c05 │
+└────────────┴──────────────────────────────────────────────────────────────────┘
+macpcdeMac-Pro:pibo macpc$ code-push app list
+┌────────┬─────────────────────┐
+│ Name   │ Deployments         │
+├────────┼─────────────────────┤
+│ Gator3 │ Production, Staging │
+├────────┼─────────────────────┤
+│ pibo   │ Production, Staging │
+└────────┴─────────────────────┘
+macpcdeMac-Pro:pibo macpc$ code-push app list pibo
+Usage: code-push app list [options]
+
+选项：
+  --format       Output format to display your apps with ("json" or "table")  [字符串] [默认值: "table"]
+  -v, --version  显示版本号  [布尔]
+
+示例：
+  app list                List your apps in tabular format
+  app list --format json  List your apps in JSON format
+
+macpcdeMac-Pro:pibo macpc$

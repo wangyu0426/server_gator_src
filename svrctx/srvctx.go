@@ -69,12 +69,6 @@ var serverCtx ServerContext
 var DeviceTable = map[uint64]*proto.DeviceCache{}
 var DeviceTableLock = &sync.RWMutex{}
 
-var AppChatTaskTable = map[uint64]map[uint64]*proto.ChatTask{}
-var AppChatTaskTableLock = &sync.RWMutex{}
-
-var AppPhotoTaskTable = map[uint64]map[uint64]*proto.PhotoSettingTask{}
-var AppPhotoTaskTableLock = &sync.RWMutex{}
-
 func init()  {
 	fmt.Println("server contextinit...")
 
@@ -142,7 +136,7 @@ func init()  {
 	}
 
 	if serverCtx.IsDebugLocal {
-		serverCtx.HttpServerName = "http://192.168.3.97"
+		serverCtx.HttpServerName = "http://192.168.0.179"
 	}
 
 	fmt.Println("serverCtx.HttpServerName: ", serverCtx.HttpServerName)
