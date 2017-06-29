@@ -58,6 +58,7 @@ type ServerContext struct {
 	UseGoogleMap  bool
 	IsDebug  bool
 	IsDebugLocal  bool
+	LocalDebugHttpServerName  string
 
 	AppServerChan chan *proto.AppMsgData  `json:"-"`
 	TcpServerChan chan *proto.MsgData `json:"-"`
@@ -136,7 +137,7 @@ func init()  {
 	}
 
 	if serverCtx.IsDebugLocal {
-		serverCtx.HttpServerName = "http://192.168.0.179"
+		serverCtx.HttpServerName = serverCtx.LocalDebugHttpServerName
 	}
 
 	fmt.Println("serverCtx.HttpServerName: ", serverCtx.HttpServerName)

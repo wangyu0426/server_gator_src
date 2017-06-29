@@ -39,5 +39,6 @@
 
     "UseGoogleMap":true,
     "IsDebug":true,
-    "IsDebugLocal":true
+    "IsDebugLocal":true,
+    "LocalDebugHttpServerName": "http://192.168.3.97"
 }
