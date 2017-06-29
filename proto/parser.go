@@ -1018,7 +1018,7 @@ func ParseSinglePhoneNumberString(phone string, i int)  FamilyMember{
 		member.Name = fields[2]
 	}
 
-	member.Index = i + 1
+	member.Index = i
 
 	return member
 }
@@ -1052,7 +1052,7 @@ func ParseFamilyMembers(PhoneNumbers string, familyMemberList *[MAX_FAMILY_MEMBE
 			continue
 		}
 
-		familyMemberList[i] = ParseSinglePhoneNumberString(m, i)
+		familyMemberList[i] = ParseSinglePhoneNumberString(m, i + 1)
 	}
 }
 

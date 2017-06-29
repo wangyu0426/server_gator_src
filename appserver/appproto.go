@@ -786,8 +786,8 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 					deviceInfo.Family = newContacts
 				}else{
 					for i := 0; i < len(deviceInfo.Family); i++ {
-						curPhone := proto.ParseSinglePhoneNumberString(setting.CurValue, i)
-						newPhone := proto.ParseSinglePhoneNumberString(setting.NewValue, i)
+						curPhone := proto.ParseSinglePhoneNumberString(setting.CurValue, setting.Index)
+						newPhone := proto.ParseSinglePhoneNumberString(setting.NewValue, setting.Index)
 						//fullPhoneNnumber := "00" + deviceInfo.Family[i].CountryCode + deviceInfo.Family[i].Phone
 						if len(curPhone.Phone) == 0 { //之前没有号码，直接寻找一个空位就可以了
 							if len(deviceInfo.Family[i].Phone) == 0 {
