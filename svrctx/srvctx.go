@@ -409,6 +409,7 @@ func SetDeviceData(imei uint64, updateType int, deviceData proto.LocationData) {
 			device.CurrentLocation.DataTime = deviceData.DataTime
 			device.CurrentLocation.Steps = deviceData.Steps
 		}else{
+			DeviceTable[imei] = &proto.DeviceCache{Imei: imei}
 			DeviceTable[imei].CurrentLocation = deviceData
 		}
 	case proto.DEVICE_DATA_BATTERY:
@@ -417,6 +418,7 @@ func SetDeviceData(imei uint64, updateType int, deviceData proto.LocationData) {
 			device.CurrentLocation.Battery = deviceData.Battery
 			device.CurrentLocation.OrigBattery = deviceData.OrigBattery
 		}else{
+			DeviceTable[imei] = &proto.DeviceCache{Imei: imei}
 			DeviceTable[imei].CurrentLocation = deviceData
 		}
 	}
