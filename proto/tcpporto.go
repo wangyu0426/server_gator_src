@@ -718,7 +718,7 @@ func DeviceTimeZoneInt(tz string) int {
 func makeDeviceFamilyPhoneNumbers(family *[MAX_FAMILY_MEMBER_NUM]FamilyMember) string {
 	phoneNumbers := ""
 	for i := 0; i < len(family); i++ {
-		phoneNumbers += fmt.Sprintf("#%s#%d#%s",  family[i].Phone, family[i].Type, family[i].Name)
+		phoneNumbers += fmt.Sprintf("#%s#%s#%d",  family[i].Phone, family[i].Name, family[i].Type)
 	}
 
 	return phoneNumbers

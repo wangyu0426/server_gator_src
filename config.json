@@ -40,5 +40,7 @@
     "UseGoogleMap":true,
     "IsDebug":true,
     "IsDebugLocal":true,
-    "LocalDebugHttpServerName": "http://192.168.3.97"
+    "LocalDebugHttpServerName": "http://192.168.3.97",
+    "AndroidAppURL": "",
+    "IOSAppURL": "",
 }

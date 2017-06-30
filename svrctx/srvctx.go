@@ -60,6 +60,9 @@ type ServerContext struct {
 	IsDebugLocal  bool
 	LocalDebugHttpServerName  string
 
+	AndroidAppURL string
+	IOSAppURL string
+
 	AppServerChan chan *proto.AppMsgData  `json:"-"`
 	TcpServerChan chan *proto.MsgData `json:"-"`
 	ServerExit chan struct{} `json:"-"`
