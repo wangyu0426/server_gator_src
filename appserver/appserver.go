@@ -126,16 +126,16 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		}
 
 		os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir +  imei, 0755)
-		fileName := ""
+		fileName, timestampString := "", proto.MakeTimestampIdString()
 		if uploadType == "minichat" {
-			fileName += proto.MakeTimestampIdString() + ".aac"
+			fileName += timestampString + ".aac"
 		}else{
 			if uploadType == "contactAvatar" {
 				contactIndex := ctx.FormValue("index")
 				fileName += "contact_" + contactIndex + "_"
 			}
 
-			fileName += proto.MakeTimestampIdString() + ".jpg"
+			fileName += timestampString + ".jpg"
 		}
 
 		uploadTypeDir := svrctx.Get().HttpStaticAvatarDir
@@ -206,12 +206,13 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			chat := proto.ChatInfo{}
 			chat.Sender = phone
 			chat.ContentType = proto.ChatContentVoice
-			chat.Content = proto.MakeTimestampIdString()
+			chat.Content = timestampString
 			chat.DateTime = proto.Str2Num(chat.Content[0:12], 10)
 
 			svrctx.AddChatData(imeiUint64, chat)
 
-			result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
+			//这里应该通知APP，微聊列表有新的项
+			//result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
 				svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)
 			fmt.Println(fileName)
 			ctx.JSON(200, result)
