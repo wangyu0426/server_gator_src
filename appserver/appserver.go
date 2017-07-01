@@ -161,6 +161,46 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				return
 			}
 
+			_,fileInfo, err5 := ctx.FormFile(uploadType)
+			if err5 != nil {
+				result.ErrCode = 500
+				result.ErrMsg = "the uploaded type is not a file"
+				ctx.JSON(500, result)
+				return
+			}
+
+			file,err6 :=fileInfo.Open()
+			if err6 != nil {
+				result.ErrCode = 500
+				result.ErrMsg = "server failed to open the uploaded  file"
+				ctx.JSON(500, result)
+				return
+			}
+
+			defer file.Close()
+			fileData, err7 :=ioutil.ReadAll(file)
+			if err7 != nil {
+				result.ErrCode = 500
+				result.ErrMsg = "server failed to read the data of  the uploaded  file"
+				ctx.JSON(500, result)
+				return
+			}
+
+			if len(fileData) == 0 {
+				result.ErrCode = 500
+				result.ErrMsg = "no content in the uploaded  file (size is 0)"
+				ctx.JSON(500, result)
+				return
+			}
+
+			err8 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + uploadTypeDir +  imei + "/" + fileName, fileData, 0666)
+			if err8 != nil {
+				result.ErrCode = 500
+				result.ErrMsg = "server failed to save the uploaded  file"
+				ctx.JSON(500, result)
+				return
+			}
+
 			chat := proto.ChatInfo{}
 			chat.Sender = phone
 			chat.ContentType = proto.ChatContentVoice
