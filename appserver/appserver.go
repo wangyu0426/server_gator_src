@@ -91,6 +91,8 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		uploadType := ctx.FormValue("type")
 		fmt.Println(uploadType)
 
+		result.Imei = imei
+
 		//_,fileInfo, err1 := ctx.FormFile(uploadType)
 		//if err1 != nil {
 		//	result.ErrCode = 500
