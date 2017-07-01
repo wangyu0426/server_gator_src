@@ -251,6 +251,8 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 							}
 						}
 
+						deviceInfoResult.FamilyNumber = loginData["devices"].([]interface{})[i].(map[string]interface{})["FamilyNumber"].(string)
+						deviceInfoResult.Name = loginData["devices"].([]interface{})[i].(map[string]interface{})["Name"].(string)
 						loginData["devices"].([]interface{})[i] = deviceInfoResult
 						fmt.Println("deviceinfoResult: ", proto.MakeStructToJson(&deviceInfoResult))
 					}

@@ -125,13 +125,24 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 		os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir +  imei, 0755)
 		fileName := ""
-		if uploadType == "contactAvatar" {
-			contactIndex := ctx.FormValue("index")
-			fileName += "contact_" + contactIndex + "_"
-		}
-		fileName += proto.MakeTimestampIdString() + ".jpg"
+		if uploadType == "minichat" {
+			fileName += proto.MakeTimestampIdString() + ".aac"
+		}else{
+			if uploadType == "contactAvatar" {
+				contactIndex := ctx.FormValue("index")
+				fileName += "contact_" + contactIndex + "_"
+			}
 
-		err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir +  imei + "/" + fileName, fileData, 0666)
+			fileName += proto.MakeTimestampIdString() + ".jpg"
+		}
+
+		uploadTypeDir := svrctx.Get().HttpStaticAvatarDir
+		if uploadType == "minichat" {
+			uploadTypeDir = svrctx.Get().HttpStaticMinichatDir
+		}
+
+
+		err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + uploadTypeDir +  imei + "/" + fileName, fileData, 0666)
 		if err4 != nil {
 			result.ErrCode = 500
 			result.ErrMsg = "server failed to save the uploaded  file"
@@ -139,32 +150,52 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			return
 		}
 
-		settings := make([]proto.SettingParam, 1)
-		if uploadType == "contactAvatar" {
-			settings[0].Index = int(proto.Str2Num(ctx.FormValue("index"), 10))
-		}
-		settings[0].FieldName = fieldname
-		settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir +  imei + "/"  +  fileName
+		if uploadType == "minichat" {
+			imeiUint64 := proto.Str2Num(imei, 10)
+			phone := ctx.FormValue("phone")
 
-		ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
-		if ret {
-			if uploadType == "contactAvatar" {
-				photoInfo := proto.PhotoSettingInfo{}
-				photoInfo.Member.Phone = ctx.FormValue("phone")
-				photoInfo.ContentType = proto.ChatContentPhoto
-				photoInfo.Content = proto.MakeTimestampIdString()
-				svrctx.AddPhotoData(proto.Str2Num(imei, 10), photoInfo)
+			if svrctx.IsPhoneNumberInFamilyList(imeiUint64, phone) == false {
+				result.ErrCode = 500
+				result.ErrMsg = fmt.Sprintf("phone number %s is not in the family phone list of %d", phone, imeiUint64)
+				ctx.JSON(500, result)
+				return
 			}
 
-			result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
-				svrctx.Get().HttpStaticAvatarDir +  imei + "/" +  fileName)
-			fmt.Println(fileName)
-			ctx.JSON(200, result)
+			chat := proto.ChatInfo{}
+			chat.Sender = phone
+			chat.ContentType = proto.ChatContentVoice
+			chat.Content = proto.MakeTimestampIdString()
+			chat.DateTime = proto.Str2Num(chat.Content[0:12], 10)
+
+			svrctx.AddChatData(imeiUint64, chat)
 		}else{
-			result.ErrCode = 500
-			result.ErrMsg = "server failed to update the device setting in db"
-			ctx.JSON(500, result)
-			return
+			settings := make([]proto.SettingParam, 1)
+			if uploadType == "contactAvatar" {
+				settings[0].Index = int(proto.Str2Num(ctx.FormValue("index"), 10))
+			}
+			settings[0].FieldName = fieldname
+			settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir +  imei + "/"  +  fileName
+
+			ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
+			if ret {
+				if uploadType == "contactAvatar" {
+					photoInfo := proto.PhotoSettingInfo{}
+					photoInfo.Member.Phone = ctx.FormValue("phone")
+					photoInfo.ContentType = proto.ChatContentPhoto
+					photoInfo.Content = proto.MakeTimestampIdString()
+					svrctx.AddPhotoData(proto.Str2Num(imei, 10), photoInfo)
+				}
+
+				result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
+					svrctx.Get().HttpStaticAvatarDir +  imei + "/" +  fileName)
+				fmt.Println(fileName)
+				ctx.JSON(200, result)
+			}else{
+				result.ErrCode = 500
+				result.ErrMsg = "server failed to update the device setting in db"
+				ctx.JSON(500, result)
+				return
+			}
 		}
 	})
 

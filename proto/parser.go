@@ -458,6 +458,8 @@ type DeviceInfoResult struct {
 	Model,
 	OwnerName,
 	PhoneNumbers,
+	FamilyNumber,
+	Name,
 	AlarmEmail,
 	LocateInterval,
 	TimeZone,
