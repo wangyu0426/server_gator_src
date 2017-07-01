@@ -36,6 +36,8 @@ func isCmdsMatched(reqCmd, ackCmd uint16) bool {
 
 //for managing connection, 对内负责管理tcp连接对象，对外为APP server提供通信接口
 func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
+	defer logging.PanicLogAndExit("")
+
 	for   {
 		select {
 		case connAdd:=<-addConnChan:
@@ -148,6 +150,8 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 
 //for reading
 func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
+	defer logging.PanicLogAndExit("")
+
 	defer c.closeOnce.Do(func() {
 		logging.Log("client connection closed")
 		delConnChan <- c
@@ -284,6 +288,8 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 
 //for writing, 写协程等待一个channel的数据，将channel收到的数据发送至客户端
 func ConnWriteLoop(c *Connection) {
+	defer logging.PanicLogAndExit("")
+
 	for   {
 		select {
 		case <-c.closeChan:
@@ -309,6 +315,8 @@ func ConnWriteLoop(c *Connection) {
 
 //for business handler，业务处理的协程
 func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
+	defer logging.PanicLogAndExit("")
+
 	for {
 		select {
 		case <-c.closeChan:
@@ -325,6 +333,8 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				MinichatUploadDir: serverCtx.HttpStaticDir + serverCtx.HttpStaticMinichatDir,
 				DeviceMinichatBaseUrl: fmt.Sprintf("%s:%d%s", serverCtx.HttpServerName,
 					serverCtx.WSPort, serverCtx.HttpStaticURL + serverCtx.HttpStaticMinichatDir),
+				AndroidAppURL: serverCtx.AndroidAppURL,
+				IOSAppURL: serverCtx.IOSAppURL,
 				Pgpool: serverCtx.PGPool,
 				MysqlPool: serverCtx.MySQLPool,
 				WritebackChan: serverCtx.TcpServerChan,
@@ -340,6 +350,8 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 }
 
 func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
+	defer logging.PanicLogAndExit("")
+
 	tcpaddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.Port ))
 	if err != nil {
 		logging.Log("resolve tcp address failed, " + err.Error())

@@ -48,6 +48,8 @@ type RequestContext struct {
 	AvatarUploadDir string
 	MinichatUploadDir string
 	DeviceMinichatBaseUrl string
+	AndroidAppURL string
+	IOSAppURL string
 	Pgpool *pgx.ConnPool
 	MysqlPool *sql.DB
 	WritebackChan chan *MsgData
@@ -199,6 +201,7 @@ type GT06Service struct {
 	msgAckId uint64
 	old LocationData
 	cur LocationData
+	fetchType string
 	needSendLocation bool
 	needSendChatNum bool
 	needSendChat bool
@@ -361,7 +364,9 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		service.cmd == DRT_SET_VOLUME_ACK   ||    // 同BP21	，手表设置音量的ACK
 		service.cmd == DRT_SET_AIRPLANE_MODE_ACK  ||      // 同BP22	，手表设置隐身模式的ACK
 		service.cmd == DRT_QUERY_TEL_USE_ACK      || 	// 同BP24	，手表对服务器查询短信条数的ACK -- 这个命令格式需另外处理
-		service.cmd == DRT_DELETE_PHONE_PHOTO_ACK  {     	// 同BP25	，手表对删除亲情号图片的ACK{
+		service.cmd == DRT_DELETE_PHONE_PHOTO_ACK  ||    	// 同BP25	，手表对删除亲情号图片的ACK
+		service.cmd == DRT_FETCH_APP_URL_ACK {     	//  同BP26	，手表获取app下载页面URL的ACK
+
 
 		service.isCmdForAck = true
 
@@ -492,13 +497,22 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			logging.Log("ProcessRspFetchFile Error")
 			return false
 		}
-	}else if service.cmd == DRT_FETCH_AGPS {
-		//BP32, 手表请求EPO数据
-		ret = service.ProcessRspAGPSInfo()
-		if ret == false {
-			logging.Log("ProcessRspAGPSInfo Error")
-			return  false
+	}else if service.cmd == DRT_FETCH_AGPS { //DRT_FETCH_AGPS 和 DRT_FETCH_APP_URL 都通过BP32命令
+		//BP32, 手表请求EPO数据或APP URL
+		bufOffset++
+		service.fetchType = string(msg.Data[bufOffset: bufOffset + 4])
+		if service.fetchType == "AP13" {
+			ret = service.ProcessRspAGPSInfo()
+			if ret == false {
+				logging.Log("ProcessRspAGPSInfo Error")
+				return  false
+			}
+		}else if service.fetchType == "AP26" {
+			madeData, id := service.makeAppURLReplyMsg()
+			resp := &ResponseItem{CMD_AP26,  service.makeReplyMsg(true, madeData, id)}
+			service.rspList = append(service.rspList, resp)
 		}
+
 	}else if service.cmd == DRT_EPO_ACK {
 		//BP13, 手表回复EPO数据确认包
 		bufOffset++
@@ -905,6 +919,16 @@ func (service *GT06Service)makeDeviceLoginReplyMsg() []byte {
 	size := fmt.Sprintf("(%04X", 5 + len(body))
 
 	return []byte(size + body)
+}
+
+func (service *GT06Service)makeAppURLReplyMsg() ([]byte, uint64) {
+	id := makeId()
+	body := fmt.Sprintf("%015dAP26,%d,%s,%d,%s,%016X)", service.imei,
+		len(service.reqCtx.IOSAppURL), service.reqCtx.IOSAppURL,
+		len(service.reqCtx.AndroidAppURL), service.reqCtx.AndroidAppURL, id)
+	size := fmt.Sprintf("(%04X", 5 + len(body))
+
+	return []byte(size + body), id
 }
 
 func (service *GT06Service)makeDeviceChatAckMsg(phone, datatime, milisecs,

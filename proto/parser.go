@@ -55,7 +55,7 @@ const (
 	DRT_PUSH_MINICHAT_ACK         // 同BP12，手表回复微聊确认包
 	DRT_EPO_ACK			  // 同BP13，手表回复epo数据确认包
 	DRT_PUSH_PHOTO_ACK         // 同BP23，手表回复头像确认包
-	DRT_FETCH_AGPS        	  // 同BP32，手表获取AGPS数据
+	DRT_FETCH_AGPS        	  // 同BP32，手表获取AGPS或APP URL 数据
 	DRT_HEART_BEAT       	  // 同BP33，手表发送状态数据
 
 	//确认消息类型
@@ -78,9 +78,13 @@ const (
 	DRT_SET_AIRPLANE_MODE_ACK       // 同BP22	，手表设置隐身模式的ACK
 	DRT_QUERY_TEL_USE_ACK       	// 同BP24	，手表对服务器查询短信条数的ACK
 	DRT_DELETE_PHONE_PHOTO_ACK       	// 同BP25	，手表对删除亲情号图片的ACK
+	DRT_FETCH_APP_URL_ACK       	// 同BP26	，手表获取app下载页面URL的ACK
 
 	DRT_MAX
 )
+
+const DRT_FETCH_APP_URL = DRT_FETCH_AGPS
+
  const (
 	CMD_AP00 = iota
 	CMD_AP01
@@ -97,6 +101,7 @@ const (
 	 CMD_AP13
 	 CMD_AP23
 	 CMD_AP14
+	 CMD_AP26
 	 CMD_AP30
 	 CMD_AP31
 	 CMD_AP34
@@ -138,6 +143,7 @@ var commands = []string{
 	"BP22",
 	"BP24",
 	"BP25",
+	"BP26",
 }
 
 /*普通的消息头部*/

@@ -10,6 +10,8 @@ import (
 )
 
 func main() {
+	defer logging.PanicLogAndExit("")
+
 	//str := []byte("357593030571505")
 	//fmt.Println(str[0] == 'a')
 	////fmt.Println("sub str: ", string([]rune(str)[1:]))

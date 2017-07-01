@@ -58,6 +58,8 @@ func init() {
 }
 
 func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
+	defer logging.PanicLogAndExit("")
+
 	appServerChan = serverCtx.AppServerChan
 	app := iris.New()
 	//app.Adapt(iris.DevLogger())
@@ -170,6 +172,8 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 	//负责管理连接、并且回发数据到app端
 	go func() {
+		defer logging.PanicLogAndExit("")
+
 		for  {
 			select {
 			case c := <- delConnChan:
@@ -275,6 +279,8 @@ func OnClientConnected(conn websocket.Connection)  {
 
 	//for reading, 负责处理APP请求的业务逻辑
 	go func(c *AppConnection) {
+		defer logging.PanicLogAndExit("")
+
 		for  {
 			select {
 			case <- c.closeChan:

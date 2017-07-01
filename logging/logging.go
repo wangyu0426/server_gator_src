@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 	"sync"
+	"gopkg.in/gomail.v2"
 )
 
 
@@ -21,6 +22,8 @@ func init()  {
 	closeLogOnce = &sync.Once{}
 
 	go func() {
+		//defer logging.PanicLogAndExit("")
+
 		for {
 			select {
 			case msg := <- logInputChan:
@@ -98,4 +101,38 @@ func Close()  {
 			logFile.Close()
 		}
 	})
+}
+
+func PanicLogAndExit(errmsg string){
+	err := recover()
+	if err == nil {
+		return
+	}
+
+	Log(fmt.Sprint("get panic: ",  errmsg, err))
+
+	SendMail("38945787@qq.com", "38945787@qq.com",  "Go Server Panic", fmt.Sprint(errmsg, err), "",
+		"smtp.qq.com", 587, "38945787@qq.com", "dumaakzcswglbibe")
+
+	panic("panic error cause exit")
+}
+
+func SendMail(from, to, subject, text, attachmentFile, mailServer  string, mailPort int, user, password string)  {
+	m := gomail.NewMessage()
+	m.SetHeader("From", from)
+	m.SetHeader("To", to)
+	//if len(cc) != 0{
+	//	m.SetAddressHeader("Cc", "dan@example.com", "Dan")
+	//}
+	m.SetHeader("Subject", subject)
+	m.SetBody("text/html", fmt.Sprintf("panic error: <b>%s</b>", text))
+	if len(attachmentFile) != 0 {
+		m.Attach(attachmentFile)
+	}
+
+	d := gomail.NewDialer(mailServer, mailPort, user, password)
+
+	if err := d.DialAndSend(m); err != nil {
+		panic(err)
+	}
 }
