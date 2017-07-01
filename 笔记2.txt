@@ -1707,6 +1707,11 @@ AP10(for device QingJingMoShi)
 
 configuration: --enable-libmp3lame --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-version3 --enable-shared
 
+ffmpeg version 2.7.2 Copyright (c) 2000-2015 the FFmpeg developers
+  built with gcc 4.4.7 (GCC) 20120313 (Red Hat 4.4.7-16)
+  configuration: --enable-libmp3lame --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-version3 --enable-shared
+
+
 
 root
 5dKZtmY5%E%#QGPRgT6USUA0
