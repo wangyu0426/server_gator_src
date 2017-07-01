@@ -2,7 +2,9 @@
 *.o
 *.a
 *.so
-#static
+#statiac
+
+static/upload/avatar
 
 # Folders
 _obj
