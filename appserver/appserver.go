@@ -168,6 +168,12 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			chat.DateTime = proto.Str2Num(chat.Content[0:12], 10)
 
 			svrctx.AddChatData(imeiUint64, chat)
+
+			result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
+				svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)
+			fmt.Println(fileName)
+			ctx.JSON(200, result)
+			return
 		}else{
 			settings := make([]proto.SettingParam, 1)
 			if uploadType == "contactAvatar" {
