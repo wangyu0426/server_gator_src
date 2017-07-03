@@ -16,6 +16,8 @@ import (
 	"io/ioutil"
 	"sync"
 	"os"
+	"os/exec"
+	"bytes"
 )
 
 type ResponseItem struct {
@@ -248,6 +250,9 @@ var EPOTaskTableLock = &sync.RWMutex{}
 
 var AppSendChatList = map[uint64]*[]*ChatTask{}
 var AppSendChatListLock = &sync.RWMutex{}
+
+var AppChatList = map[uint64]map[uint64]ChatInfo{}
+var AppChatListLock = &sync.RWMutex{}
 
 var AppNewPhotoList = map[uint64]*[]*PhotoSettingTask{}
 var AppNewPhotoListLock = &sync.RWMutex{}
@@ -1169,11 +1174,19 @@ func (service *GT06Service)  NotifyAppWithNewLocation() bool  {
 }
 
 func (service *GT06Service)  NotifyAppWithNewMinichat(chat ChatInfo) bool  {
-	result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
-	result.Minichat = append(result.Minichat, chat)
+	return NotifyAppWithNewMinichat(service.imei, service.reqCtx.AppNotifyChan, chat)
+}
 
-	service.reqCtx.AppNotifyChan  <- &AppMsgData{Cmd: HearbeatAckCmdName,
-		Imei: service.imei,
+
+func NotifyAppWithNewMinichat(imei uint64, appNotifyChan chan *AppMsgData,  chat ChatInfo) bool  {
+	result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
+
+	fmt.Println("heartbeat-ack: ", MakeStructToJson(result))
+
+	result.Minichat = append(result.Minichat, GetChatListForApp(imei)...)
+
+	appNotifyChan  <- &AppMsgData{Cmd: HearbeatAckCmdName,
+		Imei: imei,
 		Data: MakeStructToJson(result), Conn: nil}
 	return true
 }
@@ -1352,6 +1365,11 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 
 	if isFoundTask == false {
 		chat := &ChatTask{}
+		chat.Info.Imei = service.imei
+		chat.Info.Sender = Num2Str(service.imei, 10)
+		chat.Info.SenderType = 0
+		chat.Info.FileID = fileId
+		chat.Info.Content = Num2Str(fileId, 10)
 		chat.Info.DateTime = timestamp
 		chat.Info.Receiver = fields[0]
 		chat.Info.VoiceMilisecs = milisecs
@@ -1403,14 +1421,21 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		filePath := fmt.Sprintf("%s/%d.amr", filePathDir, fileId)
 		ioutil.WriteFile(filePath, fileData[0: ], 0666)
 
+		args := fmt.Sprintf("-i %s -acodec libfaac -ab 64k -ar 44100 %s/%d.aac", filePath, filePathDir, fileId)
+		err2, _ := ExecCmd("ffmpeg",  strings.Split(args, " ")...)
+		if err2 != nil {
+			logging.Log(fmt.Sprintf("[%d] ffmpeg %s failed, %s", service.imei, args, err2.Error()))
+		}
+
 		//DeviceChatTaskTableLock.Lock()
 		//chatTasks, _ :=DeviceChatTaskTable[service.imei]
 		//delete(chatTasks, fileId)
 		//DeviceChatTaskTableLock.Unlock()
 
 		//通知APP有新的微聊信息。。。
-		newChatInfo.Content = fmt.Sprintf("%swatch/%d/%d.amr", service.reqCtx.DeviceMinichatBaseUrl,
+		newChatInfo.Content = fmt.Sprintf("%swatch/%d/%d.aac", service.reqCtx.DeviceMinichatBaseUrl,
 			service.imei, fileId)
+		AddChatForApp(newChatInfo)
 		service.NotifyAppWithNewMinichat(newChatInfo)
 	}
 
@@ -3053,4 +3078,72 @@ func gcj_To_Gps84(lat, lon float64, mgLat, mgLon *float64) {
 	transform(lat, lon, &dTempLat, &dTempLon)
 	*mgLon = lon * 2 - dTempLon
 	*mgLat = lat * 2 - dTempLat
+}
+
+func AddChatForApp(chat ChatInfo){
+	AppChatListLock.Lock()
+	chatMap, ok := AppChatList[chat.Imei]
+	if ok  &&  chatMap != nil {
+		AppChatList[chat.Imei][chat.FileID] = chat
+	}else{
+		AppChatList[chat.Imei] = map[uint64]ChatInfo{}
+		AppChatList[chat.Imei][chat.FileID] = chat
+	}
+
+	AppChatListLock.Unlock()
+}
+
+func DeleteVoicesForApp(imei uint64, chatList []ChatInfo) bool {
+	ret := true
+	AppChatListLock.Lock()
+	chatMap, ok := AppChatList[imei]
+	if ok  &&  chatMap != nil {
+		for _, chat := range chatList {
+			_, ok2 := AppChatList[imei][chat.FileID]
+			if ok2 {
+				delete(AppChatList[imei], chat.FileID)
+			}else{
+				logging.Log(fmt.Sprintf("[%d] delete voices not found file id %d", imei, chat.FileID))
+				ret = false
+			}
+		}
+	}else{
+		logging.Log(fmt.Sprintf("[%d] delete voices not found items", imei))
+		ret = false
+	}
+
+	AppChatListLock.Unlock()
+
+	return ret
+}
+
+func GetChatListForApp(imei uint64) []ChatInfo{
+	chatList:= []ChatInfo{}
+	AppChatListLock.RLock()
+	chatMap, ok := AppChatList[imei]
+	if ok  &&  chatMap != nil {
+		for _, chat := range chatMap {
+			chatList = append(chatList, chat)
+		}
+	}
+	AppChatListLock.RUnlock()
+
+	return chatList
+}
+
+func ExecCmd(name string, arg ...string) (error, string){
+	cmd := exec.Command(name,  arg...)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Start()
+	if err != nil {
+		return err, ""
+	}
+
+	err = cmd.Wait()
+	if err != nil {
+		return err, ""
+	}
+
+	return nil, out.String()
 }

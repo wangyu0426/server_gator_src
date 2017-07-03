@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"net/http"
 	"io/ioutil"
+	"strings"
 )
 
 var addConnChan chan *AppConnection
@@ -117,42 +118,63 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		//	return
 		//}
 
-		fileData, err :=base64Decode([]byte(ctx.FormValue(uploadType)))
-		if err!= nil {
-			result.ErrCode = 500
-			result.ErrMsg = "upload bad data"
-			ctx.JSON(500, result)
-			return
-		}
+		if uploadType != "minichat" {
+			fileData, err := base64Decode([]byte(ctx.FormValue(uploadType)))
+			if err != nil {
+				result.ErrCode = 500
+				result.ErrMsg = "upload bad data"
+				ctx.JSON(500, result)
+				return
+			}
 
-		os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir +  imei, 0755)
-		fileName, timestampString := "", proto.MakeTimestampIdString()
-		if uploadType == "minichat" {
-			fileName += timestampString + ".aac"
-		}else{
+			os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir + imei, 0755)
+			fileName, timestampString := "", proto.MakeTimestampIdString()
+
 			if uploadType == "contactAvatar" {
 				contactIndex := ctx.FormValue("index")
 				fileName += "contact_" + contactIndex + "_"
 			}
 
 			fileName += timestampString + ".jpg"
-		}
 
-		uploadTypeDir := svrctx.Get().HttpStaticAvatarDir
-		if uploadType == "minichat" {
-			uploadTypeDir = svrctx.Get().HttpStaticMinichatDir
-		}
+			uploadTypeDir := svrctx.Get().HttpStaticAvatarDir
 
+			err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + uploadTypeDir + imei + "/" + fileName, fileData, 0666)
+			if err4 != nil {
+				result.ErrCode = 500
+				result.ErrMsg = "server failed to save the uploaded  file"
+				ctx.JSON(500, result)
+				return
+			}
 
-		err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + uploadTypeDir +  imei + "/" + fileName, fileData, 0666)
-		if err4 != nil {
-			result.ErrCode = 500
-			result.ErrMsg = "server failed to save the uploaded  file"
-			ctx.JSON(500, result)
-			return
-		}
+			settings := make([]proto.SettingParam, 1)
+			if uploadType == "contactAvatar" {
+				settings[0].Index = int(proto.Str2Num(ctx.FormValue("index"), 10))
+			}
+			settings[0].FieldName = fieldname
+			settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir +  imei + "/"  +  fileName
 
-		if uploadType == "minichat" {
+			ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
+			if ret {
+				if uploadType == "contactAvatar" {
+					photoInfo := proto.PhotoSettingInfo{}
+					photoInfo.Member.Phone = ctx.FormValue("phone")
+					photoInfo.ContentType = proto.ChatContentPhoto
+					photoInfo.Content = proto.MakeTimestampIdString()
+					svrctx.AddPhotoData(proto.Str2Num(imei, 10), photoInfo)
+				}
+
+				result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
+					svrctx.Get().HttpStaticAvatarDir +  imei + "/" +  fileName)
+				fmt.Println(fileName)
+				ctx.JSON(200, result)
+			}else{
+				result.ErrCode = 500
+				result.ErrMsg = "server failed to update the device setting in db"
+				ctx.JSON(500, result)
+				return
+			}
+		}else if uploadType == "minichat" {
 			imeiUint64 := proto.Str2Num(imei, 10)
 			phone := ctx.FormValue("phone")
 
@@ -195,7 +217,15 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				return
 			}
 
-			err8 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + uploadTypeDir +  imei + "/" + fileName, fileData, 0666)
+			os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticMinichatDir + imei, 0755)
+			fileName, timestampString := "", proto.MakeTimestampIdString()
+			fileName += timestampString + ".aac"
+
+			uploadTypeDir := svrctx.Get().HttpStaticMinichatDir
+			filePath := svrctx.Get().HttpStaticDir + uploadTypeDir +  imei + "/" + fileName
+			fileAmrPath := svrctx.Get().HttpStaticDir + uploadTypeDir +  imei + "/" +  timestampString + ".amr"
+
+				err8 := ioutil.WriteFile(filePath, fileData, 0666)
 			if err8 != nil {
 				result.ErrCode = 500
 				result.ErrMsg = "server failed to save the uploaded  file"
@@ -204,14 +234,27 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			}
 
 			chat := proto.ChatInfo{}
+			chat.Imei = imeiUint64
 			chat.Sender = phone
+			chat.SenderType = 1
+			chat.VoiceMilisecs = int(proto.Str2Num(ctx.FormValue("duration"), 10))
 			chat.ContentType = proto.ChatContentVoice
-			chat.Content = timestampString
-			chat.DateTime = proto.Str2Num(chat.Content[0:12], 10)
+			chat.Content = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
+				svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)//timestampString
+			chat.FileID = proto.Str2Num(timestampString, 10)
+			chat.DateTime = proto.Str2Num(timestampString[0:12], 10)
+
+			args := fmt.Sprintf("-i %s -acodec amr_nb -ab 3.2k -ar 8000 %s", filePath, fileAmrPath)
+			err9, _ := proto.ExecCmd("ffmpeg",  strings.Split(args, " ")...)
+			if err9 != nil {
+				logging.Log(fmt.Sprintf("[%d] ffmpeg %s failed, %s", imeiUint64, args, err9.Error()))
+			}
 
 			svrctx.AddChatData(imeiUint64, chat)
+			proto.AddChatForApp(chat)
 
 			//这里应该通知APP，微聊列表有新的项
+			proto.NotifyAppWithNewMinichat(imeiUint64, appServerChan, chat)
 			//result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
 				//svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)
 
@@ -219,33 +262,6 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			ctx.JSON(200, result)
 			return
 		}else{
-			settings := make([]proto.SettingParam, 1)
-			if uploadType == "contactAvatar" {
-				settings[0].Index = int(proto.Str2Num(ctx.FormValue("index"), 10))
-			}
-			settings[0].FieldName = fieldname
-			settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir +  imei + "/"  +  fileName
-
-			ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
-			if ret {
-				if uploadType == "contactAvatar" {
-					photoInfo := proto.PhotoSettingInfo{}
-					photoInfo.Member.Phone = ctx.FormValue("phone")
-					photoInfo.ContentType = proto.ChatContentPhoto
-					photoInfo.Content = proto.MakeTimestampIdString()
-					svrctx.AddPhotoData(proto.Str2Num(imei, 10), photoInfo)
-				}
-
-				result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
-					svrctx.Get().HttpStaticAvatarDir +  imei + "/" +  fileName)
-				fmt.Println(fileName)
-				ctx.JSON(200, result)
-			}else{
-				result.ErrCode = 500
-				result.ErrMsg = "server failed to update the device setting in db"
-				ctx.JSON(500, result)
-				return
-			}
 		}
 	})
 
@@ -315,7 +331,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 					msg.Cmd == proto.GetDeviceByImeiAckCmdName ||
 					msg.Cmd == proto.AddDeviceAckCmdName ||
 					msg.Cmd == proto.DeleteDeviceAckCmdName {
-					if msg.Cmd == proto.HearbeatCmdName {
+					if msg.Cmd == proto.HearbeatAckCmdName {
 						getAppClientsByImei(msg)
 					}
 					c := msg.Conn.(*AppConnection)

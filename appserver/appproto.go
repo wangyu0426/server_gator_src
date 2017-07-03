@@ -126,6 +126,16 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 		}
 
 		addDeviceManagerChan <- &AddDeviceChanCtx{cmd: proto.DeleteDeviceCmdName, c: c, params: &params}
+	case proto.DeleteVoicesCmdName:
+		jsonString, _ := json.Marshal(msg["data"])
+		params := proto.DeleteVoicesParams{}
+		err:=json.Unmarshal(jsonString, &params)
+		if err != nil {
+			logging.Log("delete-voices parse json failed, " + err.Error())
+			return false
+		}
+
+		return AppDeleteVoices(c, &params)
 	default:
 		break
 	}
@@ -136,22 +146,25 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
 	for _, imei := range params.Devices {
-		result.Locations = append(result.Locations, svrctx.GetDeviceData(proto.Str2Num(imei, 10), svrctx.Get().PGPool))
+		imeiUint64 := proto.Str2Num(imei, 10)
+		result.Locations = append(result.Locations, svrctx.GetDeviceData(imeiUint64, svrctx.Get().PGPool))
+		result.Minichat = append(result.Minichat, proto.GetChatListForApp(imeiUint64)...)
 	}
 
-	chat := proto.ChatInfo{}
-	DeviceMinichatBaseUrl := fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName,
-		svrctx.Get().WSPort, svrctx.Get().HttpStaticURL + svrctx.Get().HttpStaticMinichatDir)
-
-	chat.Content = fmt.Sprintf("%swatch/%d/%d.mp3", DeviceMinichatBaseUrl,
-		357593060571398, 1706201641546398)
-	chat.FileID = 1706201641546398
-	chat.SenderType = 0
-	chat.VoiceMilisecs = 3000
-	chat.Sender = "357593060571398"
-	chat.DateTime = 170620164154
-	chat.Imei = 357593060571398
-	result.Minichat = append(result.Minichat, chat)
+	//chat := proto.ChatInfo{}
+	//DeviceMinichatBaseUrl := fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName,
+	//	svrctx.Get().WSPort, svrctx.Get().HttpStaticURL + svrctx.Get().HttpStaticMinichatDir)
+	//
+	//chat.Content = fmt.Sprintf("%swatch/%d/%d.mp3", DeviceMinichatBaseUrl,
+	//	357593060571398, 1706201641546398)
+	//chat.FileID = 1706201641546398
+	////chat.Sender = proto.Num2Str()
+	//chat.SenderType = 0
+	//chat.VoiceMilisecs = 3000
+	//chat.Sender = "357593060571398"
+	//chat.DateTime = 170620164154
+	//chat.Imei = 357593060571398
+	//result.Minichat = append(result.Minichat, chat)
 
 	fmt.Println("heartbeat-ack: ", proto.MakeStructToJson(result))
 
@@ -1018,4 +1031,9 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 	}
 
 	return true
+}
+
+
+func AppDeleteVoices(c *AppConnection, params *proto.DeleteVoicesParams) bool {
+	return proto.DeleteVoicesForApp(proto.Str2Num(params.Imei, 10), params.DeleteVoices)
 }

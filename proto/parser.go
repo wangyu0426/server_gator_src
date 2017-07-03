@@ -276,6 +276,13 @@ type DeviceSettingParams struct {
 	Settings []SettingParam `json:"settings"`
 }
 
+type DeleteVoicesParams struct {
+	Imei string `json:"imei"`
+	Username string `json:"username"`
+	AccessToken string `json:"accessToken"`
+	DeleteVoices []ChatInfo  `json:"deleteVoices"`
+}
+
 type IPInfo struct {
 	StartIP uint32
 	EndIP uint32
@@ -381,6 +388,9 @@ var AddDeviceOKAckCmdName  	= AddDeviceCmdName + CmdOKTail +  CmdAckTail
 
 var DeleteDeviceCmdName  			= "delete-device"
 var DeleteDeviceAckCmdName  		= DeleteDeviceCmdName + CmdAckTail
+
+var DeleteVoicesCmdName  			= "delete-voices"
+var DeleteVoicesAckCmdName  		= DeleteVoicesCmdName + CmdAckTail
 
 
 type SafeZone struct {
@@ -612,6 +622,15 @@ func init()  {
 	//case strings.Contains(name, "Fence"):
 	//	fmt.Println("OK")
 	//}
+	//args := fmt.Sprintf("-i %s -acodec libfaac -ab 64k -ar 44100 %s.aac",
+	//	"static/upload/minichat/watch/357593060571398/1707031627033000.amr",
+	//	"static/upload/minichat/watch/357593060571398/test")
+	//argList := strings.Split(args, " ")
+	//err2, _ := ExecCmd("ffmpeg",  argList...)
+	//if err2 != nil {
+	//	fmt.Println(fmt.Sprintf(" ffmpeg %s failed, %s",  args, err2.Error()))
+	//}
+	//
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()
