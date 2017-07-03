@@ -213,7 +213,8 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 			//这里应该通知APP，微聊列表有新的项
 			//result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
-				svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)
+				//svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)
+
 			fmt.Println(fileName)
 			ctx.JSON(200, result)
 			return

@@ -269,15 +269,14 @@ func HandleTcpRequest(reqCtx RequestContext)  bool{
 		for _, msg := range msgReplyList {
 			reqCtx.WritebackChan <- msg
 		}
-	}else{
-		ret = false
-		//通知ManagerLoop, 将上次缓存的未发送的数据发送给手表
-		msgNotify := &MsgData{}
-		msgNotify.Header.Header.Version = MSG_HEADER_PUSH_CACHE
-		//logging.Log("MSG_HEADER_PUSH_CACHE, imei: " + proto.Num2Str(imei, 10))
-		msgNotify.Header.Header.Imei = service.imei
-		reqCtx.WritebackChan <- msgNotify
 	}
+
+	//通知ManagerLoop, 将上次缓存的未发送的数据发送给手表
+	msgNotify := &MsgData{}
+	msgNotify.Header.Header.Version = MSG_HEADER_PUSH_CACHE
+	//logging.Log("MSG_HEADER_PUSH_CACHE, imei: " + proto.Num2Str(imei, 10))
+	msgNotify.Header.Header.Imei = service.imei
+	reqCtx.WritebackChan <- msgNotify
 
 	return true
 }

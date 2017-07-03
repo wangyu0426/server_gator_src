@@ -68,6 +68,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				return
 			}
 
+			isPushCache := msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE
 			//if msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE {
 			if len(msg.Data) == 0 { //没有数据，表示这是一个通知的消息
 				logging.Log(fmt.Sprintf("msg to notify to push cached data to device %d ",  msg.Header.Header.Imei))
@@ -114,9 +115,16 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 								if msg.Header.Header.Version == proto.MSG_HEADER_ACK_PARSED &&
 									msg.Header.Header.Imei == cachedMsg.Header.Header.Imei &&
 									msg.Header.Header.ID == cachedMsg.Header.Header.ID {
-								}else{ //未收到确认，继续发送
-									c.responseChan <- cachedMsg
-									tempCache = append(tempCache, cachedMsg)
+								}else{ //未收到确认，如果当前消息是通知继续推送数据并且时间已经超过30s，才会发送
+									if isPushCache {
+										timeout := (cachedMsg.Header.Header.ID - proto.NewMsgID()) / 10000
+										if timeout > 30 {
+											c.responseChan <- cachedMsg
+											tempCache = append(tempCache, cachedMsg)
+										}else{
+											logging.Log(fmt.Sprintf("[%d] push data timeout less than 30s, no need to push", msg.Header.Header.Imei))
+										}
+									}
 								}
 							}else{
 								tempCache = append(tempCache, cachedMsg)
