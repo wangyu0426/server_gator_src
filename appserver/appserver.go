@@ -160,7 +160,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 					photoInfo := proto.PhotoSettingInfo{}
 					photoInfo.Member.Phone = ctx.FormValue("phone")
 					photoInfo.ContentType = proto.ChatContentPhoto
-					photoInfo.Content = proto.MakeTimestampIdString()
+					photoInfo.Content = fileName//proto.MakeTimestampIdString()
 					svrctx.AddPhotoData(proto.Str2Num(imei, 10), photoInfo)
 				}
 

@@ -1331,7 +1331,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 	isFoundTable, isFoundTask := false, false
 	DeviceChatTaskTableLock.Lock()
 	chat := &ChatTask{}
-	chatTasks, isFoundTable :=DeviceChatTaskTable[service.imei]
+	chatTasks, isFoundTable := DeviceChatTaskTable[service.imei]
 	if isFoundTable { //首先查找是否存在该IMEI对应的任务字典，
 		// 如存在则再查找该微聊对应的任务字典是否存在，不存在，则创建
 		chat, isFoundTask = chatTasks[fileId]
@@ -1404,6 +1404,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 				fileFinished = true
 				fileData = chat.Data.Data[0: chat.Data.recvSized]
 				newChatInfo = chat.Info
+				delete(DeviceChatTaskTable[service.imei], fileId)
 			}
 		}
 	}
@@ -1866,7 +1867,7 @@ func (service *GT06Service) ProcessRspPhoto() bool {
 	AppNewPhotoListLock.Lock()
 	appNewPhotoList, ok := AppNewPhotoList[service.imei]
 	if ok && appNewPhotoList != nil && len(*appNewPhotoList) > 0 {
-		avatarFileName :=fmt.Sprintf("%s%d/%s.jpg", service.reqCtx.AvatarUploadDir, service.imei, (*appNewPhotoList)[0].Info.Content)
+		avatarFileName :=fmt.Sprintf("%s%d/%s", service.reqCtx.AvatarUploadDir, service.imei, (*appNewPhotoList)[0].Info.Content)
 
 		//读取图片文件，发送第一包
 		photo, err := ioutil.ReadFile(avatarFileName)
@@ -1933,8 +1934,8 @@ func (service *GT06Service) ProcessRspChat() bool {
 		if len(chatData) > 0 {
 			//voiceFileName :=fmt.Sprintf("/usr/share/nginx/html/tracker/web/upload/minichat/app/%d/%s.amr",
 			//	service.imei, chatData[0].Content)
-			voiceFileName :=fmt.Sprintf("%s%d/%s.amr", service.reqCtx.MinichatUploadDir,
-				service.imei, chatData[0].Content)
+			voiceFileName :=fmt.Sprintf("%s%d/%d.amr", service.reqCtx.MinichatUploadDir,
+				service.imei, chatData[0].FileID)
 
 			voice, chatReplyMsg := service.makeChatDataReplyMsg(voiceFileName,
 				chatData[0].Sender, Str2Num(chatData[0].Content, 10), 1)
