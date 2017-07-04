@@ -312,6 +312,8 @@ func ConnWriteLoop(c *Connection) {
 				return
 			}
 
+			time.Sleep(10 * time.Second)
+
 			if n, err := c.conn.Write([]byte(data.Data)); err != nil {
 				logging.Log(fmt.Sprintf("send data to client failed: %s,  %d bytes sent",  err.Error(), n))
 			}else{
