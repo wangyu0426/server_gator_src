@@ -3,7 +3,8 @@
 *.a
 *.so
 #statiac
-
+*.amr
+*.aac
 static/upload/avatar
 
 # Folders
