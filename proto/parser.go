@@ -1179,7 +1179,8 @@ func StringCmd(cmd uint16) string {
 
 
 func NewMsgID() uint64 {
-	return uint64(time.Now().UnixNano() / int64(time.Millisecond )* 10)
+	//return uint64(time.Now().UnixNano() / int64(time.Millisecond )* 10)
+	return uint64(time.Now().UnixNano())
 }
 
 func msgStructTotalSize(msg *MsgData) uint16 {
