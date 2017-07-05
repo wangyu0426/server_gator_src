@@ -170,8 +170,9 @@ type MsgHeader struct {
 	SrcIP    uint32   /*消息的源IP地址*/
 	DestIP  uint32  /*消息的目的IP地址*/
 
-	ID  uint64   /*消息ID，精确到4位毫秒的时间戳，用于唯一标识一条完整的消息请求。如果某个请求含有多个分片，
+	ID  uint64   /*消息ID，精确到纳秒的时间戳，用于唯一标识一条完整的消息请求。如果某个请求含有多个分片，
                                那么所有的分片都使用同一个msgId*/
+	LastPushTime  uint64   /*上一次推送此消息的时间，精确到纳秒的时间戳，用于控制部分命令下发数据的间隔*/
 
 	Imei  uint64 /*设备的IMEI*/
 
@@ -632,6 +633,8 @@ func init()  {
 	//	fmt.Println(fmt.Sprintf(" ffmpeg %s failed, %s",  args, err2.Error()))
 	//}
 	//
+	//var a float64
+	//fmt.Println(a, a==0)
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()

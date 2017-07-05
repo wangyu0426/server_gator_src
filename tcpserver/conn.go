@@ -15,6 +15,7 @@ type Connection struct {
 	IP   uint32
 	Port int
 	lastActiveTime int64
+	lastPushFileNumTime int64
 	conn *net.TCPConn
 	buf []byte
 	closeOnce sync.Once

@@ -445,18 +445,20 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		//will need to send location
 		if cLocateTag == 'G' || cLocateTag == 'g'  {
 			service.needSendLocation = false
+			ret = service.ProcessLocate(msg.Data[bufOffset: ], cLocateTag)
 		}else {
 			bufOffset++
 			service.needSendLocation = (msg.Data[bufOffset] - '0') == 1
+			bufOffset += 1
+			ret = service.ProcessLocate(msg.Data[bufOffset: ], cLocateTag)
+
 			if service.needSendLocation {
 				madeData, id := service.makeSendLocationReplyMsg()
 				resp := &ResponseItem{CMD_AP14, service.makeReplyMsg(true, madeData, id)}
 				service.rspList = append(service.rspList, resp)
 			}
-			bufOffset += 1
 		}
 
-		ret = service.ProcessLocate(msg.Data[bufOffset: ], cLocateTag)
 		if ret == false {
 			logging.Log("ProcessLocateInfo Error")
 			return false
@@ -655,6 +657,7 @@ func (service *GT06Service)DoResponse() []*MsgData  {
 		for  _, respCmd := range service.rspList {
 			msg := MsgData{}
 			msg = *respCmd.msg
+			msg.Header.Header.Cmd = respCmd.rspCmdType
 			msg.Data = make([]byte, len(respCmd.msg.Data))
 			copy(msg.Data[0:], respCmd.msg.Data[0:])
 			msgList = append(msgList, &msg)
@@ -913,12 +916,22 @@ func (service *GT06Service)makeSyncTimeReplyMsg() ([]byte, uint64) {
 func (service *GT06Service)makeSendLocationReplyMsg() ([]byte, uint64) {
 	//(0056357593060153353AP1424.772816,121.022636,160,2015,11,12,08,00,00,0000000000000009)
 	//(0051357593060571398AP140.000000,0.000000,0,2017,05,22,11,04,28,00000D99DE4C0826)
+	var lat, lng float64
+	accracy := uint32(0)
+	if service.old.Lat == 0{
+		lat = service.cur.Lat
+		lng = service.cur.Lng
+		accracy = service.cur.Accracy
+	}else{
+		lat = service.old.Lat
+		lng = service.old.Lng
+		accracy = service.old.Accracy
+	}
+
 	id := makeId()
 	curTime := time.Now().UTC().Format("2006,01,02,15,04,05")
-	service.old.Lat, service.old.Lng = 22.587725123456,113.913641123456
 	body := fmt.Sprintf("%015dAP14%06f,%06f,%d,%s,%016X)",
-		service.imei, service.old.Lat, service.old.Lng,service.old.Accracy,
-		curTime, id)
+		service.imei, lat, lng, accracy, curTime, id)
 	size := fmt.Sprintf("(%04X", 5 + len(body))
 
 	return []byte(size + body) , id
@@ -1066,9 +1079,10 @@ func MakeFileNumReplyMsg(imei uint64, fileType, chatNum int) []byte {
 }
 
 func makeId()  (uint64) {
-	id := time.Now().UnixNano() / int64(time.Millisecond ) * 10
-	//fmt.Println("make id: ", uint64(id))
-	return uint64(id)
+	//id := time.Now().UnixNano() / int64(time.Millisecond ) * 10
+	////fmt.Println("make id: ", uint64(id))
+	//return uint64(id)
+	return NewMsgID()
 }
 
 func MakeTimestampIdString()  string {

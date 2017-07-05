@@ -82,9 +82,29 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				_, ok1 := DevicePushCache[msg.Header.Header.Imei]
 				if ok1 == false {
 					DevicePushCache[msg.Header.Header.Imei] = &[]*proto.MsgData{}
+					syncTimeMsg := &proto.MsgData{}
+					syncTimeMsg.Header.Header.Cmd = proto.CMD_AP03
+					*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], syncTimeMsg)
+
+					sendLocationMsg := &proto.MsgData{}
+					sendLocationMsg.Header.Header.Cmd = proto.CMD_AP14
+					*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], sendLocationMsg)
 				}
 
-				*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], msg)
+				if len(*DevicePushCache[msg.Header.Header.Imei]) == 1 {
+					sendLocationMsg := &proto.MsgData{}
+					sendLocationMsg.Header.Header.Cmd = proto.CMD_AP14
+					*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], sendLocationMsg)
+				}
+
+				if msg.Header.Header.Cmd == proto.CMD_AP03 {
+					(*DevicePushCache[msg.Header.Header.Imei])[0] = msg
+				}else if msg.Header.Header.Cmd == proto.CMD_AP14 {
+					(*DevicePushCache[msg.Header.Header.Imei])[1] = msg
+				}else{
+					*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], msg)
+				}
+
 				//}else{
 				//	cache = append(cache, msg)
 				logging.Log(fmt.Sprintf("[%d] cache --  count: %d", msg.Header.Header.Imei, len(*DevicePushCache[msg.Header.Header.Imei])))
@@ -104,11 +124,26 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 						for _, cachedMsg := range *cache {
 							if cachedMsg.Header.Header.Status == 0 {
 								//0， 不需要手表回复确认，直接发送完并删除
-								c.responseChan <- cachedMsg
+								//对于AP11,需要加30s延迟，不能连续发送太快
+								if cachedMsg.Header.Header.Cmd == proto.CMD_AP11 {
+									if (int64(cachedMsg.Header.Header.ID) - int64(c.lastPushFileNumTime)) / int64(time.Second) >= 30 {
+										c.responseChan <- cachedMsg
+										c.lastPushFileNumTime = int64(cachedMsg.Header.Header.ID)
+									}
+								}else{
+									c.responseChan <- cachedMsg
+								}
 							}else if cachedMsg.Header.Header.Status == 1 {
 								//1, 消息尚未发送，且需要确认，则首先发出消息，并将status置2,
+								//如果是AP03和AP14，则需要实时推送务器当前时间和手表最新定位
+								if msg.Header.Header.Cmd == proto.CMD_AP03 {
+
+								}else if msg.Header.Header.Cmd == proto.CMD_AP14 {
+
+								}
 								c.responseChan <- cachedMsg
 								cachedMsg.Header.Header.Status = 2
+								cachedMsg.Header.Header.LastPushTime = proto.NewMsgID()
 								tempCache = append(tempCache, cachedMsg)
 							}else if cachedMsg.Header.Header.Status == 2 {
 								//2, 消息已经发送，并处于等待手表确认的状态
@@ -117,9 +152,16 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 									msg.Header.Header.ID == cachedMsg.Header.Header.ID {
 								}else{ //未收到确认，如果当前消息是通知继续推送数据并且时间已经超过30s，才会发送
 									if isPushCache {
-										timeout := (proto.NewMsgID() - cachedMsg.Header.Header.ID) / 10000
+										timeout := (proto.NewMsgID() - cachedMsg.Header.Header.LastPushTime) / uint64(time.Second)
 										if timeout > 30 {
+											//如果是AP03和AP14，则需要实时推送务器当前时间和手表最新定位
+											if msg.Header.Header.Cmd == proto.CMD_AP03 {
+
+											}else if msg.Header.Header.Cmd == proto.CMD_AP14 {
+
+											}
 											c.responseChan <- cachedMsg
+											cachedMsg.Header.Header.LastPushTime = proto.NewMsgID()
 										}else{
 											logging.Log(fmt.Sprintf("[%d] push data timeout less than 30s, no need to push", msg.Header.Header.Imei))
 										}
@@ -134,7 +176,11 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 							logging.Log("send app data to write routine")
 						}
 
-						*cache = tempCache
+						if len(tempCache) > 0 {
+							*cache = tempCache
+						}else{
+							delete(DevicePushCache, msg.Header.Header.Imei)
+						}
 						logging.Log(fmt.Sprintf("[%d] cache --/ ack parse /--  count: %d", msg.Header.Header.Imei, len(*cache)))
 					}
 				}else{
@@ -311,8 +357,6 @@ func ConnWriteLoop(c *Connection) {
 				//连接关闭了，这里需要将响应数据推入续传队列
 				return
 			}
-
-			time.Sleep(10 * time.Second)
 
 			if n, err := c.conn.Write([]byte(data.Data)); err != nil {
 				logging.Log(fmt.Sprintf("send data to client failed: %s,  %d bytes sent",  err.Error(), n))
