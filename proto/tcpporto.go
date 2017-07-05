@@ -1721,7 +1721,7 @@ func (service *GT06Service) ProcessPushMicChatAck(pszMsg []byte) bool {
 	AppSendChatListLock.Lock()
 	chatTask, ok  := AppSendChatList[service.imei]
 	if ok && chatTask != nil && len(*chatTask) > 0 {
-		if timeId != Str2Num((*chatTask)[0].Info.FileID, 10) {
+		if timeId != (*chatTask)[0].Info.FileID {
 			AppSendChatListLock.Unlock()
 			logging.Log(fmt.Sprintf("[%d] time id  is not matched, %d != %s",
 				service.imei, timeId, (*chatTask)[0].Info.Content))
