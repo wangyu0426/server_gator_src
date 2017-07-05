@@ -155,7 +155,7 @@ func AdminServerLoop(exitServerFunc func())  {
 				break
 			}
 
-			svrctx.AddPhotoData(imei, photoInfo)
+			//svrctx.AddPhotoData(imei, photoInfo)
 
 		default:
 		}

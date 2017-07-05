@@ -164,6 +164,7 @@ type PhotoSettingInfo struct {
 	Member FamilyMember
 	ContentType uint8
 	Content string
+	MsgId uint64
 	Flags  int
 }
 
@@ -256,6 +257,9 @@ var AppChatListLock = &sync.RWMutex{}
 
 var AppNewPhotoList = map[uint64]*[]*PhotoSettingTask{}
 var AppNewPhotoListLock = &sync.RWMutex{}
+
+var AppNewPhotoPendingList = map[uint64]*[]*PhotoSettingTask{}
+var AppNewPhotoPendingListLock = &sync.RWMutex{}
 
 func HandleTcpRequest(reqCtx RequestContext)  bool{
 	service := &GT06Service{reqCtx: reqCtx}
@@ -385,6 +389,9 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			lastAckOK := Str2Num(string(msg.Data[16: 17]), 10)
 			if lastAckOK == 1 {
 				//回复成功，通知app成功
+				if service.cmd == DRT_SET_PHONE_NUMBERS_ACK{
+					ResolvePendingPhotoData(service.imei, msgIdForAck)
+				}
 			}else{
 				//回复失败，通知APP失败
 			}
@@ -795,7 +802,7 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 				deviceInfo, ok := (*DeviceInfoList)[imei]
 				if ok && deviceInfo != nil {
 					body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
-						makeDeviceFamilyPhoneNumbers(&deviceInfo.Family), msg.Header.Header.ID)
+						makeDeviceFamilyPhoneNumbers(&deviceInfo.Family),   params.MsgId) //msg.Header.Header.ID)
 					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
 				}
 				DeviceInfoListLock.RUnlock()
@@ -831,7 +838,7 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 						logging.Log(fmt.Sprintf("[%d] bad data of new watch alarm to save, %s", imei, setting.NewValue))
 						return  nil
 					}else{
-						body = fmt.Sprintf("%015dAP09,%d,%d,%d,%s,%s,%016X)", imei, 0, setting.Index, newWatchAlarm.Days,
+						body = fmt.Sprintf("%015dAP09,%d,%d,%d,%s,%s,%016X)", imei, 1, setting.Index, newWatchAlarm.Days,
 							newWatchAlarm.Date, newWatchAlarm.Time, msg.Header.Header.ID)
 					}
 				}
@@ -1982,7 +1989,13 @@ func (service *GT06Service) PushNewPhotoNum() bool {
 	newAvatars := 0
 	AppNewPhotoListLock.RLock()
 	newPhotoList, ok := AppNewPhotoList[service.imei]
-	if ok {
+	if ok && newPhotoList != nil {
+		//for _, photo := range *newPhotoList {
+		//	if photo.Info.MsgId == 0 {
+		//		newAvatars++
+		//	}
+		//}
+
 		newAvatars = len(*newPhotoList)
 	}
 	AppNewPhotoListLock.RUnlock()
@@ -3147,4 +3160,44 @@ func ExecCmd(name string, arg ...string) (error, string){
 	}
 
 	return nil, out.String()
+}
+
+func AddPhotoData(imei uint64, photoData PhotoSettingInfo) {
+	photoTask := PhotoSettingTask{Info: photoData}
+	AppNewPhotoListLock.Lock()
+	photoList, ok := AppNewPhotoList[imei]
+	if ok {
+		*photoList = append(*photoList, &photoTask)
+	}else {
+		AppNewPhotoList[imei] = &[]*PhotoSettingTask{}
+		*AppNewPhotoList[imei] = append(*AppNewPhotoList[imei], &photoTask)
+	}
+	AppNewPhotoListLock.Unlock()
+}
+
+func ResolvePendingPhotoData(imei, msgId uint64) {
+	isFound := false
+	var resolvedItem *PhotoSettingTask
+	tempList:= []*PhotoSettingTask{}
+	AppNewPhotoPendingListLock.RLock()
+	photoList, ok := AppNewPhotoPendingList[imei]
+	if ok && photoList != nil {
+		for _, photo := range *photoList{
+			if photo.Info.MsgId == msgId{
+				resolvedItem = photo
+				isFound = true
+			}else{
+				tempList = append(tempList, photo)
+			}
+		}
+	}
+	AppNewPhotoPendingListLock.RUnlock()
+
+	if isFound{
+		AppNewPhotoPendingListLock.Lock()
+		AppNewPhotoPendingList[imei] = &tempList
+		AppNewPhotoPendingListLock.Unlock()
+
+		AddPhotoData(imei, resolvedItem.Info)
+	}
 }

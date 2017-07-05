@@ -273,6 +273,7 @@ type DeviceSettingParams struct {
 	Imei string  				`json:"imei"`
 	UserName string		`json:"username"`
 	AccessToken string		`json:"accessToken"`
+	MsgId uint64 			`json:"msgId"`
 	Settings []SettingParam `json:"settings"`
 }
 

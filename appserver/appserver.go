@@ -161,7 +161,8 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 					photoInfo.Member.Phone = ctx.FormValue("phone")
 					photoInfo.ContentType = proto.ChatContentPhoto
 					photoInfo.Content = fileName//proto.MakeTimestampIdString()
-					svrctx.AddPhotoData(proto.Str2Num(imei, 10), photoInfo)
+					photoInfo.MsgId = proto.Str2Num(ctx.FormValue("msgId"), 10)
+					svrctx.AddPendingPhotoData(proto.Str2Num(imei, 10), photoInfo)
 				}
 
 				result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +

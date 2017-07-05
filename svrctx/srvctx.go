@@ -307,19 +307,17 @@ func PushChatNum(imei uint64) bool {
 	return true
 }
 
-func AddPhotoData(imei uint64, photoData proto.PhotoSettingInfo) {
+func AddPendingPhotoData(imei uint64, photoData proto.PhotoSettingInfo) {
 	photoTask := proto.PhotoSettingTask{Info: photoData}
-	proto.AppNewPhotoListLock.Lock()
-	photoList, ok := proto.AppNewPhotoList[imei]
+	proto.AppNewPhotoPendingListLock.Lock()
+	photoList, ok := proto.AppNewPhotoPendingList[imei]
 	if ok {
 		*photoList = append(*photoList, &photoTask)
 	}else {
-		proto.AppNewPhotoList[imei] = &[]*proto.PhotoSettingTask{}
-		*proto.AppNewPhotoList[imei] = append(*proto.AppNewPhotoList[imei], &photoTask)
+		proto.AppNewPhotoPendingList[imei] = &[]*proto.PhotoSettingTask{}
+		*proto.AppNewPhotoPendingList[imei] = append(*proto.AppNewPhotoPendingList[imei], &photoTask)
 	}
-	proto.AppNewPhotoListLock.Unlock()
-
-	PushPhotoNum(imei)
+	proto.AppNewPhotoPendingListLock.Unlock()
 }
 
 func AddChatData(imei uint64, chatData proto.ChatInfo) {
