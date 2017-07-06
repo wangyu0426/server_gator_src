@@ -136,6 +136,13 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 		}
 
 		return AppDeleteVoices(c, &params)
+	case proto.ActiveDeviceCmdName:
+		datas := msg["data"].(map[string]interface{})
+		params := proto.DeviceBaseParams{Imei: datas["imei"].(string),
+			UserName: datas["username"].(string),
+			AccessToken: datas["accessToken"].(string)}
+
+		return AppActiveDevice(c, &params)
 	default:
 		break
 	}
@@ -1036,4 +1043,8 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 
 func AppDeleteVoices(c *AppConnection, params *proto.DeleteVoicesParams) bool {
 	return proto.DeleteVoicesForApp(proto.Str2Num(params.Imei, 10), params.DeleteVoices)
+}
+
+func AppActiveDevice(c *AppConnection, params *proto.DeviceBaseParams) bool {
+	return true
 }

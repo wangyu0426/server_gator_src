@@ -251,6 +251,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				logging.Log(fmt.Sprintf("[%d] ffmpeg %s failed, %s", imeiUint64, args, err9.Error()))
 			}
 
+			logging.Log(fmt.Sprintf("[%d] app upload chat: %s", imeiUint64, proto.MakeStructToJson(chat)))
 			svrctx.AddChatData(imeiUint64, chat)
 			proto.AddChatForApp(chat)
 

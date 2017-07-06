@@ -386,7 +386,7 @@ var GetDeviceByImeiAckCmdName  	= GetDeviceByImeiCmdName + CmdAckTail
 
 var AddDeviceCmdName  			= "add-device"
 var AddDeviceAckCmdName  		= AddDeviceCmdName + CmdAckTail
-var AddDeviceOKAckCmdName  	= AddDeviceCmdName + CmdOKTail +  CmdAckTail
+var AddDeviceOKAckCmdName  		= AddDeviceCmdName + CmdOKTail +  CmdAckTail
 
 var DeleteDeviceCmdName  			= "delete-device"
 var DeleteDeviceAckCmdName  		= DeleteDeviceCmdName + CmdAckTail
@@ -394,6 +394,14 @@ var DeleteDeviceAckCmdName  		= DeleteDeviceCmdName + CmdAckTail
 var DeleteVoicesCmdName  			= "delete-voices"
 var DeleteVoicesAckCmdName  		= DeleteVoicesCmdName + CmdAckTail
 
+var ActiveDeviceCmdName  			= "active-device"
+var ActiveDeviceAckCmdName  		= ActiveDeviceCmdName + CmdAckTail
+
+var DeviceLocateNowCmdName  		= "active-device"
+var DeviceLocateNowAckCmdName  	= DeviceLocateNowCmdName + CmdAckTail
+
+var ActiveDeviceSms 				= "#CONNECTSERVER#0#GATOR#"
+var DeviceLocateNowSms 			= "#LOCATION#GATOR#"
 
 type SafeZone struct {
 	ZoneID int32
