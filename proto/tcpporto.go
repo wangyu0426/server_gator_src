@@ -1972,7 +1972,7 @@ func (service *GT06Service) ProcessRspChat() bool {
 				(*chatTask)[0].Data.Imei = service.imei
 				(*chatTask)[0].Data.Cmd = StringCmd(DRT_FETCH_FILE)
 				(*chatTask)[0].Data.Phone = chatData[0].Sender
-				(*chatTask)[0].Data.Time = Str2Num(chatData[0].Content, 10)
+				(*chatTask)[0].Data.Time = Str2Num(chatData[0].FileID, 10)
 				(*chatTask)[0].Data.BlockCount = GetBlockCount(len(voice))
 				(*chatTask)[0].Data.BlockSize = GetBlockSize(len(voice), 1)
 				(*chatTask)[0].Data.BlockIndex =1
