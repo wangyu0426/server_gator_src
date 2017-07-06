@@ -170,6 +170,18 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 								if msg.Header.Header.Version == proto.MSG_HEADER_ACK_PARSED &&
 									msg.Header.Header.Imei == cachedMsg.Header.Header.Imei &&
 									msg.Header.Header.ID == cachedMsg.Header.Header.ID {
+									if msg.Header.Header.Cmd == proto.CMD_AP03 {
+										syncTimeMsg := &proto.MsgData{}
+										syncTimeMsg.Header.Header.Cmd = proto.CMD_AP03
+										cachedMsg = &syncTimeMsg
+										tempCache = append(tempCache, cachedMsg)
+									}else if msg.Header.Header.Cmd == proto.CMD_AP14 {
+										sendLocationMsg := &proto.MsgData{}
+										sendLocationMsg.Header.Header.Cmd = proto.CMD_AP14
+										cachedMsg = &sendLocationMsg
+										tempCache = append(tempCache, cachedMsg)
+									}else{
+									}
 								}else{ //未收到确认，如果当前消息是通知继续推送数据并且时间已经超过30s，才会发送
 									if isPushCache {
 										timeout := (proto.NewMsgID() - cachedMsg.Header.Header.LastPushTime) / uint64(time.Second)
