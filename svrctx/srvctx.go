@@ -299,9 +299,11 @@ func PushChatNum(imei uint64) bool {
 	chatData := GetChatData(imei, -1)
 	if len(chatData) > 0 {
 		//通知终端有聊天信息
-		serverCtx.TcpServerChan <- proto.MakeReplyMsg(imei, false,
+		msg :=  proto.MakeReplyMsg(imei, false,
 			proto.MakeFileNumReplyMsg(imei, proto.ChatContentVoice, len(chatData)),
 			proto.NewMsgID())
+		msg.Header.Header.Cmd = proto.CMD_AP11
+		serverCtx.TcpServerChan <- msg
 	}
 
 	return true

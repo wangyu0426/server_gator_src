@@ -635,6 +635,8 @@ func init()  {
 	//
 	//var a float64
 	//fmt.Println(a, a==0)
+	//str := "(0054357593060081018AP1422.587725,113.913641,0,2017,07,06,03,30,13,00000DA2DB7AFA18)"
+	//fmt.Println(str[len(str) - 18: ])
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()

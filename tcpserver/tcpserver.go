@@ -25,6 +25,9 @@ var TcpClientTable = map[uint64]*Connection{}
 var DevicePushCache = map[uint64]*[]*proto.MsgData{}
 
 func init()  {
+	//fmt.Println(string(MakeLatestTimeLocationReplyMsg(proto.CMD_AP03, 357593060571398, 0x14CE9D5CF576B1DF, []byte("(003E357593060571398AP03,170706,023907,e0630,14CE9D5C99BF7158)"))))
+	//fmt.Println(string(MakeLatestTimeLocationReplyMsg(proto.CMD_AP14, 357593060571398, 0x00000DA2DB7AFA20, []byte("(0054357593060571398AP1422.587725,113.913641,0,2017,07,06,03,30,13,00000DA2DB7AFA18)"))))
+
 	logging.Log("tcpserver init")
 	addConnChan = make(chan *Connection, 1024)
 	delConnChan = make(chan *Connection, 1024)
@@ -98,9 +101,21 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				}
 
 				if msg.Header.Header.Cmd == proto.CMD_AP03 {
-					(*DevicePushCache[msg.Header.Header.Imei])[0] = msg
+					if (*DevicePushCache[msg.Header.Header.Imei])[0].Header.Header.ID != 0 {
+						tempID := (*DevicePushCache[msg.Header.Header.Imei])[0].Header.Header.ID
+						(*DevicePushCache[msg.Header.Header.Imei])[0] = msg
+						(*DevicePushCache[msg.Header.Header.Imei])[0].Header.Header.ID = tempID
+					}else{
+						(*DevicePushCache[msg.Header.Header.Imei])[0] = msg
+					}
 				}else if msg.Header.Header.Cmd == proto.CMD_AP14 {
-					(*DevicePushCache[msg.Header.Header.Imei])[1] = msg
+					if (*DevicePushCache[msg.Header.Header.Imei])[1].Header.Header.ID != 0 {
+						tempID := (*DevicePushCache[msg.Header.Header.Imei])[1].Header.Header.ID
+						(*DevicePushCache[msg.Header.Header.Imei])[1] = msg
+						(*DevicePushCache[msg.Header.Header.Imei])[1].Header.Header.ID = tempID
+					}else{
+						(*DevicePushCache[msg.Header.Header.Imei])[1] = msg
+					}
 				}else{
 					*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], msg)
 				}
@@ -122,6 +137,11 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 						logging.Log(fmt.Sprintf("[%d] cache --////--  count: %d", msg.Header.Header.Imei, len(*cache)))
 						tempCache := []*proto.MsgData{}
 						for _, cachedMsg := range *cache {
+							if len(cachedMsg.Data) == 0 {
+								tempCache = append(tempCache, cachedMsg)
+								continue
+							}
+
 							if cachedMsg.Header.Header.Status == 0 {
 								//0， 不需要手表回复确认，直接发送完并删除
 								//对于AP11,需要加30s延迟，不能连续发送太快
@@ -136,11 +156,11 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 							}else if cachedMsg.Header.Header.Status == 1 {
 								//1, 消息尚未发送，且需要确认，则首先发出消息，并将status置2,
 								//如果是AP03和AP14，则需要实时推送务器当前时间和手表最新定位
-								if msg.Header.Header.Cmd == proto.CMD_AP03 {
-
-								}else if msg.Header.Header.Cmd == proto.CMD_AP14 {
-
+								if cachedMsg.Header.Header.Cmd == proto.CMD_AP03 ||  cachedMsg.Header.Header.Cmd == proto.CMD_AP14 {
+									cachedMsg.Data = MakeLatestTimeLocationReplyMsg(cachedMsg.Header.Header.Cmd,
+										cachedMsg.Header.Header.Imei, cachedMsg.Header.Header.ID, cachedMsg.Data)
 								}
+
 								c.responseChan <- cachedMsg
 								cachedMsg.Header.Header.Status = 2
 								cachedMsg.Header.Header.LastPushTime = proto.NewMsgID()
@@ -155,19 +175,19 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 										timeout := (proto.NewMsgID() - cachedMsg.Header.Header.LastPushTime) / uint64(time.Second)
 										if timeout > 30 {
 											//如果是AP03和AP14，则需要实时推送务器当前时间和手表最新定位
-											if msg.Header.Header.Cmd == proto.CMD_AP03 {
-
-											}else if msg.Header.Header.Cmd == proto.CMD_AP14 {
-
+											if cachedMsg.Header.Header.Cmd == proto.CMD_AP03 ||  cachedMsg.Header.Header.Cmd == proto.CMD_AP14 {
+												cachedMsg.Data = MakeLatestTimeLocationReplyMsg(cachedMsg.Header.Header.Cmd,
+													cachedMsg.Header.Header.Imei, cachedMsg.Header.Header.ID, cachedMsg.Data)
 											}
+
 											c.responseChan <- cachedMsg
 											cachedMsg.Header.Header.LastPushTime = proto.NewMsgID()
 										}else{
 											logging.Log(fmt.Sprintf("[%d] push data timeout less than 30s, no need to push", msg.Header.Header.Imei))
 										}
-
-										tempCache = append(tempCache, cachedMsg)
 									}
+
+									tempCache = append(tempCache, cachedMsg)
 								}
 							}else{
 								tempCache = append(tempCache, cachedMsg)
@@ -456,5 +476,44 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		//for writing, 写协程等待一个channel的数据，将channel收到的数据发送至客户端
 		go ConnWriteLoop(c)
 	}
+}
 
+func MakeLatestTimeLocationReplyMsg(cmd uint16, imei, id uint64, data []byte) []byte{
+	if len(data) == 0 {
+		return data
+	}
+
+	offset := 0
+	if cmd == proto.CMD_AP03 {
+		//(003E357593060571398AP03,170706,024012,e0630,14CE9D6BDC6263B7)
+		replyData := make([]byte, len(data))
+		curTime := time.Now().UTC().Format("060102,150405")
+		copy(replyData[offset: offset + 25], data[offset: offset + 25])
+		offset += 25
+
+		copy(replyData[offset: offset + 13], curTime[0: ])
+		offset += 13
+
+		copy(replyData[offset: offset + 6], data[offset: offset + 6])
+		offset += 6
+
+		copy(replyData[offset: offset + 18],  []byte(fmt.Sprintf(",%016X)", id)))
+		offset += 18
+
+		return replyData
+	}else if cmd == proto.CMD_AP14{
+		//(0054357593060081018AP1422.587725,113.913641,0,2017,07,06,03,30,13,00000DA2DB7AFA18)
+
+		replyData, body  := "", ""
+		curTime := time.Now().UTC().Format("2006,01,02,15,04,05")
+
+		location := svrctx.GetDeviceData(imei, svrctx.Get().PGPool)
+		body = string(data[5: 24]) + fmt.Sprintf("%06f,%06f,%d,", location.Lat, location.Lng, location.Accracy) + curTime +
+			fmt.Sprintf(",%016X)", id)
+
+		replyData = fmt.Sprintf("(%04X", 5 + len(body)) + body
+		return []byte(replyData)
+	}
+
+	return data
 }
