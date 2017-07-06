@@ -298,7 +298,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		}
 
 		//记录收到的是些什么数据
-		logging.Log(string(c.buf))
+		logging.Log(string(c.buf[0: dataSize]))
 
 		if !full {
 			if serverCtx.IsDebug == true {
