@@ -173,12 +173,12 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 									if msg.Header.Header.Cmd == proto.CMD_AP03 {
 										syncTimeMsg := &proto.MsgData{}
 										syncTimeMsg.Header.Header.Cmd = proto.CMD_AP03
-										cachedMsg = &syncTimeMsg
+										cachedMsg = syncTimeMsg
 										tempCache = append(tempCache, cachedMsg)
 									}else if msg.Header.Header.Cmd == proto.CMD_AP14 {
 										sendLocationMsg := &proto.MsgData{}
 										sendLocationMsg.Header.Header.Cmd = proto.CMD_AP14
-										cachedMsg = &sendLocationMsg
+										cachedMsg = sendLocationMsg
 										tempCache = append(tempCache, cachedMsg)
 									}else{
 									}
