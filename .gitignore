@@ -5,6 +5,7 @@
 #statiac
 *.amr
 *.aac
+cnfig.json
 static/upload/avatar
 
 # Folders
