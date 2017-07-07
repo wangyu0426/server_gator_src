@@ -98,7 +98,7 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 			logging.Log("set-device parse json failed, " + err.Error())
 			return false
 		}
-		return AppUpdateDeviceSetting(c, &params, false)
+		return AppUpdateDeviceSetting(c, &params, false, "")
 	case proto.GetDeviceByImeiCmdName:
 		datas := msg["data"].(map[string]interface{})
 		params := proto.DeviceAddParams{Imei: datas["imei"].(string),
@@ -694,7 +694,7 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 			newSettings.Settings = append(newSettings.Settings, setting)
 		}
 
-		return AppUpdateDeviceSetting(c, &newSettings, true)
+		return AppUpdateDeviceSetting(c, &newSettings, true, params.MySimID)
 	}else{
 		resultData, _ := json.Marshal(&result)
 		appServerChan <- &proto.AppMsgData{Cmd: proto.AddDeviceAckCmdName, Imei: imei,
@@ -890,7 +890,8 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 	return UpdateDeviceSettingInDB(imei, settings, valulesIsString)
 }
 
-func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams, isAddDevice bool) bool {
+func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams, isAddDevice bool,
+	familyNumber string) bool {
 	isNeedNotifyDevice := make([]bool, len(params.Settings))
 	valulesIsString := make([]bool, len(params.Settings))
 	imei := proto.Str2Num(params.Imei, 10)
@@ -978,7 +979,9 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 			proto.DeviceInfoListLock.RLock()
 			deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 			if ok && deviceInfo != nil {
-				resultJson, _ := json.Marshal(proto.MakeDeviceInfoResult(deviceInfo))
+				deviceInfoResult := proto.MakeDeviceInfoResult(deviceInfo)
+				deviceInfoResult.FamilyNumber = familyNumber
+				resultJson, _ := json.Marshal(&deviceInfoResult)
 				result.Data = string([]byte(resultJson))
 			}
 			proto.DeviceInfoListLock.RUnlock()
