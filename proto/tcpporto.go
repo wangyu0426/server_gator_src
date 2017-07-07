@@ -290,6 +290,12 @@ func HandleTcpRequest(reqCtx RequestContext)  bool{
 	return true
 }
 
+func MakeLocateNowReplyMsg(imei uint64) []byte {
+	//(0019357593060153353AP00)
+	return []byte(fmt.Sprintf("(0019%dAP00)", imei))
+
+}
+
 func MakeReplyMsg(imei uint64, requireAck bool, data []byte, id uint64) *MsgData{
 	msg := MsgData{}
 	msg.Data = data

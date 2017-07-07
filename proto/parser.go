@@ -210,6 +210,12 @@ type AppMsgData struct {
 	Conn interface{}  `json:"-"`
 }
 
+type AppRequestTcpConnParams struct {
+	ID uint64		 	`json:"id,omitempty"`
+	ReqCmd string 		`json:"reqCmd"`
+	Params DeviceActiveParams `json:"params"`
+}
+
 type HeartbeatParams struct {
 	UserName string `json:"username"`
 	AccessToken string `json:"accessToken"`
@@ -244,6 +250,13 @@ type DeviceBaseParams struct {
 	Imei string  				`json:"imei"`
 	UserName string		`json:"username"`
 	AccessToken string		`json:"accessToken"`
+}
+
+type DeviceActiveParams struct {
+	Imei string  				`json:"imei"`
+	UserName string		`json:"username"`
+	AccessToken string		`json:"accessToken"`
+	Phone string			`json:"phone"`
 }
 
 type DeviceAddParams struct {
@@ -394,11 +407,15 @@ var DeleteDeviceAckCmdName  		= DeleteDeviceCmdName + CmdAckTail
 var DeleteVoicesCmdName  			= "delete-voices"
 var DeleteVoicesAckCmdName  		= DeleteVoicesCmdName + CmdAckTail
 
+var DeviceLocateNowCmdName  		= "locate-now"
+var DeviceLocateNowAckCmdName  	= DeviceLocateNowCmdName + CmdAckTail
+
 var ActiveDeviceCmdName  			= "active-device"
 var ActiveDeviceAckCmdName  		= ActiveDeviceCmdName + CmdAckTail
 
-var DeviceLocateNowCmdName  		= "active-device"
-var DeviceLocateNowAckCmdName  	= DeviceLocateNowCmdName + CmdAckTail
+var ActiveDeviceSosCmdName  			= "active-sos"
+var ActiveDeviceSosAckCmdName  		= ActiveDeviceSosCmdName + CmdAckTail
+
 
 var ActiveDeviceSms 				= "#CONNECTSERVER#0#GATOR#"
 var DeviceLocateNowSms 			= "#LOCATION#GATOR#"

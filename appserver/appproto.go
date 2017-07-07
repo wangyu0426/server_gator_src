@@ -33,6 +33,9 @@ func base64Decode(src []byte) ([]byte, error) {
 	return coder.DecodeString(string(src))
 }
 
+func init()  {
+}
+
 func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, data []byte) bool {
 	var itf interface{}
 	err:=json.Unmarshal(data, &itf)
@@ -136,13 +139,22 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 		}
 
 		return AppDeleteVoices(c, &params)
+	case proto.DeviceLocateNowCmdName:
+		datas := msg["data"].(map[string]interface{})
+		params := proto.DeviceActiveParams{Imei: datas["imei"].(string),
+			UserName: datas["username"].(string),
+			AccessToken: datas["accessToken"].(string),
+			Phone: datas["phone"].(string)}
+
+		return AppActiveDeviceToLocateNow(c, &params)
 	case proto.ActiveDeviceCmdName:
 		datas := msg["data"].(map[string]interface{})
-		params := proto.DeviceBaseParams{Imei: datas["imei"].(string),
+		params := proto.DeviceActiveParams{Imei: datas["imei"].(string),
 			UserName: datas["username"].(string),
-			AccessToken: datas["accessToken"].(string)}
+			AccessToken: datas["accessToken"].(string),
+			Phone: datas["phone"].(string)}
 
-		return AppActiveDevice(c, &params)
+		return AppActiveDeviceToConnectServer(c, &params)
 	default:
 		break
 	}
@@ -1048,6 +1060,24 @@ func AppDeleteVoices(c *AppConnection, params *proto.DeleteVoicesParams) bool {
 	return proto.DeleteVoicesForApp(proto.Str2Num(params.Imei, 10), params.DeleteVoices)
 }
 
-func AppActiveDevice(c *AppConnection, params *proto.DeviceBaseParams) bool {
+func AppActiveDeviceToLocateNow(c *AppConnection, params *proto.DeviceActiveParams) bool {
+	reqParams := proto.AppRequestTcpConnParams{}
+	reqParams.ID = proto.NewMsgID()
+	reqParams.ReqCmd = proto.DeviceLocateNowCmdName
+	reqParams.Params = *params
+
+	msg := proto.MsgData{Data: []byte(proto.MakeStructToJson(&reqParams))}
+	msg.Header.Header.ID = reqParams.ID
+	msg.Header.Header.Imei = proto.Str2Num(params.Imei, 10)
+	msg.Header.Header.Cmd = proto.CMD_AP00
+	msg.Header.Header.Version = proto.MSG_HEADER_VER_EX
+	msg.Header.Header.From = proto.MsgFromAppServerToTcpServer
+
+	svrctx.Get().TcpServerChan <- &msg
+
+	return true
+}
+
+func AppActiveDeviceToConnectServer(c *AppConnection, params *proto.DeviceActiveParams) bool {
 	return true
 }

@@ -71,6 +71,40 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				return
 			}
 
+			if  msg.Header.Header.Version == proto.MSG_HEADER_VER_EX &&
+				msg.Header.Header.From == proto.MsgFromAppServerToTcpServer {
+				logging.Log(fmt.Sprintf("[%d] will active device: %s", msg.Header.Header.Imei, msg.Data))
+
+				c, ok2 := TcpClientTable[msg.Header.Header.Imei]
+				if ok2 {
+					logging.Log(fmt.Sprintf("[%d] lastActiveTime: %d", msg.Header.Header.Imei, c.lastActiveTime))
+					if (c.lastActiveTime - time.Now().Unix()) <= int64(serverCtx.MaxDeviceIdleTimeSecs) {
+						//如果100秒内有数据，则认为连接良好
+						var (
+							data []byte
+							requireAck bool
+						)
+
+						switch msg.Header.Header.Cmd {
+						case proto.CMD_AP00:
+							data = proto.MakeLocateNowReplyMsg(msg.Header.Header.Imei)
+							requireAck = false
+						}
+
+						c.responseChan <-  proto.MakeReplyMsg(msg.Header.Header.Imei, requireAck, data, msg.Header.Header.ID)
+					}else{
+						//超过连接有效期，则通知APP需要发送短信激活
+						logging.Log(fmt.Sprintf("[%d] device idle no data over %d seconds and will notify app to send sms",
+							msg.Header.Header.Imei, serverCtx.MaxDeviceIdleTimeSecs ))
+					}
+				}else {
+					logging.Log(fmt.Sprintf("[%d]will send app data to tcp connection from TcpClientTable, but connection not found",
+						msg.Header.Header.Imei))
+				}
+
+				return
+			}
+
 			isPushCache := msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE
 			//if msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE {
 			if len(msg.Data) == 0 { //没有数据，表示这是一个通知的消息
@@ -129,7 +163,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 			if ok2 {
 				logging.Log(fmt.Sprintf("[%d] lastActiveTime: %d", msg.Header.Header.Imei, c.lastActiveTime))
 				if (c.lastActiveTime - time.Now().Unix()) <= int64(serverCtx.MaxDeviceIdleTimeSecs) {
-					//如果60秒内有数据，则认为连接良好
+					//如果100秒内有数据，则认为连接良好
 					cache, ok3 := DevicePushCache[msg.Header.Header.Imei]
 					if (ok3 == false) {
 						logging.Log(fmt.Sprintf("[%d] no data cached to send", msg.Header.Header.Imei ))
@@ -310,7 +344,11 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		}
 
 		//记录收到的是些什么数据
-		logging.Log(string(c.buf[0: dataSize]))
+		if dataSize > 80 {
+			logging.Log(string(c.buf[0: 80]))
+		}else{
+			logging.Log(string(c.buf[0: dataSize]))
+		}
 
 		if !full {
 			if serverCtx.IsDebug == true {
