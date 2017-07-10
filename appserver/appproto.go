@@ -655,6 +655,13 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 					}
 
 					family = deviceInfo.Family
+
+					if isAdmin{
+						deviceInfo.OwnerName = params.OwnerName
+						deviceInfo.CountryCode = params.DeviceSimCountryCode
+						deviceInfo.SimID = params.DeviceSimID
+						deviceInfo.TimeZone = proto.DeviceTimeZoneInt(params.TimeZone)
+					}
 				}
 				proto.DeviceInfoListLock.Unlock()
 				if isFound {
@@ -786,7 +793,7 @@ func AddDeviceManagerLoop()  {
 	}
 }
 
-func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsString []bool, needUpdatDB bool)  bool {
+func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsString []bool)  bool {
 	phoneNumbers := ""
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
@@ -924,12 +931,8 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 	}
 	proto.DeviceInfoListLock.Unlock()
 
-	if needUpdatDB{
-		//更新数据库
-		return UpdateDeviceSettingInDB(imei, settings, valulesIsString)
-	}else{
-		return true
-	}
+	//更新数据库
+	return UpdateDeviceSettingInDB(imei, settings, valulesIsString)
 }
 
 func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams, isAddDevice bool,
@@ -974,7 +977,10 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 		}
 	}
 
-	ret := SaveDeviceSettings(imei, params.Settings, valulesIsString, isAddDevice == false)
+	ret := true
+	if isAddDevice == false {
+		ret = SaveDeviceSettings(imei, params.Settings, valulesIsString)
+	}
 
 	result := proto.HttpAPIResult{
 		ErrCode: 0,

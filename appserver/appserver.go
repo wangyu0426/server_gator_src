@@ -154,7 +154,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			settings[0].FieldName = fieldname
 			settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir +  imei + "/"  +  fileName
 
-			ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil, true)
+			ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
 			if ret {
 				if uploadType == "contactAvatar" {
 					photoInfo := proto.PhotoSettingInfo{}
