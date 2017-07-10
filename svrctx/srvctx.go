@@ -406,7 +406,7 @@ func QueryLocations(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64
 	locations := []proto.LocationData{}
 	//缓存中没有数据，将从数据库中查询
 	strSQL := fmt.Sprintf("select * from  device_location where imei=%d and location_time >= %d and location_time <= %d " +
-		" order by location_time desc", imei)
+		" order by location_time desc", imei, beginTime, endTime)
 	logging.Log("sql: " + strSQL)
 	rows, err := pgpool.Query(strSQL)
 	if err != nil {
@@ -414,7 +414,7 @@ func QueryLocations(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64
 		return nil
 	}
 
-	if rows.Next() {
+	for rows.Next() {
 		values , err := rows.Values()
 		logging.Log(fmt.Sprint("query location data: ", values, err))
 		locationItem := proto.LocationData{}
@@ -428,11 +428,10 @@ func QueryLocations(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64
 		fmt.Println("locationItem: ", locationItem)
 		locationItem.Imei = imei
 		locations = append(locations, locationItem)
-	}else {
-		logging.Log(fmt.Sprintf("[%d] query location: no data in db", imei))
 	}
 
 	if len(locations) == 0{
+		logging.Log(fmt.Sprintf("[%d] query location: no data in db", imei))
 		return nil
 	}else{
 		return &locations
