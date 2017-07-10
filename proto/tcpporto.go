@@ -296,6 +296,22 @@ func MakeLocateNowReplyMsg(imei uint64) []byte {
 
 }
 
+func MakeSosReplyMsg(imei, id uint64) []byte {
+	//(002C357593060153353AP16,1,0000000000000012)
+	body := fmt.Sprintf("%015dAP16,1,%016X)", imei, id)
+	size := fmt.Sprintf("(%04X", 5 + len(body))
+
+	return []byte(size + body)
+}
+
+func MakeVoiceMonitorReplyMsg(imei, id uint64, phone string) []byte {
+	//(0035357593060153353AP0513632782450,0000000000000004)
+	body := fmt.Sprintf("%015dAP05%s,%016X)", imei, phone, id)
+	size := fmt.Sprintf("(%04X", 5 + len(body))
+
+	return []byte(size + body)
+}
+
 func MakeReplyMsg(imei uint64, requireAck bool, data []byte, id uint64) *MsgData{
 	msg := MsgData{}
 	msg.Data = data

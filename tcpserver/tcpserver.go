@@ -71,10 +71,13 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				return
 			}
 
+			logging.Log("recv chan data: " + proto.MakeStructToJson(msg))
+
 			if  msg.Header.Header.Version == proto.MSG_HEADER_VER_EX &&
 				msg.Header.Header.From == proto.MsgFromAppServerToTcpServer {
 				logging.Log(fmt.Sprintf("[%d] will active device: %s", msg.Header.Header.Imei, msg.Data))
 
+				cmdAckName := "'"
 				c, ok2 := TcpClientTable[msg.Header.Header.Imei]
 				if ok2 {
 					logging.Log(fmt.Sprintf("[%d] lastActiveTime: %d", msg.Header.Header.Imei, c.lastActiveTime))
@@ -89,20 +92,47 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 						case proto.CMD_AP00:
 							data = proto.MakeLocateNowReplyMsg(msg.Header.Header.Imei)
 							requireAck = false
+							cmdAckName = proto.DeviceLocateNowAckCmdName
+						//case proto.CMD_AP16:
+						//	data = proto.MakeSosReplyMsg(msg.Header.Header.Imei, proto.NewMsgID())
+						//	requireAck = false
+						//	cmdAckName = proto.ActiveDeviceSosAckCmdName
 						}
 
 						c.responseChan <-  proto.MakeReplyMsg(msg.Header.Header.Imei, requireAck, data, msg.Header.Header.ID)
+						logging.Log(fmt.Sprintf("[%d] device active msg has been sent, app has no need to send sms",  msg.Header.Header.Imei ))
+						break
 					}else{
 						//超过连接有效期，则通知APP需要发送短信激活
 						logging.Log(fmt.Sprintf("[%d] device idle no data over %d seconds and will notify app to send sms",
 							msg.Header.Header.Imei, serverCtx.MaxDeviceIdleTimeSecs ))
 					}
 				}else {
-					logging.Log(fmt.Sprintf("[%d]will send app data to tcp connection from TcpClientTable, but connection not found",
+					logging.Log(fmt.Sprintf("[%d]will send app data to active device , but device tcp connection not found, will notify app to send sms",
 						msg.Header.Header.Imei))
 				}
 
-				return
+				//params := proto.AppRequestTcpConnParams{}
+				//err := json.Unmarshal(msg.Data, &params)
+				//if err!= nil {
+				//	logging.Log(fmt.Sprintf("[%d] parse json from msg.Data failed ,%s", msg.Header.Header.Imei, err.Error()))
+				//	return
+				//}
+
+				//result := proto.HttpAPIResult{ErrCode: 1, Imei: proto.Num2Str(msg.Header.Header.Imei, 10), Data: msg.Data}
+
+				switch msg.Header.Header.Cmd {
+				case proto.CMD_AP00:
+					cmdAckName = proto.DeviceLocateNowAckCmdName
+				//case proto.CMD_AP16:
+				//	cmdAckName = proto.ActiveDeviceSosAckCmdName
+				}
+
+				serverCtx.AppServerChan  <- &proto.AppMsgData{Cmd: cmdAckName,
+					Imei: msg.Header.Header.Imei,
+					Data: string(msg.Data), Conn: nil}
+
+				break
 			}
 
 			isPushCache := msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE

@@ -154,7 +154,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			settings[0].FieldName = fieldname
 			settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir +  imei + "/"  +  fileName
 
-			ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
+			ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil, true)
 			if ret {
 				if uploadType == "contactAvatar" {
 					photoInfo := proto.PhotoSettingInfo{}
@@ -332,7 +332,8 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 					msg.Conn == proto.VerifyCodeAckCmdName ||
 					msg.Cmd == proto.GetDeviceByImeiAckCmdName ||
 					msg.Cmd == proto.AddDeviceAckCmdName ||
-					msg.Cmd == proto.DeleteDeviceAckCmdName {
+					msg.Cmd == proto.DeleteDeviceAckCmdName ||
+					msg.Cmd == proto.GetLocationsAckCmdName {
 					if msg.Cmd == proto.HearbeatAckCmdName {
 						getAppClientsByImei(msg)
 					}
@@ -344,6 +345,28 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 					}else{
 						logging.Log("send msg: " + fmt.Sprint(msg))
 					}
+					break
+				}else if msg.Cmd == proto.DeviceLocateNowAckCmdName {
+					params := proto.AppRequestTcpConnParams{}
+					err := json.Unmarshal([]byte(msg.Data), &params)
+					if err != nil {
+						logging.Log("parse json data for locate now ack failed, " + err.Error() + ", " + msg.Data)
+						break
+					}
+
+					c := getAppClientsByAccessToken(msg.Imei,  params.Params.AccessToken)
+					if c != nil {
+						result := proto.HttpAPIResult{ErrCode: 1, Data: proto.DeviceLocateNowSms}
+						appMsg := proto.AppMsgData{Cmd: proto.DeviceLocateNowAckCmdName,
+							Imei: msg.Imei, Data: proto.MakeStructToJson(&result)}
+						err =(*c.conn).EmitMessage([]byte(proto.MakeStructToJson(&appMsg)))
+						if err != nil {
+							logging.Log("send msg to app failed, " + err.Error())
+						}else{
+							logging.Log("send msg: " + fmt.Sprint(msg))
+						}
+					}
+
 					break
 				}
 
@@ -499,4 +522,22 @@ func getAppClientsByImei(msg *proto.AppMsgData)  map[string]*AppConnection {
 
 		return nil
 	}
+}
+
+func getAppClientsByAccessToken(imei uint64, accessToken string)  *AppConnection {
+	if imei == 0 || len(accessToken) == 0 {
+		logging.Log(fmt.Sprintf("bad input params for getAppClientsByAccessToken: %d, %s", imei, accessToken))
+		return nil
+	}
+
+	subTable, ok := AppClientTable[imei]
+	if ok && subTable != nil {
+		accessTokenConn, ok2 := subTable[accessToken]
+		if ok2 && accessTokenConn != nil {
+			return accessTokenConn
+		}
+	}
+
+	logging.Log(fmt.Sprintf("getAppClientsByAccessToken not found app connection: %d, %s", imei, accessToken))
+	return nil
 }

@@ -396,6 +396,49 @@ func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 	}
 }
 
+
+func QueryLocations(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64)  *[]proto.LocationData {
+	if imei == 0 || pgpool == nil || endTime <= beginTime {
+		logging.Log(fmt.Sprintf("[imei: %d] bad input parms: %d, %d", imei, beginTime, endTime))
+		return nil
+	}
+
+	locations := []proto.LocationData{}
+	//缓存中没有数据，将从数据库中查询
+	strSQL := fmt.Sprintf("select * from  device_location where imei=%d and location_time >= %d and location_time <= %d " +
+		" order by location_time desc", imei)
+	logging.Log("sql: " + strSQL)
+	rows, err := pgpool.Query(strSQL)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] pg query failed, %s",  imei, err.Error()))
+		return nil
+	}
+
+	if rows.Next() {
+		values , err := rows.Values()
+		logging.Log(fmt.Sprint("query location data: ", values, err))
+		locationItem := proto.LocationData{}
+		// [357593060571398 20170524141830 29.566889 106.45424 map[datatime:1.7052414183e+11 zoneAlarm:0 zoneIndex:0 lat:29.566888 steps:0 battery:3 readflag:0 zoneName: locateType:1 org_battery:5 lng:106.454239 alarm:2 accracy:0]]
+		//deviceData.DataTime = uint64(values[1].(int64))
+		//deviceData.Lat = float64(values[2].(float32))
+		//deviceData.Lng = float64(values[3].(float32))
+		//fmt.Println("deviceData: ", deviceData)
+		jsonStr, _ := json.Marshal(values[4])
+		json.Unmarshal(jsonStr, &locationItem)
+		fmt.Println("locationItem: ", locationItem)
+		locationItem.Imei = imei
+		locations = append(locations, locationItem)
+	}else {
+		logging.Log(fmt.Sprintf("[%d] query location: no data in db", imei))
+	}
+
+	if len(locations) == 0{
+		return nil
+	}else{
+		return &locations
+	}
+}
+
 func SetDeviceData(imei uint64, updateType int, deviceData proto.LocationData) {
 	DeviceTableLock.Lock()
 	switch updateType {

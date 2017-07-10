@@ -148,13 +148,39 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 
 		return AppActiveDeviceToLocateNow(c, &params)
 	case proto.ActiveDeviceCmdName:
+		//datas := msg["data"].(map[string]interface{})
+		//params := proto.DeviceActiveParams{Imei: datas["imei"].(string),
+		//	UserName: datas["username"].(string),
+		//	AccessToken: datas["accessToken"].(string),
+		//	Phone: datas["phone"].(string)}
+		//
+		//return AppActiveDeviceToConnectServer(c, &params)
+	case proto.ActiveDeviceSosCmdName:
 		datas := msg["data"].(map[string]interface{})
 		params := proto.DeviceActiveParams{Imei: datas["imei"].(string),
 			UserName: datas["username"].(string),
 			AccessToken: datas["accessToken"].(string),
 			Phone: datas["phone"].(string)}
 
-		return AppActiveDeviceToConnectServer(c, &params)
+		return AppActiveDeviceSos(c, &params)
+	case proto.SetDeviceVoiceMonitorCmdName:
+		datas := msg["data"].(map[string]interface{})
+		params := proto.DeviceActiveParams{Imei: datas["imei"].(string),
+			UserName: datas["username"].(string),
+			AccessToken: datas["accessToken"].(string),
+			Phone: datas["phone"].(string)}
+
+		return AppSetDeviceVoiceMonitor(c, &params)
+	case proto.GetLocationsCmdName:
+		jsonString, _ := json.Marshal(msg["data"])
+		params := proto.QueryLocationsParams{}
+		err:=json.Unmarshal(jsonString, &params)
+		if err != nil {
+			logging.Log("get-locations parse json failed, " + err.Error())
+			return false
+		}
+
+		return AppQueryLocations(c, &params)
 	default:
 		break
 	}
@@ -760,7 +786,7 @@ func AddDeviceManagerLoop()  {
 	}
 }
 
-func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsString []bool)  bool {
+func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsString []bool, needUpdatDB bool)  bool {
 	phoneNumbers := ""
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
@@ -898,8 +924,12 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 	}
 	proto.DeviceInfoListLock.Unlock()
 
-	//更新数据库
-	return UpdateDeviceSettingInDB(imei, settings, valulesIsString)
+	if needUpdatDB{
+		//更新数据库
+		return UpdateDeviceSettingInDB(imei, settings, valulesIsString)
+	}else{
+		return true
+	}
 }
 
 func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams, isAddDevice bool,
@@ -944,10 +974,7 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 		}
 	}
 
-	ret := true
-	if isAddDevice == false {
-		ret = SaveDeviceSettings(imei, params.Settings, valulesIsString)
-	}
+	ret := SaveDeviceSettings(imei, params.Settings, valulesIsString, isAddDevice == false)
 
 	result := proto.HttpAPIResult{
 		ErrCode: 0,
@@ -1061,23 +1088,63 @@ func AppDeleteVoices(c *AppConnection, params *proto.DeleteVoicesParams) bool {
 }
 
 func AppActiveDeviceToLocateNow(c *AppConnection, params *proto.DeviceActiveParams) bool {
+	return AppActiveDevice(proto.DeviceLocateNowCmdName, proto.CMD_AP00, params)
+}
+
+//func AppActiveDeviceToConnectServer(c *AppConnection, params *proto.DeviceActiveParams) bool {
+//	return AppActiveDevice(proto.ActiveDeviceCmdName, proto.CMD_ACTIVE_DEVICE, params)
+//}
+
+func AppActiveDeviceSos(c *AppConnection, params *proto.DeviceActiveParams) bool {
+	//return AppActiveDevice(proto.ActiveDeviceSosCmdName, proto.CMD_AP16, params)
+	imei := proto.Str2Num(params.Imei, 10)
+	id := proto.NewMsgID()
+	svrctx.Get().TcpServerChan <- proto.MakeReplyMsg(imei, true, proto.MakeSosReplyMsg(imei, id), id)
+
+	return true
+}
+
+func AppSetDeviceVoiceMonitor(c *AppConnection, params *proto.DeviceActiveParams) bool {
+	//return AppActiveDevice(proto.ActiveDeviceSosCmdName, proto.CMD_AP16, params)
+	imei := proto.Str2Num(params.Imei, 10)
+	id := proto.NewMsgID()
+	svrctx.Get().TcpServerChan <- proto.MakeReplyMsg(imei, true,
+		proto.MakeVoiceMonitorReplyMsg(imei, id, params.Phone), id)
+
+	return true
+}
+
+func AppQueryLocations(c *AppConnection, params *proto.QueryLocationsParams) bool {
+	imei := proto.Str2Num(params.Imei, 10)
+	locations := svrctx.QueryLocations(imei, svrctx.Get().PGPool, params.BeginTime, params.EndTime)
+	if locations == nil || len(*locations) == 0 {
+		locations = &[]proto.LocationData{}
+	}
+
+	result := proto.QueryLocationsResult{Imei: params.Imei, BeginTime: params.BeginTime, EndTime: params.EndTime, Locations: *locations}
+
+	appServerChan <- &proto.AppMsgData{Cmd: proto.GetLocationsAckCmdName,
+		UserName: params.UserName,
+		AccessToken: params.AccessToken,
+		Data: proto.MakeStructToJson(result), Conn: c}
+
+	return true
+}
+
+func AppActiveDevice(reqCmd string, msgCmd uint16, params *proto.DeviceActiveParams)  bool {
 	reqParams := proto.AppRequestTcpConnParams{}
 	reqParams.ID = proto.NewMsgID()
-	reqParams.ReqCmd = proto.DeviceLocateNowCmdName
+	reqParams.ReqCmd = reqCmd
 	reqParams.Params = *params
 
 	msg := proto.MsgData{Data: []byte(proto.MakeStructToJson(&reqParams))}
 	msg.Header.Header.ID = reqParams.ID
 	msg.Header.Header.Imei = proto.Str2Num(params.Imei, 10)
-	msg.Header.Header.Cmd = proto.CMD_AP00
+	msg.Header.Header.Cmd = msgCmd
 	msg.Header.Header.Version = proto.MSG_HEADER_VER_EX
 	msg.Header.Header.From = proto.MsgFromAppServerToTcpServer
 
 	svrctx.Get().TcpServerChan <- &msg
 
-	return true
-}
-
-func AppActiveDeviceToConnectServer(c *AppConnection, params *proto.DeviceActiveParams) bool {
 	return true
 }

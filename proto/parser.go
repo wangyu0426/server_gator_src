@@ -101,12 +101,16 @@ const DRT_FETCH_APP_URL = DRT_FETCH_AGPS
 	 CMD_AP13
 	 CMD_AP23
 	 CMD_AP14
+	 CMD_AP16
 	 CMD_AP26
 	 CMD_AP30
 	 CMD_AP31
 	 CMD_AP34
 
 	 CMD_ACK
+
+	 //CMD_ACTIVE_DEVICE
+	 CMD_NONE
  )
 
 
@@ -257,6 +261,21 @@ type DeviceActiveParams struct {
 	UserName string		`json:"username"`
 	AccessToken string		`json:"accessToken"`
 	Phone string			`json:"phone"`
+}
+
+type QueryLocationsParams struct {
+	Imei string  				`json:"imei"`
+	UserName string		`json:"username"`
+	AccessToken string		`json:"accessToken"`
+	BeginTime uint64		`json:"beginTime"`
+	EndTime uint64		`json:"endTime"`
+}
+
+type QueryLocationsResult struct {
+	Imei string  				`json:"imei"`
+	BeginTime uint64		`json:"beginTime"`
+	EndTime uint64		`json:"endTime"`
+	Locations []LocationData`json:"locations"`
 }
 
 type DeviceAddParams struct {
@@ -413,9 +432,14 @@ var DeviceLocateNowAckCmdName  	= DeviceLocateNowCmdName + CmdAckTail
 var ActiveDeviceCmdName  			= "active-device"
 var ActiveDeviceAckCmdName  		= ActiveDeviceCmdName + CmdAckTail
 
-var ActiveDeviceSosCmdName  			= "active-sos"
-var ActiveDeviceSosAckCmdName  		= ActiveDeviceSosCmdName + CmdAckTail
+var ActiveDeviceSosCmdName  		= "active-sos"
+var ActiveDeviceSosAckCmdName  	= ActiveDeviceSosCmdName + CmdAckTail
 
+var SetDeviceVoiceMonitorCmdName  		= "voice-monitor"
+var SetDeviceVoiceMonitorAckCmdName  		= SetDeviceVoiceMonitorCmdName + CmdAckTail
+
+var GetLocationsCmdName  			= "get-locations"
+var GetLocationsAckCmdName  		= GetLocationsCmdName + CmdAckTail
 
 var ActiveDeviceSms 				= "#CONNECTSERVER#0#GATOR#"
 var DeviceLocateNowSms 			= "#LOCATION#GATOR#"
