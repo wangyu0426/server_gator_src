@@ -374,7 +374,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		}
 
 		//记录收到的是些什么数据
-		if dataSize > 80 {
+		if cmd == proto.StringCmd(proto.DRT_SEND_MINICHAT) {
 			logging.Log(string(c.buf[0: 80]))
 		}else{
 			logging.Log(string(c.buf[0: dataSize]))
