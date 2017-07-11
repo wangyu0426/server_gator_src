@@ -1,5 +1,8 @@
 select w.IMEI, w.OwnerName, w.PhoneNumbers, w.TimeZone, w.CountryCode, w.ChildPowerOff, w.UseDST, w.SocketModeOff, w.Volume, w.Lang, w.Fence1,w.Fence2, w.Fence3,w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2,w.HideTimer3, pm.model, c.name from watchinfo w join device d on w.recid=d.recid join productmodel pm  on d.modelid=pm.recid join companies c on d.companyid=c.recid where w.imei like '%571398%';
 
+alter table vehiclesinuser add COLUMN IsAdmin char(1) NOT NULL default 0
+
+
 CREATE TABLE device_location
 (
     imei bigint NOT NULL,
@@ -240,6 +243,8 @@ openssl x509 -req -days 365 -in csr.pem -signkey key.pem -out cert.crt
 grep 61664333 -r ./ | awk '{print $1}' | awk -F ':' '{print $1}'
 56
 
+
+alter table watchinfo add COLUMN ContactAvatar VARCHAR(2560) NOT NULL;
 
 /////////////==================================/////////////==================================
 /**
@@ -701,11 +706,9 @@ const styles = StyleSheet.create({
 
 })
 
+strSQL := fmt.Sprintf("update %s set location_time=%d,data=jsonb_set(data,'{datatime}','%d'::jsonb,'{steps}','%d'::jsonb,'{locateType}','%d'::jsonb,true) ",
 
-update device_location_2017_05 set location_time=20170525153000,data=jsonb_set(data,'{datatime}','170525153000'::jsonb,true), data=jsonb_set(data,'{steps}','0'::jsonb,true), data=jsonb_set(data,'{locateType}','3'::jsonb,true) where imei=357593060571398 and location_time=20170525153000;
 
-update device_location_2017_05 set location_time=20170525153000,data=jsonb_set(data,'{datatime}','170525153000'::jsonb,true), data=jsonb_set(data,'{steps}','0'::jsonb,true), data=jsonb_set(data,'{locateType}','3'::jsonb,true) where imei=357593060571398 and location_time=20170525153000;
-
-update device_location_2017_05 set location_time=20170525153000,data=jsonb_set(data,'{datatime}','170525153000'::jsonb,true), data=jsonb_set(data,'{steps}','0'::jsonb,true), data=jsonb_set(data,'{locateType}','3'::jsonb,true) where imei=357593060571398 and location_time=20170525153000;
+update device_location_2017_05 set location_time=20170525153000,data=jsonb_set(data,'{datatime}','170525153000'::jsonb,true) where imei=357593060571398 and location_time=20170525153000; update device_location_2017_05 set location_time=20170525153000,data=jsonb_set(data,'{steps}','0'::jsonb,true) where imei=357593060571398 and location_time=20170525153000; update device_location_2017_05 set location_time=20170525153000,data=jsonb_set(data,'{locateType}','3'::jsonb,true) where imei=357593060571398 and location_time=20170525153000;
 
 data = jsonb_set(data,'{datatime, steps, }','%d'::jsonb,'{steps}','%d'::jsonb,'{locateType}','%d'::jsonb,true) 
