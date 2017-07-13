@@ -406,7 +406,7 @@ func QueryLocations(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64
 	locations := []proto.LocationData{}
 	//缓存中没有数据，将从数据库中查询
 	strSQL := fmt.Sprintf("select * from  device_location where imei=%d and location_time >= %d and location_time <= %d " +
-		" order by location_time desc", imei, beginTime, endTime)
+		" order by location_time ", imei, beginTime, endTime)
 	logging.Log("sql: " + strSQL)
 	rows, err := pgpool.Query(strSQL)
 	if err != nil {
