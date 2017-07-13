@@ -80,8 +80,10 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				cmdAckName := "'"
 				c, ok2 := TcpClientTable[msg.Header.Header.Imei]
 				if ok2 {
-					logging.Log(fmt.Sprintf("[%d] lastActiveTime: %d", msg.Header.Header.Imei, c.lastActiveTime))
-					if (c.lastActiveTime - time.Now().Unix()) <= int64(serverCtx.MaxDeviceIdleTimeSecs) {
+					curTimeSecs := time.Now().Unix()
+					logging.Log(fmt.Sprintf("[%d] lastActiveTime: %d, curTimeSecs: %d, maxIdle: %d, result: %d", msg.Header.Header.Imei,
+						c.lastActiveTime, curTimeSecs, serverCtx.MaxDeviceIdleTimeSecs, curTimeSecs - c.lastActiveTime))
+					if (curTimeSecs - c.lastActiveTime) <= int64(serverCtx.MaxDeviceIdleTimeSecs) {
 						//如果100秒内有数据，则认为连接良好
 						var (
 							data []byte
@@ -192,7 +194,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 			c, ok2 := TcpClientTable[msg.Header.Header.Imei]
 			if ok2 {
 				logging.Log(fmt.Sprintf("[%d] lastActiveTime: %d", msg.Header.Header.Imei, c.lastActiveTime))
-				if (c.lastActiveTime - time.Now().Unix()) <= int64(serverCtx.MaxDeviceIdleTimeSecs) {
+				if (time.Now().Unix() - c.lastActiveTime) <= int64(serverCtx.MaxDeviceIdleTimeSecs) {
 					//如果100秒内有数据，则认为连接良好
 					cache, ok3 := DevicePushCache[msg.Header.Header.Imei]
 					if (ok3 == false) {
