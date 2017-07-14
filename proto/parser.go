@@ -863,7 +863,8 @@ func makeDBTimeZoneString(tz int) string  {
 	if tz == 0 {
 		return "00:00"
 	}else if tz < 0 {
-		return fmt.Sprintf("%02d:%02d", int(tz / 100), tz % 100)
+		tz = -tz
+		return fmt.Sprintf("-%02d:%02d", int(tz / 100), tz % 100)
 	}else{
 		return fmt.Sprintf("+%02d:%02d", int(tz / 100), tz % 100)
 	}
