@@ -2086,6 +2086,7 @@ func (service *GT06Service) ProcessUpdateWatchStatus(pszMsgBuf []byte) bool {
 	stWatchStatus.iLocateType = uint8(iLocateType)
 	stWatchStatus.i64Time = i64Time
 	stWatchStatus.Step = nStep
+	stWatchStatus.AlarmType = service.cur.AlarmType
 	ret = service.UpdateWatchStatus(stWatchStatus)
 	if ret == false {
 		logging.Log("Update Watch status failed ")
@@ -2097,6 +2098,19 @@ func (service *GT06Service) ProcessUpdateWatchStatus(pszMsgBuf []byte) bool {
 		if ret == false {
 			logging.Log(fmt.Sprintf("UpdateWatchBattery failed, battery=%d", ucBattery))
 			return ret
+		}
+	}
+
+	if(service.cur.AlarmType != 0 && service.old.Lat != 0){
+		newData := service.old
+		newData.AlarmType = service.cur.AlarmType
+		newData.DataTime = i64Time
+		newData.Steps = nStep
+		service.cur = newData
+		ret = service.WatchDataUpdateDB()
+		if ret == false {
+			logging.Log(fmt.Sprintf("[%d] Update WatchData into Database failed", service.imei))
+			return false
 		}
 	}
 

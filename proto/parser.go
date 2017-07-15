@@ -576,6 +576,7 @@ type WatchStatus struct {
 	iLocateType uint8
 	i64Time uint64
 	Step uint64
+	AlarmType uint8
 }
 
 
