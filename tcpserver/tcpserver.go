@@ -463,7 +463,20 @@ func ConnWriteLoop(c *Connection) {
 			if n, err := c.conn.Write([]byte(data.Data)); err != nil {
 				logging.Log(fmt.Sprintf("send data to client failed: %s,  %d bytes sent",  err.Error(), n))
 			}else{
-				logging.Log(fmt.Sprintf("send data to client: %s,  %d bytes sent", string(data.Data), n))
+				sentData := string(data.Data)
+				cmd := sentData[20: 24]
+				count := 0
+				if cmd == "AP12"  { //微聊，只打印80个字节
+					count = 80
+				}else if cmd == "AP13"  { //EPO，只打印40个字节
+					count = 40
+				}else if cmd == "AP23" { //亲情号头像，只打印60个字节
+					count = 60
+				}else{
+					count = len(sentData)
+				}
+
+				logging.Log(fmt.Sprintf("send data to client: %s,  %d bytes sent", sentData[0: count], n))
 			}
 		}
 	}

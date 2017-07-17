@@ -352,7 +352,7 @@ func (service *GT06Service)PreDoRequest() bool  {
 
 
 func (service *GT06Service)DoRequest(msg *MsgData) bool  {
-	logging.Log("Get Input Msg: " + string(msg.Data))
+	//logging.Log("Get Input Msg: " + string(msg.Data))
 	logging.Log(fmt.Sprintf("imei: %d cmd: %s; go routines: %d", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd), runtime.NumGoroutine()))
 
 	DeviceInfoListLock.RLock()
