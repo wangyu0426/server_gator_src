@@ -269,6 +269,7 @@ type QueryLocationsParams struct {
 	AccessToken string		`json:"accessToken"`
 	BeginTime uint64		`json:"beginTime"`
 	EndTime uint64		`json:"endTime"`
+	Lbs bool 				`json:"lbs"`
 }
 
 type QueryLocationsResult struct {
@@ -344,6 +345,7 @@ const (
 	ALARM_SOS = 2
 	ALARM_OUTZONE = 6
 	ALARM_BATTERYLOW = 8
+	ALARM_DEVICE_DETACHED = 32
 )
 
 const (
@@ -446,7 +448,7 @@ var DeviceLocateNowSms 			= "#LOCATION#GATOR#"
 
 type SafeZone struct {
 	ZoneID int32
-	ZoneName string
+	//ZoneName string
 	//LatiTude float64
 	//LongTitude float64
 	//Radiu uint32

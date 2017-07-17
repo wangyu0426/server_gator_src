@@ -123,12 +123,11 @@ type LocationData struct {
 	AlarmType uint8   	`json:"alarm"`
 	LocateType uint8	`json:"locateType"`
 	ReadFlag uint8  	 `json:"readflag"`
-	ZoneAlarm uint8 	 `json:"zoneAlarm"`
+	//ZoneAlarm uint8 	 `json:"zoneAlarm"`
 	ZoneIndex int32 	`json:"zoneIndex"`
 	ZoneName string 	`json:"zoneName"`
 
 	OrigBattery uint8	`json:"org_battery,omitempty"`
-	origBatteryOld uint8
 }
 
 const (
@@ -240,7 +239,7 @@ const MAX_WIFI_NUM = 6
 const MAX_LBS_NUM = 8
 
 const PI  = 3.1415926
-const BASE_TITUDE  =1000000
+const BASE_TITUDE  =1
 const EARTH_RADIUS = 6378.137
 
 var DeviceChatTaskTable = map[uint64]map[uint64]*ChatTask{}
@@ -341,6 +340,8 @@ func (service *GT06Service)makeAckParsedMsg(id uint64) *MsgData{
 
 func (service *GT06Service)PreDoRequest() bool  {
 	service.wifiZoneIndex = -1
+	service.cur.ZoneIndex = -1
+	service.old.ZoneIndex = -1
 	service.needSendLocation = false
 	service.needSendChatNum = true
 	service.needSendPhotoNum = true
@@ -939,21 +940,21 @@ func (service *GT06Service)makeSendLocationReplyMsg() ([]byte, uint64) {
 	//(0056357593060153353AP1424.772816,121.022636,160,2015,11,12,08,00,00,0000000000000009)
 	//(0051357593060571398AP140.000000,0.000000,0,2017,05,22,11,04,28,00000D99DE4C0826)
 	var lat, lng float64
-	accracy := uint32(0)
+	//accracy := uint32(0)
 	if service.old.Lat == 0{
 		lat = service.cur.Lat
 		lng = service.cur.Lng
-		accracy = service.cur.Accracy
+		//accracy = service.cur.Accracy
 	}else{
 		lat = service.old.Lat
 		lng = service.old.Lng
-		accracy = service.old.Accracy
+		//accracy = service.old.Accracy
 	}
 
 	id := makeId()
 	curTime := time.Now().UTC().Format("2006,01,02,15,04,05")
 	body := fmt.Sprintf("%015dAP14%06f,%06f,%d,%s,%016X)",
-		service.imei, lat, lng, accracy, curTime, id)
+		service.imei, lat, lng, 200, curTime, id)
 	size := fmt.Sprintf("(%04X", 5 + len(body))
 
 	return []byte(size + body) , id
@@ -1160,16 +1161,6 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 
 	//范围报警
 	ret = service.ProcessZoneAlarm()
-	if 0 == service.cur.AlarmType {
-		if service.cur.origBatteryOld > 2 && service.cur.OrigBattery <= 2  {
-			service.cur.AlarmType = ALARM_BATTERYLOW
-		}
-	} else if ALARM_BATTERYLOW == service.cur.AlarmType {
-		if service.cur.origBatteryOld <= 2 || service.cur.OrigBattery > 2  {
-			service.cur.AlarmType = 0
-		}
-	}
-
 	logging.Log(fmt.Sprintf("end: m_iAlarmStatu=%d",  service.cur.AlarmType))
 	logging.Log(fmt.Sprintf("Update database: DeviceID=%d, m_DateTime=%d, m_lng=%f, m_lat=%f",
 		service.imei, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
@@ -2051,7 +2042,7 @@ func (service *GT06Service) ProcessUpdateWatchStatus(pszMsgBuf []byte) bool {
 	}
 
 	ucBattery := 1
-	if service.cur.OrigBattery > 2 {
+	if service.cur.OrigBattery >= 3 {
 		ucBattery = int(service.cur.OrigBattery - 2)
 	}
 
@@ -2203,9 +2194,13 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	iTimeSec := service.GetIntValue(pszMsg[bufOffset: ], TIME_LEN)
 	bufOffset += TIME_LEN
 
-	iIOStatu := service.cur.OrigBattery - 2
-	if iIOStatu < 1 {
-		service.cur.AlarmType = ALARM_BATTERYLOW
+	iIOStatu := service.cur.OrigBattery
+	if iIOStatu > 2 {
+		iIOStatu -= 2
+	}
+
+	if iIOStatu <= 1 {
+		service.cur.AlarmType |= ALARM_BATTERYLOW
 		iIOStatu = 1
 	}
 
@@ -2252,9 +2247,13 @@ func (service *GT06Service) ProcessWifiInfo(pszMsgBuf []byte) bool {
 	bufOffset += shBufLen
 
 	service.cur.DataTime = i64Time
-	service.cur.Battery = service.cur.OrigBattery - 2
-	if service.cur.Battery < 1  {
-		service.cur.AlarmType = ALARM_BATTERYLOW
+	service.cur.Battery = 1
+	if service.cur.OrigBattery >= 3 {
+		service.cur.Battery = service.cur.OrigBattery - 2
+	}
+
+	if service.cur.Battery <= 1  {
+		service.cur.AlarmType |= ALARM_BATTERYLOW
 		service.cur.Battery = 1
 	}
 
@@ -2310,9 +2309,13 @@ func (service *GT06Service) ProcessLBSInfo(pszMsgBuf []byte) bool {
 	iSecTime := service.GetIntValue(pszMsgBuf[bufOffset: ], TIME_LEN)
 	i64Time := uint64(iDayTime * 1000000 + iSecTime)
 
-	service.cur.Battery = service.cur.OrigBattery - 2
+	service.cur.Battery = 1
+	if  service.cur.OrigBattery >= 3 {
+		service.cur.Battery =  service.cur.OrigBattery - 2
+	}
+
 	if service.cur.Battery < 1 {
-		service.cur.AlarmType = ALARM_BATTERYLOW
+		service.cur.AlarmType |= ALARM_BATTERYLOW
 		service.cur.Battery = 1
 	}
 
@@ -2372,9 +2375,13 @@ func (service *GT06Service) ProcessMutilLocateInfo(pszMsgBuf []byte) bool {
 	bufOffset += shBufLen
 
 	service.cur.DataTime = i64Time
-	service.cur.Battery = service.cur.OrigBattery - 2
+	service.cur.Battery = 1
+	if  service.cur.OrigBattery >= 3 {
+		service.cur.Battery =  service.cur.OrigBattery - 2
+	}
+
 	if service.cur.Battery < 1 {
-		service.cur.AlarmType = ALARM_BATTERYLOW
+		service.cur.AlarmType |= ALARM_BATTERYLOW
 		service.cur.Battery = 1
 	}
 
@@ -2421,126 +2428,158 @@ func (service *GT06Service) ProcessMutilLocateInfo(pszMsgBuf []byte) bool {
 
 func (service *GT06Service) ProcessZoneAlarm() bool {
 	//service.GetWatchDataInfo(service.imei)
-	if service.old.DataTime > 0 {
-		iZoneID := service.old.ZoneIndex
-		iAlarmType := service.old.AlarmType
-		iZoneAlarmType := service.old.ZoneAlarm
+	//报警的处理逻辑：
+	//首先，报警的类型有：
+	//1.无需计算，手表直接上报的报警：sos，低电，脱离——这种类型的报警已经在前面读取到了
 
-		if service.cur.Battery == 1 && service.old.Battery > 1 {
-			service.cur.AlarmType = ALARM_BATTERYLOW
-		}
+	//因此，此方法用来处理需要计算的报警类型
+	//2.需要计算，区域范围距离计算是否进入或者走出
+	//3.需要计算，通过手表上报的电量计算是否低电报警
+	//4.需要计算，通过判断设置的WiFi位置决定是否进入区域
+	//以上报警可能同时兼有，即一次定位数据中可能产生多个报警类型
 
-		if iAlarmType == service.cur.AlarmType {
-			service.cur.AlarmType = 0
-		} else {
-			iAlarmType = service.cur.AlarmType;
-		}
+	//需要计算的报警也有两种情况，第一种需要跟上一次的报警做比较，
+	//有可能上一次报过相同的报警类型，需要上次的数据做比较，避免相同报警连续重复上报
+	//第二种可以不需要上一次的数据，或者需要考虑上一次还没有数据的情况
 
-		if iZoneID == 0 && iZoneAlarmType == 0 {
-			iZoneID = 1
-		}
+	//上次有数据，那么可以计算所有的报警类型，低电，GPS出入界，WiFi入界和避免重复报警
+	//上次没有数据，那么这是第一次上报数据，这时可以计算低电，GPS入界，WiFi入界
+	//归纳之，没有依赖前一次数据的报警类型，始终可以计算，
+	// 只有gps出界这一种情况，需要依赖上次的数据才能进行计算
+	//还有一些容错的情况，比如短时间内（一分钟？）距离超过1800米，不作为出界报警，可能上报的数据不正常
 
-		stCurPoint, stDstPoint := TPoint{}, TPoint{}
-		if (service.cur.LocateType != LBS_GPS && service.wifiZoneIndex < 0) ||  service.cur.AlarmType > 0 {
-			if service.old.LocateType == LBS_WIFI {
-				stCurPoint.Latitude = service.cur.Lat
-				stCurPoint.LongtiTude = service.cur.Lng
-				stDstPoint.Latitude = service.old.Lat
-				stDstPoint.LongtiTude = service.old.Lng
-				iDistance := service.GetDisTance(&stCurPoint, &stDstPoint)
+	//低电报警已经在处理定位数据的方法计算出来了，因此这里只需要考虑是否是低电重复报警
+	//对于计算低电报警，唯一的条件就是上次的电量大于2，而这次的电量小于2
 
-				if iDistance <= 200 && (service.cur.LocateType == LBS_JIZHAN ) {
-					i64Time := service.cur.DataTime
-					service.cur = service.old
-					service.cur.DataTime = i64Time
-					service.cur.LocateType = LBS_SMARTLOCATION
-					service.getSameWifi = true
-				}
+	//第一步，先来计算是否低电报警
+	if  service.old.DataTime == 0 && service.cur.OrigBattery <= 2 || //上次没有数据，这次电量低于2，报低电
+		service.old.DataTime > 0 && service.old.OrigBattery >=3  && service.cur.OrigBattery <= 2 {
+		//上次有数据，上次电量大于等于3，而这次电量小于等于2，报低电
+		service.cur.AlarmType |= ALARM_BATTERYLOW
+	}
 
-				if iDistance >= 1800 && service.cur.DataTime >= service.old.DataTime {
-					iTotalMin := deltaMinutes(service.old.DataTime, service.cur.DataTime)
-					if iTotalMin == 0 || (iTotalMin > 0 && iTotalMin * 800 <= iDistance) {
-						i64Time := service.cur.DataTime
-						service.cur = service.old
-						service.cur.DataTime = i64Time
-						service.cur.LocateType = LBS_SMARTLOCATION
-						service.getSameWifi = true
-					}
-				}
-			}
-
-			logging.Log(fmt.Sprintf("device %d, m_iAlarmStatu=%d, parsed location:  m_DateTime=%f, m_lng=%d, m_lat=%f",
-				service.imei,  service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
-
-			return true
-		}
-
+	//在进行出入届计算之前，先做容错的处理，仅对上次有数据的情况
+	stCurPoint, stDstPoint := TPoint{}, TPoint{}
+	if service.old.DataTime > 0{
 		stCurPoint.Latitude = service.cur.Lat
 		stCurPoint.LongtiTude = service.cur.Lng
-
-		DeviceInfoListLock.RLock()
-		safeZones := GetSafeZoneSettings(service.imei)
-
-		if safeZones != nil {
-			for  i := 0; i < len(safeZones); i++ {
-				stSafeZone := safeZones[i]
-				if stSafeZone.On == "0" {
-					continue
-				}
-
-				strLatLng := strings.Split(stSafeZone.Center, ",")
-				if len(strLatLng) != 2 {
-					continue
-				}
-				zoneLat := Str2Float(strLatLng[0])
-				zoneLng := Str2Float(strLatLng[1])
-
-				stDstPoint.Latitude = zoneLat
-				stDstPoint.LongtiTude = zoneLng
-				iRadiu := service.GetDisTance(&stCurPoint, &stDstPoint)
-				if iRadiu < uint32(stSafeZone.Radius) {
-					if iZoneID != stSafeZone.ZoneID || (iZoneID == stSafeZone.ZoneID && iZoneAlarmType != ALARM_INZONE) {
-						if service.wifiZoneIndex < 0 && service.cur.LocateType == LBS_WIFI  {
-							break
-						}
-
-						if service.hasSetHomeWifi && service.wifiZoneIndex >= 0 && strings.ToLower(stSafeZone.ZoneName) == "home" {
-							continue
-						}
-
-						iZoneID = stSafeZone.ZoneID
-						iZoneAlarmType = ALARM_INZONE
-						iAlarmType = 0
-						service.cur.AlarmType = iZoneAlarmType
-						service.cur.ZoneName = stSafeZone.ZoneName
-						logging.Log(fmt.Sprintf("Device[%d] Make a InZone Alarm[%s][%d,%d][%d,%d]",
-							service.imei, stSafeZone.ZoneName, iRadiu, stSafeZone.Radius , iZoneAlarmType, iZoneID))
-						break
-					}
-				} else {
-					if iZoneID == stSafeZone.ZoneID && iZoneAlarmType != ALARM_OUTZONE {
-						if service.wifiZoneIndex < 0 && service.cur.LocateType == LBS_WIFI  {
-							break
-						}
-
-						iZoneID = stSafeZone.ZoneID
-						iZoneAlarmType = ALARM_OUTZONE
-						service.cur.AlarmType = iZoneAlarmType
-						iAlarmType = 0
-						service.cur.ZoneName = stSafeZone.ZoneName
-						logging.Log(fmt.Sprintf("Device[%d] Make a OutZone Alarm[%s][%d,%d][%d,%d]",
-							service.imei, stSafeZone.ZoneName, iRadiu, stSafeZone.Radius,  iZoneAlarmType,  iZoneID))
-						break
-					}
-				}
+		stDstPoint.Latitude = service.old.Lat
+		stDstPoint.LongtiTude = service.old.Lng
+		iDistance := service.GetDisTance(&stCurPoint, &stDstPoint)
+		if service.cur.LocateType == LBS_JIZHAN && service.old.LocateType == LBS_WIFI {
+			//如果上一次是WiFi定位，这一次是基站定位，并且距离不超过200米，则认为是智能定位，不更新位置
+			if iDistance <= 200 {
+				i64Time := service.cur.DataTime
+				service.cur = service.old
+				service.cur.DataTime = i64Time
+				service.cur.LocateType = LBS_SMARTLOCATION
+				service.getSameWifi = true
+				logging.Log(fmt.Sprintf("[%d] distance <= 200, it is the same wifi location", service.imei))
+				return true
 			}
 		}
 
-		DeviceInfoListLock.RUnlock()
-	} else{
-		logging.Log(fmt.Sprintf("device %d, m_iAlarmStatu=%d, parsed location:  m_DateTime=%d, m_lng=%f, m_lat=%f",
-			service.imei, service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
+		if iDistance >= 1800 && service.cur.LocateType != LBS_GPS {//GPS数据是完全可能1分钟移动800米距离的，比如在外开车
+			iTotalMin := uint32(0)
+			if service.cur.DataTime >= service.old.DataTime {
+				iTotalMin = deltaMinutes(service.old.DataTime, service.cur.DataTime)
+			}
+
+			if  iDistance >= iTotalMin * 800 { //如果两次距离超过1800，并且1分钟内距离超过800，
+				// 则认为是数据异常跳跃，不更新位置
+				i64Time := service.cur.DataTime
+				service.cur = service.old
+				service.cur.DataTime = i64Time
+				service.cur.LocateType = LBS_SMARTLOCATION
+				service.getSameWifi = true
+				logging.Log(fmt.Sprintf("[%d] distance %d >= 1800, total delta minutes %d, no need update location",
+					service.imei, iDistance, iTotalMin))
+				return true
+			}
+		}
 	}
+
+
+	//第二步，计算WiFi入界（WiFi不需要报出界）
+	//首先如果上报的WiFi数据中，包含了安全区域的WiFi，其次上一次的报警不是进入同一个安全区域
+	//那么上报这次的WiFi入界报警
+	//如果上一次并没有数据，那么直接报WiFi入界
+	if service.wifiZoneIndex >= 0  && service.wifiZoneIndex < MAX_SAFE_ZONE_NUM{
+		if service.old.DataTime == 0  || service.old.DataTime > 0 && (service.old.AlarmType & ALARM_INZONE  == 0) ||
+			service.old.DataTime > 0 && (service.old.AlarmType & ALARM_INZONE  != 0) &&
+				int16(service.old.ZoneIndex) != service.wifiZoneIndex{
+			DeviceInfoListLock.RLock()
+			safeZones := GetSafeZoneSettings(service.imei)
+			if safeZones != nil {
+				service.cur.ZoneIndex = int32(service.wifiZoneIndex)
+				service.cur.ZoneName = safeZones[service.wifiZoneIndex].Name
+				service.cur.AlarmType |= ALARM_INZONE
+				logging.Log(fmt.Sprintf("Device[%d] Make a OutZone Alarm by wifi [%s][%d,%d][%d,%d]",
+					service.imei, service.cur.ZoneName, safeZones[service.wifiZoneIndex].Radius,
+					service.cur.AlarmType,  service.cur.ZoneIndex, service.old.AlarmType,  service.old.ZoneIndex))
+			}
+			DeviceInfoListLock.RUnlock()
+			return true
+		}
+	}
+
+	//第三步，计算GPS经纬度距离来决定出入界报警和是否重复报警
+	//首先，计算当前经纬度与每个安全区域的中心点距离，
+	stCurPoint.Latitude = service.cur.Lat
+	stCurPoint.LongtiTude = service.cur.Lng
+
+	DeviceInfoListLock.RLock()
+	safeZones := GetSafeZoneSettings(service.imei)
+
+	if safeZones != nil {
+		for  i := 0; i < len(safeZones); i++ {
+			stSafeZone := safeZones[i]
+			if stSafeZone.On == "0" {
+				continue
+			}
+
+			strLatLng := strings.Split(stSafeZone.Center, ",")
+			if len(strLatLng) != 2 {
+				continue
+			}
+
+			zoneLat := Str2Float(strLatLng[0])
+			zoneLng := Str2Float(strLatLng[1])
+			if zoneLat == 0 || zoneLng == 0{
+				continue
+			}
+
+			stDstPoint.Latitude = zoneLat
+			stDstPoint.LongtiTude = zoneLng
+			iRadiu := service.GetDisTance(&stCurPoint, &stDstPoint)
+			fmt.Println(iRadiu, stCurPoint, stDstPoint)
+			if iRadiu < uint32(stSafeZone.Radius) { //判断是否入界
+				//如果上次没有数据，则直接报入界，如果上次有数据，并且不是入界同一个区域，也报入界
+				if service.old.DataTime == 0 || service.old.ZoneIndex != stSafeZone.ZoneID ||
+					(service.old.ZoneIndex == stSafeZone.ZoneID && (service.old.AlarmType & ALARM_INZONE) == 0 ) {
+					service.cur.ZoneIndex = stSafeZone.ZoneID
+					service.cur.AlarmType |= ALARM_INZONE
+					service.cur.ZoneName = stSafeZone.Name
+					logging.Log(fmt.Sprintf("Device[%d] Make a InZone Alarm[%s][%d,%d][%d,%d]",
+						service.imei, stSafeZone.Name, iRadiu, stSafeZone.Radius , service.cur.AlarmType, service.cur.ZoneIndex))
+					break
+				}
+			} else {//判断是否出界
+				//如果上次没有数据，则不上报出界，如果上次有数据，并且上一次的报警必须是入界同一个安全区域，才报出界
+				if  service.old.DataTime > 0 &&  service.old.ZoneIndex == stSafeZone.ZoneID &&
+					(service.old.AlarmType & ALARM_INZONE) != 0 {
+					service.cur.ZoneIndex = stSafeZone.ZoneID
+					service.cur.AlarmType |= ALARM_OUTZONE
+					service.cur.ZoneName = stSafeZone.Name
+					logging.Log(fmt.Sprintf("Device[%d] Make a OutZone Alarm[%s][%d,%d][%d,%d]",
+						service.imei, stSafeZone.Name, iRadiu, stSafeZone.Radius , service.cur.AlarmType, service.cur.ZoneIndex))
+					break
+				}
+			}
+		}
+	}
+
+	DeviceInfoListLock.RUnlock()
 
 	return true
 }

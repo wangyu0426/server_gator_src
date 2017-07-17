@@ -1122,7 +1122,7 @@ func AppSetDeviceVoiceMonitor(c *AppConnection, params *proto.DeviceActiveParams
 
 func AppQueryLocations(c *AppConnection, params *proto.QueryLocationsParams) bool {
 	imei := proto.Str2Num(params.Imei, 10)
-	locations := svrctx.QueryLocations(imei, svrctx.Get().PGPool, params.BeginTime, params.EndTime)
+	locations := svrctx.QueryLocations(imei, svrctx.Get().PGPool, params.BeginTime, params.EndTime, params.Lbs)
 	if locations == nil || len(*locations) == 0 {
 		locations = &[]proto.LocationData{}
 	}
