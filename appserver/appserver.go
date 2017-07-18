@@ -333,7 +333,8 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 					msg.Cmd == proto.GetDeviceByImeiAckCmdName ||
 					msg.Cmd == proto.AddDeviceAckCmdName ||
 					msg.Cmd == proto.DeleteDeviceAckCmdName ||
-					msg.Cmd == proto.GetLocationsAckCmdName {
+					msg.Cmd == proto.GetLocationsAckCmdName ||
+					msg.Cmd == proto.GetAlarmsAckCmdName {
 					if msg.Cmd == proto.HearbeatAckCmdName {
 						getAppClientsByImei(msg)
 					}
