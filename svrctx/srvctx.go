@@ -397,7 +397,7 @@ func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 }
 
 
-func QueryLocations(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64, lbs bool)  *[]proto.LocationData {
+func QueryLocations(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64, lbs bool, alarmOnly bool)  *[]proto.LocationData {
 	if imei == 0 || pgpool == nil || endTime <= beginTime {
 		logging.Log(fmt.Sprintf("[imei: %d] bad input parms: %d, %d", imei, beginTime, endTime))
 		return nil
@@ -405,13 +405,19 @@ func QueryLocations(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64
 
 	locations := []proto.LocationData{}
 	strSQL := ""
-	if lbs{
-		strSQL = fmt.Sprintf("select * from  device_location where imei=%d and location_time >= %d and location_time <= %d " +
+	if alarmOnly{
+		strSQL = fmt.Sprintf("select * from  device_location where imei=%d and location_time >= %d and location_time <= %d  " +
+			" and data->'alarm' != '0'  " +
 			" order by location_time ", imei, beginTime, endTime)
 	}else{
-		strSQL = fmt.Sprintf("select * from  device_location where imei=%d and location_time >= %d and location_time <= %d  " +
-			" and (data @> '{\"locateType\": 1}' or data @> '{\"locateType\": 3}')  " +
-			" order by location_time ", imei, beginTime, endTime)
+		if lbs{
+			strSQL = fmt.Sprintf("select * from  device_location where imei=%d and location_time >= %d and location_time <= %d " +
+				" order by location_time ", imei, beginTime, endTime)
+		}else{
+			strSQL = fmt.Sprintf("select * from  device_location where imei=%d and location_time >= %d and location_time <= %d  " +
+				" and (data @> '{\"locateType\": 1}' or data @> '{\"locateType\": 3}')  " +
+				" order by location_time ", imei, beginTime, endTime)
+		}
 	}
 
 	logging.Log("sql: " + strSQL)

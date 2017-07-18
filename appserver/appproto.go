@@ -171,6 +171,8 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 			Phone: datas["phone"].(string)}
 
 		return AppSetDeviceVoiceMonitor(c, &params)
+	case proto.GetAlarmsCmdName:
+		fallthrough
 	case proto.GetLocationsCmdName:
 		jsonString, _ := json.Marshal(msg["data"])
 		params := proto.QueryLocationsParams{}
@@ -1121,15 +1123,20 @@ func AppSetDeviceVoiceMonitor(c *AppConnection, params *proto.DeviceActiveParams
 }
 
 func AppQueryLocations(c *AppConnection, params *proto.QueryLocationsParams) bool {
+	cmdAck := proto.GetLocationsAckCmdName
+	if params.AlarmOnly {
+		cmdAck = proto.GetAlarmsAckCmdName
+	}
+
 	imei := proto.Str2Num(params.Imei, 10)
-	locations := svrctx.QueryLocations(imei, svrctx.Get().PGPool, params.BeginTime, params.EndTime, params.Lbs)
+	locations := svrctx.QueryLocations(imei, svrctx.Get().PGPool, params.BeginTime, params.EndTime, params.Lbs, params.AlarmOnly)
 	if locations == nil || len(*locations) == 0 {
 		locations = &[]proto.LocationData{}
 	}
 
 	result := proto.QueryLocationsResult{Imei: params.Imei, BeginTime: params.BeginTime, EndTime: params.EndTime, Locations: *locations}
 
-	appServerChan <- &proto.AppMsgData{Cmd: proto.GetLocationsAckCmdName,
+	appServerChan <- &proto.AppMsgData{Cmd: cmdAck,
 		UserName: params.UserName,
 		AccessToken: params.AccessToken,
 		Data: proto.MakeStructToJson(result), Conn: c}

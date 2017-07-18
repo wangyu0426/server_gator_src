@@ -270,6 +270,7 @@ type QueryLocationsParams struct {
 	BeginTime uint64		`json:"beginTime"`
 	EndTime uint64		`json:"endTime"`
 	Lbs bool 				`json:"lbs"`
+	AlarmOnly  bool 		`json:"alarmOnly"`
 }
 
 type QueryLocationsResult struct {
@@ -442,6 +443,9 @@ var SetDeviceVoiceMonitorAckCmdName  		= SetDeviceVoiceMonitorCmdName + CmdAckTa
 
 var GetLocationsCmdName  			= "get-locations"
 var GetLocationsAckCmdName  		= GetLocationsCmdName + CmdAckTail
+
+var GetAlarmsCmdName  			= "get-alarms"
+var GetAlarmsAckCmdName  		= GetAlarmsCmdName + CmdAckTail
 
 var ActiveDeviceSms 				= "#CONNECTSERVER#0#GATOR#"
 var DeviceLocateNowSms 			= "#LOCATION#GATOR#"
