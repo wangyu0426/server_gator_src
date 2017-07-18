@@ -280,6 +280,14 @@ type QueryLocationsResult struct {
 	Locations []LocationData`json:"locations"`
 }
 
+type DeleteAlarmsResult struct {
+	Imei string  				`json:"imei"`
+	BeginTime uint64		`json:"beginTime"`
+	EndTime uint64		`json:"endTime"`
+	ErrorCode int 			`json:"errcode"`
+	Data  string  			`json:"data"`
+}
+
 type DeviceAddParams struct {
 	Imei string  				`json:"imei"`
 	UserName string		`json:"username"`
@@ -446,6 +454,9 @@ var GetLocationsAckCmdName  		= GetLocationsCmdName + CmdAckTail
 
 var GetAlarmsCmdName  			= "get-alarms"
 var GetAlarmsAckCmdName  		= GetAlarmsCmdName + CmdAckTail
+
+var DeleteAlarmsCmdName  			= "delete-alarms"
+var DeleteAlarmsAckCmdName  		= DeleteAlarmsCmdName + CmdAckTail
 
 var ActiveDeviceSms 				= "#CONNECTSERVER#0#GATOR#"
 var DeviceLocateNowSms 			= "#LOCATION#GATOR#"

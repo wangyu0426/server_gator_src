@@ -451,6 +451,26 @@ func QueryLocations(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64
 	}
 }
 
+
+func DeleteAlarms(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64)  bool {
+	if imei == 0 || pgpool == nil || endTime <= beginTime {
+		logging.Log(fmt.Sprintf("[imei: %d] bad input parms: %d, %d", imei, beginTime, endTime))
+		return false
+	}
+
+	strSQL := fmt.Sprintf("delete from  device_location where imei=%d and location_time >= %d and location_time <= %d  " +
+			" and data->'alarm' != '0'  ", imei, beginTime, endTime)
+
+	logging.Log("sql: " + strSQL)
+	_, err := pgpool.Exec(strSQL)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] pg exec failed, %s",  imei, err.Error()))
+		return false
+	}
+
+	return true
+}
+
 func SetDeviceData(imei uint64, updateType int, deviceData proto.LocationData) {
 	DeviceTableLock.Lock()
 	switch updateType {

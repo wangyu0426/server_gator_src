@@ -178,11 +178,21 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 		params := proto.QueryLocationsParams{}
 		err:=json.Unmarshal(jsonString, &params)
 		if err != nil {
-			logging.Log("get-locations parse json failed, " + err.Error())
+			logging.Log(cmd.(string) + " parse json failed, " + err.Error())
 			return false
 		}
 
 		return AppQueryLocations(c, &params)
+	case proto.DeleteAlarmsCmdName:
+		jsonString, _ := json.Marshal(msg["data"])
+		params := proto.QueryLocationsParams{}
+		err:=json.Unmarshal(jsonString, &params)
+		if err != nil {
+			logging.Log(cmd.(string) + " parse json failed, " + err.Error())
+			return false
+		}
+
+		return AppDeleteAlarms(c, &params)
 	default:
 		break
 	}
@@ -1135,6 +1145,25 @@ func AppQueryLocations(c *AppConnection, params *proto.QueryLocationsParams) boo
 	}
 
 	result := proto.QueryLocationsResult{Imei: params.Imei, BeginTime: params.BeginTime, EndTime: params.EndTime, Locations: *locations}
+
+	appServerChan <- &proto.AppMsgData{Cmd: cmdAck,
+		UserName: params.UserName,
+		AccessToken: params.AccessToken,
+		Data: proto.MakeStructToJson(result), Conn: c}
+
+	return true
+}
+
+func AppDeleteAlarms(c *AppConnection, params *proto.QueryLocationsParams) bool {
+	cmdAck := proto.DeleteAlarmsAckCmdName
+	imei := proto.Str2Num(params.Imei, 10)
+	ret := svrctx.DeleteAlarms(imei, svrctx.Get().PGPool, params.BeginTime, params.EndTime)
+
+	result := proto.DeleteAlarmsResult{Imei: params.Imei, BeginTime: params.BeginTime, EndTime: params.EndTime,
+		ErrorCode: 0}
+	if ret == false {
+		result.ErrorCode = 500
+	}
 
 	appServerChan <- &proto.AppMsgData{Cmd: cmdAck,
 		UserName: params.UserName,
