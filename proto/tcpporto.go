@@ -133,6 +133,7 @@ type LocationData struct {
 	ZoneName string 	`json:"zoneName"`
 
 	OrigBattery uint8	`json:"org_battery,omitempty"`
+	OrigAlarm uint8       `json:"org_alarm,omitempty"`
 	lastAlarm AlarmInfo
 }
 
@@ -452,14 +453,24 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		bufOffset++
 		cLocateTag := msg.Data[bufOffset]
 		bufOffset += 2
-		service.cur.AlarmType = msg.Data[bufOffset] - '0'
+		service.cur.OrigAlarm = msg.Data[bufOffset] - '0'
 		bufOffset++
 
 		if msg.Data[bufOffset] != ',' {
 			szAlarm := []byte{msg.Data[bufOffset - 1], msg.Data[bufOffset]}
 			alarm, _ := strconv.ParseUint(string(szAlarm), 16, 0)
-			service.cur.AlarmType = uint8(alarm)
+			service.cur.OrigAlarm = uint8(alarm)
 			bufOffset++
+		}
+
+		service.cur.AlarmType = service.cur.OrigAlarm
+		//去掉手表上报的低电和设备脱离状态，由服务器计算是否报警
+		service.cur.AlarmType &= (^uint8(ALARM_BATTERYLOW))
+		service.cur.AlarmType &= (^uint8(ALARM_DEVICE_DETACHED))
+
+		//由于手表脱离可能是一种持续状态，手表会持续上报这个状态，所以实际报警是在第一次上报脱离的时候
+		if service.old.OrigAlarm & ALARM_DEVICE_DETACHED == 0 && service.cur.OrigAlarm & ALARM_DEVICE_DETACHED != 0 {
+			service.cur.AlarmType |= uint8(ALARM_DEVICE_DETACHED)
 		}
 
 		bufOffset++
@@ -2520,9 +2531,10 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 				service.cur.ZoneIndex = int32(service.wifiZoneIndex)
 				service.cur.ZoneName = safeZones[service.wifiZoneIndex].Name
 				service.cur.AlarmType |= ALARM_INZONE
-				logging.Log(fmt.Sprintf("Device[%d] Make a OutZone Alarm by wifi [%s][%d,%d][%d,%d]",
+				logging.Log(fmt.Sprintf("Device[%d] Make a InZone Alarm by wifi [%s][%d,%d][%d,%d]",
 					service.imei, service.cur.ZoneName, safeZones[service.wifiZoneIndex].Radius,
 					service.cur.AlarmType,  service.cur.ZoneIndex, service.old.AlarmType,  service.old.ZoneIndex))
+				logging.Log("service.old:  " + MakeStructToJson(&service.old) + ";   service.cur:  " + MakeStructToJson(&service.cur))
 			}
 			DeviceInfoListLock.RUnlock()
 			return true
@@ -2531,6 +2543,12 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 
 	//第三步，计算GPS经纬度距离来决定出入界报警和是否重复报警
 	//首先，计算当前经纬度与每个安全区域的中心点距离，
+
+	//非GPS定位不做区域报警
+	if service.cur.LocateType != LBS_GPS {
+		return true
+	}
+
 	stCurPoint.Latitude = service.cur.Lat
 	stCurPoint.LongtiTude = service.cur.Lng
 
@@ -2568,6 +2586,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 					service.cur.ZoneName = stSafeZone.Name
 					logging.Log(fmt.Sprintf("Device[%d] Make a InZone Alarm[%s][%d,%d][%d,%d]",
 						service.imei, stSafeZone.Name, iRadiu, stSafeZone.Radius , service.cur.AlarmType, service.cur.ZoneIndex))
+					logging.Log("service.old:  " + MakeStructToJson(&service.old) + ";   service.cur:  " + MakeStructToJson(&service.cur))
 					break
 				}
 			} else {//判断是否出界
@@ -2579,6 +2598,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 					service.cur.ZoneName = stSafeZone.Name
 					logging.Log(fmt.Sprintf("Device[%d] Make a OutZone Alarm[%s][%d,%d][%d,%d]",
 						service.imei, stSafeZone.Name, iRadiu, stSafeZone.Radius , service.cur.AlarmType, service.cur.ZoneIndex))
+					logging.Log("service.old:  " + MakeStructToJson(&service.old) + ";   service.cur:  " + MakeStructToJson(&service.cur))
 					break
 				}
 			}
