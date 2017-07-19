@@ -786,7 +786,7 @@ func deleteDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 }
 
 func AddDeviceManagerLoop()  {
-	defer logging.PanicLogAndExit("")
+	defer logging.PanicLogAndExit("AddDeviceManagerLoop")
 	for {
 		select {
 		case msg := <- addDeviceManagerChan:

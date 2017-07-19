@@ -59,7 +59,7 @@ func init() {
 }
 
 func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
-	defer logging.PanicLogAndExit("")
+	defer logging.PanicLogAndExit("AppServerRunLoop")
 
 	appServerChan = serverCtx.AppServerChan
 	app := iris.New()
@@ -271,7 +271,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 	//负责管理连接、并且回发数据到app端
 	go func() {
-		defer logging.PanicLogAndExit("")
+		defer logging.PanicLogAndExit("appserver.go: 274")
 
 		for  {
 			select {
@@ -404,7 +404,7 @@ func OnClientConnected(conn websocket.Connection)  {
 
 	//for reading, 负责处理APP请求的业务逻辑
 	go func(c *AppConnection) {
-		defer logging.PanicLogAndExit("")
+		defer logging.PanicLogAndExit("appserver.go: 407")
 
 		for  {
 			select {

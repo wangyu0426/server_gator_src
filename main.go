@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	defer logging.PanicLogAndExit("")
+	defer logging.PanicLogAndExit("main: ")
 
 	//str := []byte("357593030571505")
 	//fmt.Println(str[0] == 'a')
