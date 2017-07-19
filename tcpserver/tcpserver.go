@@ -476,6 +476,10 @@ func ConnWriteLoop(c *Connection) {
 					count = len(sentData)
 				}
 
+				if count > len(sentData){
+					count = len(sentData)
+				}
+
 				logging.Log(fmt.Sprintf("send data to client: %s,  %d bytes sent", sentData[0: count], n))
 			}
 		}
