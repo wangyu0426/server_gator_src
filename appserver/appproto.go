@@ -311,8 +311,10 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 					deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 					if ok && deviceInfo != nil {
 						deviceInfoResult = proto.MakeDeviceInfoResult(deviceInfo)
-						deviceInfoResult.Avatar = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort, svrctx.Get().HttpStaticURL +
-							deviceInfoResult.Avatar)
+						if len(deviceInfoResult.Avatar) > 0 {
+							deviceInfoResult.Avatar = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort, svrctx.Get().HttpStaticURL +
+								deviceInfoResult.Avatar)
+						}
 
 						for i, ava := range deviceInfoResult.ContactAvatar{
 							if len(ava) > 0 {
