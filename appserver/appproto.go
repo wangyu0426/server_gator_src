@@ -648,6 +648,26 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 				// error code:  -2 表示验该用户已经关注了手表
 				result.ErrCode = -2
 				result.ErrMsg = "the device was added duplicately"
+
+				proto.DeviceInfoListLock.RLock()
+				deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+				if ok && deviceInfo != nil {
+					deviceInfoResult := proto.MakeDeviceInfoResult(deviceInfo)
+					if len(deviceInfo.Avatar) == 0 || (strings.Contains(deviceInfo.Avatar, ".jpg") == false &&
+						strings.Contains(deviceInfo.Avatar, ".JPG") == false) {
+						deviceInfoResult.Avatar = ""
+					}else{
+						if deviceInfo.Avatar[0] == '/'{
+							deviceInfoResult.Avatar = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort, svrctx.Get().HttpStaticURL +
+								deviceInfoResult.Avatar)
+						}
+					}
+
+					deviceInfoResult.FamilyNumber = params.MySimID
+					resultJson, _ := json.Marshal(&deviceInfoResult)
+					result.Data = string([]byte(resultJson))
+				}
+				proto.DeviceInfoListLock.RUnlock()
 			}else{
 				strSqlUpdateDeviceInfo := ""
 				isFound := false
