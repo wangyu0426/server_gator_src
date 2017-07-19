@@ -930,6 +930,7 @@ func MakeDeviceInfoResult(deviceInfo *DeviceInfo) DeviceInfoResult {
 	result.TimeZone = makeDBTimeZoneString(deviceInfo.TimeZone)
 	result.CountryCode = deviceInfo.CountryCode
 	result.Avatar = deviceInfo.Avatar
+
 	result.VerifyCode = deviceInfo.VerifyCode
 	result.Lang = deviceInfo.Lang
 	result.Volume = deviceInfo.Volume

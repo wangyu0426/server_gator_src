@@ -1037,6 +1037,16 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 			deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 			if ok && deviceInfo != nil {
 				deviceInfoResult := proto.MakeDeviceInfoResult(deviceInfo)
+				if len(deviceInfo.Avatar) == 0 || (strings.Contains(deviceInfo.Avatar, ".jpg") == false &&
+					strings.Contains(deviceInfo.Avatar, ".JPG") == false) {
+					deviceInfoResult.Avatar = "'"
+				}else{
+					if deviceInfo.Avatar[0] == '/'{
+						deviceInfoResult.Avatar = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort, svrctx.Get().HttpStaticURL +
+							deviceInfoResult.Avatar)
+					}
+				}
+
 				deviceInfoResult.FamilyNumber = familyNumber
 				resultJson, _ := json.Marshal(&deviceInfoResult)
 				result.Data = string([]byte(resultJson))
