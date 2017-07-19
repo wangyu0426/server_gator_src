@@ -580,11 +580,21 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		service.cur.AlarmType = msg.Data[bufOffset] - '0'
 		bufOffset++
 		if msg.Data[bufOffset] != ',' {
-			service.cur.AlarmType = uint8(Str2Num(string(msg.Data[bufOffset - 1 : bufOffset + 1]), 16))
+			service.cur.OrigAlarm = uint8(Str2Num(string(msg.Data[bufOffset - 1 : bufOffset + 1]), 16))
 			bufOffset++
 		}
 
 		bufOffset++
+
+		service.cur.AlarmType = service.cur.OrigAlarm
+		//去掉手表上报的低电和设备脱离状态，由服务器计算是否报警
+		service.cur.AlarmType &= (^uint8(ALARM_BATTERYLOW))
+		service.cur.AlarmType &= (^uint8(ALARM_DEVICE_DETACHED))
+
+		//由于手表脱离可能是一种持续状态，手表会持续上报这个状态，所以实际报警是在第一次上报脱离的时候
+		if service.old.OrigAlarm & ALARM_DEVICE_DETACHED == 0 && service.cur.OrigAlarm & ALARM_DEVICE_DETACHED != 0 {
+			service.cur.AlarmType |= uint8(ALARM_DEVICE_DETACHED)
+		}
 
 		//steps
 		service.cur.Steps = Str2Num(string(msg.Data[bufOffset : bufOffset + 8]), 16)
@@ -626,6 +636,12 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	return ret
 }
 
+func (service *GT06Service)CountSteps() {
+	//170520114920
+	if service.old.DataTime == 0 || (service.cur.DataTime / 1000000 ==  service.old.DataTime / 1000000) {
+		service.cur.Steps += service.old.Steps
+	}
+}
 
 func (service *GT06Service)DoResponse() []*MsgData  {
 	if service.needSendChat {
@@ -1181,6 +1197,8 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 	logging.Log(fmt.Sprintf("end: m_iAlarmStatu=%d",  service.cur.AlarmType))
 	logging.Log(fmt.Sprintf("Update database: DeviceID=%d, m_DateTime=%d, m_lng=%f, m_lat=%f",
 		service.imei, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
+
+	service.CountSteps()
 
 	ret = service.WatchDataUpdateDB()
 	if ret == false {
@@ -2063,15 +2081,18 @@ func (service *GT06Service) ProcessUpdateWatchStatus(pszMsgBuf []byte) bool {
 		ucBattery = int(service.cur.OrigBattery - 2)
 	}
 
-	ret := service.UpdateWatchBattery()
-	if ret == false {
-		logging.Log(fmt.Sprintf("UpdateWatchBattery failed, battery=%d", ucBattery))
-		return ret
-	}
+	service.cur.Battery = uint8(ucBattery)
+
+	//ret := service.UpdateWatchBattery()
+	//if ret == false {
+	//	logging.Log(fmt.Sprintf("UpdateWatchBattery failed, battery=%d", ucBattery))
+	//	return ret
+	//}
 
 	nStep := service.cur.Steps
 	if  nStep >= 0x7fff - 1 || int(nStep) < 0 {
 		nStep = 0
+		service.cur.Steps = nStep
 	}
 
 	iLocateType := LBS_SMARTLOCATION
@@ -2087,33 +2108,38 @@ func (service *GT06Service) ProcessUpdateWatchStatus(pszMsgBuf []byte) bool {
 	i64Time := uint64(iDayTime * 1000000 + iSecTime)
 	bufOffset += TIME_LEN + 1
 
+	service.cur.DataTime = i64Time
+	service.CountSteps()
+
 	logging.Log(fmt.Sprintf("Update Watch %d, Step:%d, Battery:%d", service.imei, service.cur.Steps, ucBattery))
 
 	stWatchStatus := &WatchStatus{}
 	stWatchStatus.i64DeviceID = service.imei
 	stWatchStatus.iLocateType = uint8(iLocateType)
 	stWatchStatus.i64Time = i64Time
-	stWatchStatus.Step = nStep
+	stWatchStatus.Step = service.cur.Steps
 	stWatchStatus.AlarmType = service.cur.AlarmType
-	ret = service.UpdateWatchStatus(stWatchStatus)
+	stWatchStatus.Battery = service.cur.Battery
+	ret := service.UpdateWatchStatus(stWatchStatus)
 	if ret == false {
 		logging.Log("Update Watch status failed ")
 	}
 
-	if ucBattery <=7 && ucBattery >= 0 {
-		service.cur.Battery = uint8(ucBattery)
-		ret = service.UpdateWatchBattery()
-		if ret == false {
-			logging.Log(fmt.Sprintf("UpdateWatchBattery failed, battery=%d", ucBattery))
-			return ret
-		}
-	}
+	//if ucBattery <=7 && ucBattery >= 0 {
+	//	service.cur.Battery = uint8(ucBattery)
+	//	ret = service.UpdateWatchBattery()
+	//	if ret == false {
+	//		logging.Log(fmt.Sprintf("UpdateWatchBattery failed, battery=%d", ucBattery))
+	//		return ret
+	//	}
+	//}
 
 	if(service.cur.AlarmType != 0 && service.old.Lat != 0){
 		newData := service.old
 		newData.AlarmType = service.cur.AlarmType
 		newData.DataTime = i64Time
-		newData.Steps = nStep
+		newData.Steps = service.cur.Steps
+		newData.Battery = service.cur.Battery
 		service.cur = newData
 		ret = service.WatchDataUpdateDB()
 		if ret == false {
@@ -2654,6 +2680,8 @@ func (service *GT06Service) UpdateWatchData() bool {
 
 func (service *GT06Service) UpdateWatchStatus(watchStatus *WatchStatus) bool {
 	deviceData := LocationData{LocateType: watchStatus.iLocateType,
+		Battery: watchStatus.Battery,
+		AlarmType: watchStatus.AlarmType,
 		Steps: watchStatus.Step,
 		DataTime: watchStatus.i64Time,
 	}

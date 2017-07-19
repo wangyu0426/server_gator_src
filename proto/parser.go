@@ -594,6 +594,7 @@ type WatchStatus struct {
 	i64Time uint64
 	Step uint64
 	AlarmType uint8
+	Battery uint8
 }
 
 
@@ -705,6 +706,15 @@ func init()  {
 	//fmt.Println(a, a==0)
 	//str := "(0054357593060081018AP1422.587725,113.913641,0,2017,07,06,03,30,13,00000DA2DB7AFA18)"
 	//fmt.Println(str[len(str) - 18: ])
+
+	//oldtime := 170530114920
+	//curtime := 170521125020
+	//oldsteps := 100
+	//cursteps := 200
+	//if oldtime == 0 || (curtime / 1000000 ==  oldtime / 1000000) {
+	//	cursteps += oldsteps
+	//}
+	//fmt.Println(cursteps)
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()
