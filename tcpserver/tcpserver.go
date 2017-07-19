@@ -77,7 +77,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				msg.Header.Header.From == proto.MsgFromAppServerToTcpServer {
 				logging.Log(fmt.Sprintf("[%d] will active device: %s", msg.Header.Header.Imei, msg.Data))
 
-				cmdAckName := "'"
+				cmdAckName := ""
 				c, ok2 := TcpClientTable[msg.Header.Header.Imei]
 				if ok2 {
 					curTimeSecs := time.Now().Unix()

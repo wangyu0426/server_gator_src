@@ -1041,7 +1041,7 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 				deviceInfoResult := proto.MakeDeviceInfoResult(deviceInfo)
 				if len(deviceInfo.Avatar) == 0 || (strings.Contains(deviceInfo.Avatar, ".jpg") == false &&
 					strings.Contains(deviceInfo.Avatar, ".JPG") == false) {
-					deviceInfoResult.Avatar = "'"
+					deviceInfoResult.Avatar = ""
 				}else{
 					if deviceInfo.Avatar[0] == '/'{
 						deviceInfoResult.Avatar = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort, svrctx.Get().HttpStaticURL +
