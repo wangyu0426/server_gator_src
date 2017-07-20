@@ -380,6 +380,8 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	service.imei = msg.Header.Header.Imei
 	service.cmd = msg.Header.Header.Cmd
 
+	service.cur.Imei = service.imei
+
 	service.GetWatchDataInfo(service.imei)
 
 	if IsDeviceInCompanyBlacklist(service.imei) {
