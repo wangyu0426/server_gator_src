@@ -2620,7 +2620,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 
 			//判断报警，需根据上次的报警数据进行决定
 			//1.上次无报警，那么这次只考虑入界报警
-			if false &&  service.old.LastAlarmType & ALARM_INZONE == 0 && service.old.LastAlarmType & ALARM_OUTZONE == 0 &&
+			if service.old.LastAlarmType & ALARM_INZONE == 0 && service.old.LastAlarmType & ALARM_OUTZONE == 0 &&
 				service.old.LastZoneIndex < 0 {
 				if iRadiu < uint32(stSafeZone.Radius) { //判断是否入界
 					service.cur.ZoneIndex = stSafeZone.ZoneID
@@ -2632,9 +2632,9 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 					break
 				}
 			}else{
-				if true || service.old.LastAlarmType & ALARM_INZONE  != 0{ //上次是入界报警
+				if service.old.LastAlarmType & ALARM_INZONE  != 0{ //上次是入界报警
 					//那么这次需要计算是否有出界，并且同时是否有另一个入界
-					if true || service.old.LastZoneIndex == stSafeZone.ZoneID && iRadiu >= uint32(stSafeZone.Radius){
+					if  service.old.LastZoneIndex == stSafeZone.ZoneID && iRadiu >= uint32(stSafeZone.Radius){
 						service.cur.ZoneIndex = stSafeZone.ZoneID
 						service.cur.AlarmType |= ALARM_OUTZONE
 						if len(service.cur.ZoneName) == 0 {
@@ -2652,7 +2652,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 						}
 					}
 
-					if true ||  service.old.LastZoneIndex != stSafeZone.ZoneID && iRadiu < uint32(stSafeZone.Radius){
+					if service.old.LastZoneIndex != stSafeZone.ZoneID && iRadiu < uint32(stSafeZone.Radius){
 						service.cur.ZoneIndex = stSafeZone.ZoneID
 						service.cur.AlarmType |= ALARM_INZONE
 						if len(service.cur.ZoneName) == 0 {
