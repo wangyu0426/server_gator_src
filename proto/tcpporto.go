@@ -973,7 +973,7 @@ func (service *GT06Service)makeSendLocationReplyMsg() ([]byte, uint64) {
 	//(0056357593060153353AP1424.772816,121.022636,160,2015,11,12,08,00,00,0000000000000009)
 	//(0051357593060571398AP140.000000,0.000000,0,2017,05,22,11,04,28,00000D99DE4C0826)
 	var lat, lng float64
-	//accracy := uint32(0)
+	accracy := uint32(200)
 	if service.old.Lat == 0{
 		lat = service.cur.Lat
 		lng = service.cur.Lng
@@ -987,7 +987,7 @@ func (service *GT06Service)makeSendLocationReplyMsg() ([]byte, uint64) {
 	id := makeId()
 	curTime := time.Now().UTC().Format("2006,01,02,15,04,05")
 	body := fmt.Sprintf("%015dAP14%06f,%06f,%d,%s,%016X)",
-		service.imei, lat, lng, 200, curTime, id)
+		service.imei, lat, lng, accracy, curTime, id)
 	size := fmt.Sprintf("(%04X", 5 + len(body))
 
 	return []byte(size + body) , id
@@ -2089,11 +2089,11 @@ func (service *GT06Service) ProcessUpdateWatchStatus(pszMsgBuf []byte) bool {
 	//	return ret
 	//}
 
-	nStep := service.cur.Steps
-	if  nStep >= 0x7fff - 1 || int(nStep) < 0 {
-		nStep = 0
-		service.cur.Steps = nStep
-	}
+	//nStep := service.cur.Steps
+	//if  nStep >= 0x7fff - 1 || int(nStep) < 0 {
+	//	nStep = 0
+	//	service.cur.Steps = nStep
+	//}
 
 	iLocateType := LBS_SMARTLOCATION
 
@@ -2324,7 +2324,7 @@ func (service *GT06Service) ProcessWifiInfo(pszMsgBuf []byte) bool {
 		}
 	}
 
-	service.cur.Steps = 0
+	//service.cur.Steps = 0
 	service.cur.ReadFlag = 0
 	service.cur.LocateType = LBS_WIFI
 	service.cur.Accracy = service.accracy
@@ -2385,7 +2385,7 @@ func (service *GT06Service) ProcessLBSInfo(pszMsgBuf []byte) bool {
 	}
 
 	service.cur.DataTime = i64Time
-	service.cur.Steps = 0
+	//service.cur.Steps = 0
 	service.cur.ReadFlag  = 0
 	service.cur.Accracy = service.accracy
 	service.cur.LocateType = LBS_JIZHAN  //uint8(service.accracy / 10) //LBS_JIZHAN;
@@ -2452,7 +2452,7 @@ func (service *GT06Service) ProcessMutilLocateInfo(pszMsgBuf []byte) bool {
 		}
 	}
 
-	service.cur.Steps = 0
+	//service.cur.Steps = 0
 	service.cur.ReadFlag = 0
 	service.cur.LocateType = LBS_WIFI
 	service.cur.Accracy = service.accracy

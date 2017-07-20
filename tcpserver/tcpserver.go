@@ -607,7 +607,7 @@ func MakeLatestTimeLocationReplyMsg(cmd uint16, imei, id uint64, data []byte) []
 		curTime := time.Now().UTC().Format("2006,01,02,15,04,05")
 
 		location := svrctx.GetDeviceData(imei, svrctx.Get().PGPool)
-		body = string(data[5: 24]) + fmt.Sprintf("%06f,%06f,%d,", location.Lat, location.Lng, location.Accracy) + curTime +
+		body = string(data[5: 24]) + fmt.Sprintf("%06f,%06f,%d,", location.Lat, location.Lng, 200) + curTime +
 			fmt.Sprintf(",%016X)", id)
 
 		replyData = fmt.Sprintf("(%04X", 5 + len(body)) + body
