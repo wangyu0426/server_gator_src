@@ -132,9 +132,10 @@ type LocationData struct {
 	ZoneIndex int32 	`json:"zoneIndex"`
 	ZoneName string 	`json:"zoneName"`
 
-	OrigBattery uint8	`json:"org_battery,omitempty"`
-	OrigAlarm uint8       `json:"org_alarm,omitempty"`
-	lastAlarm AlarmInfo
+	OrigBattery uint8		`json:"org_battery"`
+	OrigAlarm uint8       		`json:"org_alarm"`
+	LastAlarmType uint8      `json:"lastAlarmType"`
+	LastZoneIndex int32 	`json:"lastZoneIndex"`
 }
 
 const (
@@ -349,6 +350,8 @@ func (service *GT06Service)PreDoRequest() bool  {
 	service.wifiZoneIndex = -1
 	service.cur.ZoneIndex = -1
 	service.old.ZoneIndex = -1
+	service.cur.LastZoneIndex = -1
+	service.old.LastZoneIndex = -1
 	service.needSendLocation = false
 	service.needSendChatNum = true
 	service.needSendPhotoNum = true
@@ -638,9 +641,9 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 
 func (service *GT06Service)CountSteps() {
 	//170520114920
-	if service.old.DataTime == 0 || (service.cur.DataTime / 1000000 ==  service.old.DataTime / 1000000) {
-		service.cur.Steps += service.old.Steps
-	}
+	//if service.old.DataTime == 0 || (service.cur.DataTime / 1000000 ==  service.old.DataTime / 1000000) {
+	//	service.cur.Steps = service.old.Steps
+	//}
 }
 
 func (service *GT06Service)DoResponse() []*MsgData  {
@@ -1199,6 +1202,13 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 		service.imei, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
 
 	service.CountSteps()
+
+	if service.cur.AlarmType != 0 {
+		service.cur.LastAlarmType = service.cur.AlarmType
+		if service.cur.ZoneIndex >= 0 {
+			service.cur.LastZoneIndex = service.cur.ZoneIndex
+		}
+	}
 
 	ret = service.WatchDataUpdateDB()
 	if ret == false {
@@ -2234,6 +2244,8 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	iSpeed := int32(fSpeed * 10)
 	bufOffset += 5
 
+	logging.Log(fmt.Sprintf("[%d] fSpeed: %f, iSpeed: %d", service.imei, fSpeed, iSpeed))
+
 	iTimeSec := service.GetIntValue(pszMsg[bufOffset: ], TIME_LEN)
 	bufOffset += TIME_LEN
 
@@ -2261,7 +2273,6 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	service.cur.DataTime = i64Time
 	service.cur.Lng = float64(float64(iLongtitude) / 1000000.0)
 	service.cur.Lat = float64(float64(iLatitude) / 1000000.0)
-	service.cur.Steps = uint64(iSpeed)
 	service.cur.ReadFlag = 0
 	service.cur.Battery = iIOStatu
 	service.cur.LocateType = LBS_GPS
@@ -2548,9 +2559,10 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 	//那么上报这次的WiFi入界报警
 	//如果上一次并没有数据，那么直接报WiFi入界
 	if service.wifiZoneIndex >= 0  && service.wifiZoneIndex < MAX_SAFE_ZONE_NUM{
-		if service.old.DataTime == 0  || (service.old.AlarmType & ALARM_INZONE  == 0) && (service.old.lastAlarm.alarm & ALARM_INZONE  == 0) ||
+		if service.old.DataTime == 0  || (service.old.AlarmType & ALARM_INZONE  == 0) &&
+			(service.old.LastAlarmType & ALARM_INZONE  == 0) ||
 			(service.old.AlarmType & ALARM_INZONE  != 0) && int16(service.old.ZoneIndex) != service.wifiZoneIndex &&
-				(service.old.lastAlarm.alarm & ALARM_INZONE  != 0) && int16(service.old.lastAlarm.zoneIndex) != service.wifiZoneIndex {
+				(service.old.LastAlarmType & ALARM_INZONE  != 0) && int16(service.old.LastZoneIndex) != service.wifiZoneIndex {
 			DeviceInfoListLock.RLock()
 			safeZones := GetSafeZoneSettings(service.imei)
 			if safeZones != nil {
@@ -2606,7 +2618,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 			if iRadiu < uint32(stSafeZone.Radius) { //判断是否入界
 				//如果上次没有数据，则直接报入界，如果上次有数据，并且不是入界同一个区域，也报入界
 				if !((service.old.ZoneIndex == stSafeZone.ZoneID && (service.old.AlarmType & ALARM_INZONE) != 0 ) ||
-					(service.old.lastAlarm.zoneIndex == stSafeZone.ZoneID && (service.old.lastAlarm.alarm & ALARM_INZONE) != 0)) {
+					(service.old.LastZoneIndex == stSafeZone.ZoneID && (service.old.LastAlarmType & ALARM_INZONE) != 0)) {
 					service.cur.ZoneIndex = stSafeZone.ZoneID
 					service.cur.AlarmType |= ALARM_INZONE
 					service.cur.ZoneName = stSafeZone.Name
@@ -2618,7 +2630,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 			} else {//判断是否出界
 				//如果上次没有数据，则不上报出界，如果上次有数据，并且上一次的报警必须是入界同一个安全区域，才报出界
 				if  (service.old.ZoneIndex == stSafeZone.ZoneID && (service.old.AlarmType & ALARM_INZONE) != 0 ) ||
-					(service.old.lastAlarm.zoneIndex == stSafeZone.ZoneID && (service.old.lastAlarm.alarm & ALARM_INZONE) != 0) {
+					(service.old.LastZoneIndex == stSafeZone.ZoneID && (service.old.LastAlarmType & ALARM_INZONE) != 0) {
 					service.cur.ZoneIndex = stSafeZone.ZoneID
 					service.cur.AlarmType |= ALARM_OUTZONE
 					service.cur.ZoneName = stSafeZone.Name
@@ -2881,11 +2893,16 @@ func (service *GT06Service) GetFloatValue(pszMsgBuf []byte, shLen uint16) float6
 func  (service *GT06Service) GetWatchDataInfo(imei uint64)  {
 	if service.reqCtx.GetDeviceDataFunc != nil {
 		service.old = service.reqCtx.GetDeviceDataFunc(imei, service.reqCtx.Pgpool)
-		service.cur.lastAlarm.alarm = service.old.AlarmType
-		service.cur.lastAlarm.zoneIndex = service.old.ZoneIndex
-		service.cur.lastAlarm.zoneName = service.old.ZoneName
+		if service.old.DataTime == 0 || service.old.Lat == 0 {
+			service.old.ZoneIndex = -1
+			service.old.LastZoneIndex = -1
+		}
+
+		service.cur.LastAlarmType = service.old.LastAlarmType
+		service.cur.LastZoneIndex = service.old.LastZoneIndex
 	}
 }
+
 func  (service *GT06Service) GetLocation()  bool{
 	useGooglemap := true
 	DeviceInfoListLock.RLock()
