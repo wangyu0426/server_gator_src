@@ -2617,10 +2617,12 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 			stDstPoint.LongtiTude = zoneLng
 			iRadiu := service.GetDisTance(&stCurPoint, &stDstPoint)
 			fmt.Println(iRadiu, stCurPoint, stDstPoint)
-			if iRadiu < uint32(stSafeZone.Radius) { //判断是否入界
-				//如果上次没有数据，则直接报入界，如果上次有数据，并且不是入界同一个区域，也报入界
-				if !((service.old.ZoneIndex == stSafeZone.ZoneID && (service.old.AlarmType & ALARM_INZONE) != 0 ) ||
-					(service.old.LastZoneIndex == stSafeZone.ZoneID && (service.old.LastAlarmType & ALARM_INZONE) != 0)) {
+
+			//判断报警，需根据上次的报警数据进行决定
+			//1.上次无报警，那么这次只考虑入界报警
+			if false &&  service.old.LastAlarmType & ALARM_INZONE == 0 && service.old.LastAlarmType & ALARM_OUTZONE == 0 &&
+				service.old.LastZoneIndex < 0 {
+				if iRadiu < uint32(stSafeZone.Radius) { //判断是否入界
 					service.cur.ZoneIndex = stSafeZone.ZoneID
 					service.cur.AlarmType |= ALARM_INZONE
 					service.cur.ZoneName = stSafeZone.Name
@@ -2629,17 +2631,56 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 					logging.Log("service.old:  " + MakeStructToJson(&service.old) + ";   service.cur:  " + MakeStructToJson(&service.cur))
 					break
 				}
-			} else {//判断是否出界
-				//如果上次没有数据，则不上报出界，如果上次有数据，并且上一次的报警必须是入界同一个安全区域，才报出界
-				if  (service.old.ZoneIndex == stSafeZone.ZoneID && (service.old.AlarmType & ALARM_INZONE) != 0 ) ||
-					(service.old.LastZoneIndex == stSafeZone.ZoneID && (service.old.LastAlarmType & ALARM_INZONE) != 0) {
-					service.cur.ZoneIndex = stSafeZone.ZoneID
-					service.cur.AlarmType |= ALARM_OUTZONE
-					service.cur.ZoneName = stSafeZone.Name
-					logging.Log(fmt.Sprintf("Device[%d] Make a OutZone Alarm[%s][%d,%d][%d,%d]",
-						service.imei, stSafeZone.Name, iRadiu, stSafeZone.Radius , service.cur.AlarmType, service.cur.ZoneIndex))
-					logging.Log("service.old:  " + MakeStructToJson(&service.old) + ";   service.cur:  " + MakeStructToJson(&service.cur))
-					break
+			}else{
+				if true || service.old.LastAlarmType & ALARM_INZONE  != 0{ //上次是入界报警
+					//那么这次需要计算是否有出界，并且同时是否有另一个入界
+					if true || service.old.LastZoneIndex == stSafeZone.ZoneID && iRadiu >= uint32(stSafeZone.Radius){
+						service.cur.ZoneIndex = stSafeZone.ZoneID
+						service.cur.AlarmType |= ALARM_OUTZONE
+						if len(service.cur.ZoneName) == 0 {
+							service.cur.ZoneName = Num2Str(ALARM_OUTZONE, 10)  + stSafeZone.Name
+						}else{
+							service.cur.ZoneName += "," + Num2Str(ALARM_OUTZONE, 10)  + stSafeZone.Name
+						}
+
+						logging.Log(fmt.Sprintf("Device[%d] Make a OutZone Alarm[%s][%d,%d][%d,%d]",
+							service.imei, stSafeZone.Name, iRadiu, stSafeZone.Radius , service.cur.AlarmType, service.cur.ZoneIndex))
+						logging.Log("service.old:  " + MakeStructToJson(&service.old) + ";   service.cur:  " + MakeStructToJson(&service.cur))
+
+						if (service.cur.AlarmType & ALARM_OUTZONE)  != 0 && (service.cur.AlarmType & ALARM_INZONE)  != 0{
+							break
+						}
+					}
+
+					if true ||  service.old.LastZoneIndex != stSafeZone.ZoneID && iRadiu < uint32(stSafeZone.Radius){
+						service.cur.ZoneIndex = stSafeZone.ZoneID
+						service.cur.AlarmType |= ALARM_INZONE
+						if len(service.cur.ZoneName) == 0 {
+							service.cur.ZoneName = Num2Str(ALARM_INZONE, 10)  + stSafeZone.Name
+						}else{
+							service.cur.ZoneName += "," + Num2Str(ALARM_INZONE, 10)  + stSafeZone.Name
+						}
+
+						logging.Log(fmt.Sprintf("Device[%d] Make a InZone Alarm[%s][%d,%d][%d,%d]",
+							service.imei, stSafeZone.Name, iRadiu, stSafeZone.Radius , service.cur.AlarmType, service.cur.ZoneIndex))
+						logging.Log("service.old:  " + MakeStructToJson(&service.old) + ";   service.cur:  " + MakeStructToJson(&service.cur))
+
+						if (service.cur.AlarmType & ALARM_OUTZONE)  != 0 && (service.cur.AlarmType & ALARM_INZONE)  != 0{
+							break
+						}
+					}
+
+				}else if service.old.LastAlarmType & ALARM_OUTZONE  != 0 {
+					//上次是出界报警,那么这次只需要考虑是否有入界报警
+					if iRadiu < uint32(stSafeZone.Radius) { //判断是否入界
+						service.cur.ZoneIndex = stSafeZone.ZoneID
+						service.cur.AlarmType |= ALARM_INZONE
+						service.cur.ZoneName = stSafeZone.Name
+						logging.Log(fmt.Sprintf("Device[%d] Make a InZone Alarm[%s][%d,%d][%d,%d]",
+							service.imei, stSafeZone.Name, iRadiu, stSafeZone.Radius , service.cur.AlarmType, service.cur.ZoneIndex))
+						logging.Log("service.old:  " + MakeStructToJson(&service.old) + ";   service.cur:  " + MakeStructToJson(&service.cur))
+						break
+					}
 				}
 			}
 		}
