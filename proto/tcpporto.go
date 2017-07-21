@@ -2621,8 +2621,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 
 			//判断报警，需根据上次的报警数据进行决定
 			//1.上次无报警，那么这次只考虑入界报警
-			if service.old.LastAlarmType & ALARM_INZONE == 0 && service.old.LastAlarmType & ALARM_OUTZONE == 0 &&
-				service.old.LastZoneIndex < 0 {
+			if service.old.LastAlarmType & ALARM_INZONE == 0 && service.old.LastAlarmType & ALARM_OUTZONE == 0 {
 				if iRadiu < uint32(stSafeZone.Radius) { //判断是否入界
 					service.cur.ZoneIndex = stSafeZone.ZoneID
 					service.cur.AlarmType |= ALARM_INZONE
