@@ -280,6 +280,13 @@ type QueryLocationsResult struct {
 	Locations []LocationData`json:"locations"`
 }
 
+type PhpQueryLocationsResult struct {
+	Result int 				`json:"result"`
+	ResultStr string			`json:"resultstr"`
+	Systemno uint64		`json:"systemno"`
+	Data  []interface{} 		`json:"data"`
+}
+
 type DeleteAlarmsResult struct {
 	Imei string  				`json:"imei"`
 	BeginTime uint64		`json:"beginTime"`

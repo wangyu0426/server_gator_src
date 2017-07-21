@@ -71,13 +71,51 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 	app.StaticWeb(svrctx.Get().HttpStaticURL, svrctx.Get().HttpStaticDir)
 
-	app.Get("/api/hi", func(ctx *iris.Context) {
-		result := proto.HttpAPIResult{
-			ErrCode: 0,
-			ErrMsg: "",
-			Imei: "0",
+	app.Get("/api/get-locations", func(ctx *iris.Context) {
+		systemno := ctx.FormValue("systemno")
+		imei := proto.Str2Num("3575" + systemno, 10)
+		datatype := ctx.FormValue("datatype")
+		var locations *[]proto.LocationData
+		if datatype == "1"{
+			dataResult := proto.PhpQueryLocationsResult{Result: 0, ResultStr: "",  Systemno: proto.Str2Num(systemno, 10)}
+			data := svrctx.GetDeviceData(imei, svrctx.Get().PGPool)
+			dataResult.Data = append(dataResult.Data, data.DataTime)
+			dataResult.Data = append(dataResult.Data, uint64(data.Lat * 1000000))
+			dataResult.Data = append(dataResult.Data, uint64(data.Lng * 1000000))
+			dataResult.Data = append(dataResult.Data, data.Steps)
+			dataResult.Data = append(dataResult.Data, data.Battery)
+			dataResult.Data = append(dataResult.Data, data.AlarmType)
+			dataResult.Data = append(dataResult.Data, data.ReadFlag)
+			dataResult.Data = append(dataResult.Data, data.LocateType)
+			dataResult.Data = append(dataResult.Data, data.ZoneName)
+			dataResult.Data = append(dataResult.Data, data.Accracy)
+			ctx.JSON(200, dataResult)
+		}else if(datatype == "2"){
+			dataResult := proto.PhpQueryLocationsResult{Result: 0, ResultStr: "",  Systemno: proto.Str2Num(systemno, 10)}
+			beginTime := proto.Str2Num("20" + ctx.FormValue("start"), 10)
+			endTime := proto.Str2Num("20" + ctx.FormValue("end"), 10)
+
+			locations = svrctx.QueryLocations(imei, svrctx.Get().PGPool, beginTime, endTime, true, false)
+			if locations != nil && len(*locations) > 0 {
+				for _, data := range *locations {
+					dataItem := []interface{}{}
+					dataItem = append(dataItem, data.DataTime)
+					dataItem = append(dataItem, uint64(data.Lat * 1000000))
+					dataItem = append(dataItem, uint64(data.Lng * 1000000))
+					dataItem = append(dataItem, data.Steps)
+					dataItem = append(dataItem, data.Battery)
+					dataItem = append(dataItem, data.AlarmType)
+					dataItem = append(dataItem, data.ReadFlag)
+					dataItem = append(dataItem, data.LocateType)
+					dataItem = append(dataItem, data.ZoneName)
+					dataItem = append(dataItem, data.Accracy)
+
+					dataResult.Data = append(dataResult.Data, dataItem)
+				}
+			}
+
+			ctx.JSON(200, dataResult)
 		}
-		ctx.JSON(200, result)
 	})
 
 	app.Post(svrctx.Get().HttpUploadURL, func(ctx *iris.Context) {
