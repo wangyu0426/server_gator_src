@@ -2617,7 +2617,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 			stDstPoint.Latitude = zoneLat
 			stDstPoint.LongtiTude = zoneLng
 			iRadiu := service.GetDisTance(&stCurPoint, &stDstPoint)
-			fmt.Println(iRadiu, stCurPoint, stDstPoint)
+			logging.Log(fmt.Sprint(service.imei, " iRadiu, stCurPoint, stDstPoint: ", iRadiu, stCurPoint, stDstPoint))
 
 			//判断报警，需根据上次的报警数据进行决定
 			//1.上次无报警，那么这次只考虑入界报警
