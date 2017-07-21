@@ -862,6 +862,7 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 				body := fmt.Sprintf("%015dAP15,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
 				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
 			case PhoneNumbersFieldName:
+				msg.Header.Header.ID = params.MsgId
 				DeviceInfoListLock.RLock()
 				deviceInfo, ok := (*DeviceInfoList)[imei]
 				if ok && deviceInfo != nil {
