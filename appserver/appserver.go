@@ -417,6 +417,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 				subTable := getAppClientsByImei(msg)
 				if subTable != nil {
+					logging.Log(fmt.Sprint(msg.Imei, "app clients: ", subTable))
 					for _, c := range subTable{
 						data, err := json.Marshal(&msg)
 						err =(*c.conn).EmitMessage(data)

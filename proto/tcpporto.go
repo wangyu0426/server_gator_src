@@ -2258,7 +2258,6 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	}
 
 	if iIOStatu <= 1 {
-		service.cur.AlarmType |= ALARM_BATTERYLOW
 		iIOStatu = 1
 	}
 
@@ -2310,7 +2309,6 @@ func (service *GT06Service) ProcessWifiInfo(pszMsgBuf []byte) bool {
 	}
 
 	if service.cur.Battery <= 1  {
-		service.cur.AlarmType |= ALARM_BATTERYLOW
 		service.cur.Battery = 1
 	}
 
@@ -2372,7 +2370,6 @@ func (service *GT06Service) ProcessLBSInfo(pszMsgBuf []byte) bool {
 	}
 
 	if service.cur.Battery < 1 {
-		service.cur.AlarmType |= ALARM_BATTERYLOW
 		service.cur.Battery = 1
 	}
 
@@ -2438,7 +2435,6 @@ func (service *GT06Service) ProcessMutilLocateInfo(pszMsgBuf []byte) bool {
 	}
 
 	if service.cur.Battery < 1 {
-		service.cur.AlarmType |= ALARM_BATTERYLOW
 		service.cur.Battery = 1
 	}
 
@@ -2635,12 +2631,12 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 				if service.old.LastAlarmType & ALARM_INZONE  != 0{ //上次是入界报警
 					//那么这次需要计算是否有出界，并且同时是否有另一个入界
 					if  service.old.LastZoneIndex == stSafeZone.ZoneID && iRadiu >= uint32(stSafeZone.Radius){
-						service.cur.ZoneIndex = stSafeZone.ZoneID
 						service.cur.AlarmType |= ALARM_OUTZONE
 						if len(service.cur.ZoneName) == 0 {
-							service.cur.ZoneName = Num2Str(ALARM_OUTZONE, 10)  + stSafeZone.Name
+							service.cur.ZoneName = stSafeZone.Name
+							service.cur.ZoneIndex = stSafeZone.ZoneID
 						}else{
-							service.cur.ZoneName += "," + Num2Str(ALARM_OUTZONE, 10)  + stSafeZone.Name
+							service.cur.ZoneName = Num2Str(ALARM_INZONE, 10)  + service.cur.ZoneName +"," + Num2Str(ALARM_OUTZONE, 10)  + stSafeZone.Name
 						}
 
 						logging.Log(fmt.Sprintf("Device[%d] Make a OutZone Alarm[%s][%d,%d][%d,%d]",
@@ -2656,9 +2652,9 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 						service.cur.ZoneIndex = stSafeZone.ZoneID
 						service.cur.AlarmType |= ALARM_INZONE
 						if len(service.cur.ZoneName) == 0 {
-							service.cur.ZoneName = Num2Str(ALARM_INZONE, 10)  + stSafeZone.Name
+							service.cur.ZoneName = stSafeZone.Name
 						}else{
-							service.cur.ZoneName += "," + Num2Str(ALARM_INZONE, 10)  + stSafeZone.Name
+							service.cur.ZoneName = Num2Str(ALARM_OUTZONE, 10)  + service.cur.ZoneName + "," + Num2Str(ALARM_INZONE, 10)  + stSafeZone.Name
 						}
 
 						logging.Log(fmt.Sprintf("Device[%d] Make a InZone Alarm[%s][%d,%d][%d,%d]",
