@@ -453,7 +453,7 @@ func QueryLocations(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64
 
 
 func DeleteAlarms(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64)  bool {
-	if imei == 0 || pgpool == nil || endTime <= beginTime {
+	if imei == 0 || pgpool == nil || endTime < beginTime {
 		logging.Log(fmt.Sprintf("[imei: %d] bad input parms: %d, %d", imei, beginTime, endTime))
 		return false
 	}
