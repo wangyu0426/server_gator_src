@@ -196,6 +196,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			if ret {
 				if uploadType == "contactAvatar" {
 					photoInfo := proto.PhotoSettingInfo{}
+					photoInfo.CreateTime = proto.NewMsgID()
 					photoInfo.Member.Phone = ctx.FormValue("phone")
 					photoInfo.ContentType = proto.ChatContentPhoto
 					photoInfo.Content = fileName//proto.MakeTimestampIdString()
@@ -273,6 +274,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			}
 
 			chat := proto.ChatInfo{}
+			chat.CreateTime = proto.NewMsgID()
 			chat.Imei = imeiUint64
 			chat.Sender = phone
 			chat.SenderType = 1

@@ -163,6 +163,7 @@ type ChatInfo struct {
 	ContentType uint8
 	Content string 		`json:"content"`	//如contentType是文件类型，则Content是以时间戳id命名的文件名
 	Flags  int
+	CreateTime  uint64  //服务器生成时间
 }
 
 
@@ -173,6 +174,7 @@ type PhotoSettingInfo struct {
 	Content string
 	MsgId uint64
 	Flags  int
+	CreateTime  uint64  //服务器生成时间
 }
 
 type DataBlock struct {
@@ -359,7 +361,6 @@ func (service *GT06Service)PreDoRequest() bool  {
 
 	return true
 }
-
 
 func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	//logging.Log("Get Input Msg: " + string(msg.Data))
@@ -1447,6 +1448,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 
 	if isFoundTask == false {
 		chat := &ChatTask{}
+		chat.Info.CreateTime = NewMsgID()
 		chat.Info.Imei = service.imei
 		chat.Info.Sender = Num2Str(service.imei, 10)
 		chat.Info.SenderType = 0
@@ -2773,31 +2775,31 @@ func (service *GT06Service) UpdateWatchBattery() bool {
 }
 
 func (service *GT06Service) NotifyAlarmMsg() bool {
-	strRequestBody := "r=app/auth/alarm&"
-	strReqURL := "http://service.gatorcn.com/tracker/web/index.php"
-	value := fmt.Sprintf("systemno=%d&data=%d,%d,%d,%d,%d,%d,%d,%d,%s,%s",
-		service.imei % 100000000000, service.cur.DataTime, int(service.cur.Lat * 1000000), int(service.cur.Lng * 1000000),
-		service.cur.Steps, service.cur.Battery, service.cur.AlarmType, service.cur.ReadFlag,
-		service.cur.LocateType, service.cur.ZoneName, "")
-
-	strRequestBody += value
-	strReqURL += "?" +  strRequestBody
-	logging.Log(strReqURL)
-	resp, err := http.Get(strReqURL)
-	if err != nil {
-		logging.Log(fmt.Sprintf("[%d] call php api to notify app failed  failed,  %s", service.imei, err.Error()))
-		return false
-	}
-
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		logging.Log(fmt.Sprintf("[%d] php notify api  response has err, %s", service.imei, err.Error()))
-		return false
-	}
-
-	logging.Log(fmt.Sprintf("[%d] read php notify api response:, %s", service.imei, body))
+	//strRequestBody := "r=app/auth/alarm&"
+	//strReqURL := "http://service.gatorcn.com/tracker/web/index.php"
+	//value := fmt.Sprintf("systemno=%d&data=%d,%d,%d,%d,%d,%d,%d,%d,%s,%s",
+	//	service.imei % 100000000000, service.cur.DataTime, int(service.cur.Lat * 1000000), int(service.cur.Lng * 1000000),
+	//	service.cur.Steps, service.cur.Battery, service.cur.AlarmType, service.cur.ReadFlag,
+	//	service.cur.LocateType, service.cur.ZoneName, "")
+	//
+	//strRequestBody += value
+	//strReqURL += "?" +  strRequestBody
+	//logging.Log(strReqURL)
+	//resp, err := http.Get(strReqURL)
+	//if err != nil {
+	//	logging.Log(fmt.Sprintf("[%d] call php api to notify app failed  failed,  %s", service.imei, err.Error()))
+	//	return false
+	//}
+	//
+	//defer resp.Body.Close()
+	//
+	//body, err := ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	logging.Log(fmt.Sprintf("[%d] php notify api  response has err, %s", service.imei, err.Error()))
+	//	return false
+	//}
+	//
+	//logging.Log(fmt.Sprintf("[%d] read php notify api response:, %s", service.imei, body))
 
 	return true
 }

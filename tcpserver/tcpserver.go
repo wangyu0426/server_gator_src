@@ -251,7 +251,9 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 								}else{ //未收到确认，如果当前消息是通知继续推送数据并且时间已经超过30s，才会发送
 									if isPushCache {
 										timeout := (proto.NewMsgID() - cachedMsg.Header.Header.LastPushTime) / uint64(time.Second)
-										if timeout > 30 {
+										if timeout >=  uint64(serverCtx.MaxPushDataTimeSecs) {
+											logging.Log(fmt.Sprintf("[%d] push data timeout more than one day, need to remove/delete", msg.Header.Header.Imei))
+										}else if  timeout > uint64(serverCtx.MinPushDataDelayTimeSecs) {
 											//如果是AP03和AP14，则需要实时推送务器当前时间和手表最新定位
 											if cachedMsg.Header.Header.Cmd == proto.CMD_AP03 ||  cachedMsg.Header.Header.Cmd == proto.CMD_AP14 {
 												cachedMsg.Data = MakeLatestTimeLocationReplyMsg(cachedMsg.Header.Header.Cmd,
@@ -550,6 +552,9 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	//for managing connection, 对内负责管理tcp连接对象，对外为APP server提供通信接口
 	go ConnManagerLoop(serverCtx)
 
+	//负责定时清理缓存数据
+	go BackgroundCleanerLoop(serverCtx)
+
 	for  {
 		//listener.SetDeadline(time.Now().Add(time.Second * serverCtx.AcceptTimeout))
 		conn, err := listener.AcceptTCP()
@@ -615,4 +620,142 @@ func MakeLatestTimeLocationReplyMsg(cmd uint16, imei, id uint64, data []byte) []
 	}
 
 	return data
+}
+
+func BackgroundCleanerLoop(serverCtx *svrctx.ServerContext) {
+	defer logging.PanicLogAndExit("BackgroundCleanerLoop")
+
+	for  {
+		proto.DeviceChatTaskTableLock.Lock()
+		for imei, item := range proto.DeviceChatTaskTable{
+			for fileid, subItem := range item {
+				if subItem != nil {
+					timeout := (proto.NewMsgID() -  subItem.Info.CreateTime) / uint64(time.Second)
+					if timeout >= uint64(serverCtx.MaxMinichatKeepTimeSecs) {
+						delete(item, fileid)
+						logging.Log(fmt.Sprintf("%d device send chat timeout over %d hours, need to delete/remove",
+							imei, timeout / 3600))
+					}
+				}
+			}
+
+			if item != nil && len(item) == 0 {
+				delete(proto.DeviceChatTaskTable, imei)
+			}
+		}
+		proto.DeviceChatTaskTableLock.Unlock()
+
+		logging.Log("device chat list cleaned")
+
+		tempChatTaskList :=  []*proto.ChatTask{}
+		proto.AppSendChatListLock.Lock()
+		for imei, item := range proto.AppSendChatList{
+			if item != nil{
+				for _, subItem := range *item{
+					if subItem != nil {
+						timeout := (proto.NewMsgID() -  subItem.Info.CreateTime) / uint64(time.Second)
+						if timeout >= uint64(serverCtx.MaxMinichatKeepTimeSecs) {
+							logging.Log(fmt.Sprintf("%d AppSendChat timeout over %d hours, need to delete/remove",
+								imei, timeout / 3600))
+						}else{
+							tempChatTaskList = append(tempChatTaskList, subItem)
+						}
+					}
+				}
+
+				if len(tempChatTaskList) > 0 {
+					proto.AppSendChatList[imei] = &tempChatTaskList
+				}
+
+				if len(*item) == 0{
+					delete(proto.AppSendChatList, imei)
+				}
+			}
+		}
+
+		proto.AppSendChatListLock.Unlock()
+
+		logging.Log("app send chat list cleaned")
+
+		//
+		//var AppChatList = map[uint64]map[uint64]ChatInfo{}
+		proto.AppChatListLock.Lock()
+		for imei, item := range  proto.AppChatList {
+			for fileid, subItem := range item {
+				timeout := (proto.NewMsgID() -  subItem.CreateTime) / uint64(time.Second)
+				if timeout >= uint64(serverCtx.MaxMinichatKeepTimeSecs) {
+					delete(item, fileid)
+					logging.Log(fmt.Sprintf("%d APP chat timeout over %d hours, need to delete/remove",
+						imei, timeout / 3600))
+				}
+			}
+
+			if item != nil && len(item) == 0 {
+				delete(proto.AppChatList, imei)
+			}
+		}
+		proto.AppChatListLock.Unlock()
+
+		logging.Log("app chat list cleaned")
+
+		tempPhotoList := []*proto.PhotoSettingTask{}
+		proto.AppNewPhotoListLock.Lock()
+		for imei, item := range proto.AppNewPhotoList{
+			if item != nil{
+				for _, subItem := range *item{
+					if subItem != nil {
+						timeout := (proto.NewMsgID() -  subItem.Info.CreateTime) / uint64(time.Second)
+						if timeout >= uint64(serverCtx.MaxMinichatKeepTimeSecs) {
+							logging.Log(fmt.Sprintf("%d AppNewPhotoList timeout over %d hours, need to delete/remove",
+								imei, timeout / 3600))
+						}else{
+							tempPhotoList = append(tempPhotoList, subItem)
+						}
+					}
+				}
+
+				if len(tempPhotoList) > 0 {
+					proto.AppNewPhotoList[imei] = &tempPhotoList
+				}
+
+				if len(*item) == 0{
+					delete(proto.AppNewPhotoList, imei)
+				}
+			}
+		}
+		proto.AppNewPhotoListLock.Unlock()
+
+		logging.Log("app new photo list cleaned")
+
+		tempPhotoPendingList := []*proto.PhotoSettingTask{}
+		proto.AppNewPhotoPendingListLock.Lock()
+		for imei, item := range proto.AppNewPhotoPendingList {
+			if item != nil{
+				for _, subItem := range *item{
+					if subItem != nil {
+						timeout := (proto.NewMsgID() -  subItem.Info.CreateTime) / uint64(time.Second)
+						if timeout >= uint64(serverCtx.MaxMinichatKeepTimeSecs) {
+							logging.Log(fmt.Sprintf("%d AppNewPhotoPendingList timeout over %d hours, need to delete/remove",
+								imei, timeout / 3600))
+						}else{
+							tempPhotoPendingList = append(tempPhotoPendingList, subItem)
+						}
+					}
+				}
+
+				if len(tempPhotoList) > 0 {
+					proto.AppNewPhotoPendingList[imei] = &tempPhotoPendingList
+				}
+
+				if len(*item) == 0{
+					delete(proto.AppNewPhotoPendingList, imei)
+				}
+			}
+		}
+		proto.AppNewPhotoPendingListLock.Unlock()
+
+		logging.Log("app new photo pending list cleaned")
+
+		time.Sleep(time.Duration(serverCtx.BackgroundCleanerDelayTimeSecs) * time.Second)
+	}
 }

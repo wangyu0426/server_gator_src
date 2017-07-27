@@ -41,6 +41,10 @@ type ServerContext struct {
 	AcceptTimeout time.Duration
 	RecvTimeout   time.Duration
 	MaxDeviceIdleTimeSecs int
+	MaxPushDataTimeSecs int
+	MinPushDataDelayTimeSecs int
+	BackgroundCleanerDelayTimeSecs int
+	MaxMinichatKeepTimeSecs int
 	RedisAddr     string
 	RedisPort     uint16
 	RedisPassword string

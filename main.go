@@ -5,7 +5,6 @@ import (
 	"./logging"
 	"./tcpserver"
 	"./appserver"
-	"./cache"
 	"./admin"
 )
 
@@ -27,7 +26,6 @@ func main() {
 
 	//fmt.Println("server config: ", *svrctx.Get())
 
-	cache.TestRedis()
 	go tcpserver.TcpServerRunLoop(svrctx.Get())
 	go appserver.AppServerRunLoop(svrctx.Get())
 
