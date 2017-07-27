@@ -887,7 +887,7 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 			case WatchAlarmFieldName + "4":
 				// (0040357593060153353AP09,1,0,127,150728,152900,0000000000000008)
 				body := ""
-				if setting.NewValue == "delete" {
+				if setting.NewValue == "delete" || setting.NewValue == "null" {
 					curWatchAlarm := WatchAlarm{}
 					err := json.Unmarshal([]byte(setting.CurValue), &curWatchAlarm)
 					if err != nil {
