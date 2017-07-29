@@ -1267,7 +1267,7 @@ func NotifyAppWithNewMinichat(imei uint64, appNotifyChan chan *AppMsgData,  chat
 
 	fmt.Println("heartbeat-ack: ", MakeStructToJson(result))
 
-	result.Minichat = append(result.Minichat, GetChatListForApp(imei)...)
+	result.Minichat = append(result.Minichat, GetChatListForApp(imei, "")...)
 
 	appNotifyChan  <- &AppMsgData{Cmd: HearbeatAckCmdName,
 		Imei: imei,
@@ -3336,13 +3336,19 @@ func DeleteVoicesForApp(imei uint64, chatList []ChatInfo) bool {
 	return ret
 }
 
-func GetChatListForApp(imei uint64) []ChatInfo{
+func GetChatListForApp(imei uint64, username string) []ChatInfo{
 	chatList:= []ChatInfo{}
 	AppChatListLock.RLock()
 	chatMap, ok := AppChatList[imei]
 	if ok  &&  chatMap != nil {
 		for _, chat := range chatMap {
-			chatList = append(chatList, chat)
+			if username == "" {
+				chatList = append(chatList, chat)
+			}else{
+				if username == chat.SenderUser {
+					chatList = append(chatList, chat)
+				}
+			}
 		}
 	}
 	AppChatListLock.RUnlock()

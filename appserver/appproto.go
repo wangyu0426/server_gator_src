@@ -205,7 +205,7 @@ func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 	for _, imei := range params.Devices {
 		imeiUint64 := proto.Str2Num(imei, 10)
 		result.Locations = append(result.Locations, svrctx.GetDeviceData(imeiUint64, svrctx.Get().PGPool))
-		result.Minichat = append(result.Minichat, proto.GetChatListForApp(imeiUint64)...)
+		result.Minichat = append(result.Minichat, proto.GetChatListForApp(imeiUint64, params.UserName)...)
 	}
 
 	//chat := proto.ChatInfo{}
