@@ -3345,7 +3345,7 @@ func GetChatListForApp(imei uint64, username string) []ChatInfo{
 			if username == "" {
 				chatList = append(chatList, chat)
 			}else{
-				if username == chat.SenderUser {
+				if chat.SenderType == 0 || username == chat.SenderUser {
 					chatList = append(chatList, chat)
 				}
 			}
