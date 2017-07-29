@@ -126,6 +126,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		}
 
 		imei := ctx.FormValue("imei")
+		username := ctx.FormValue("username")
 		fieldname := ctx.FormValue("fieldname")
 		uploadType := ctx.FormValue("type")
 		fmt.Println(uploadType)
@@ -278,6 +279,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			chat.Imei = imeiUint64
 			chat.Sender = phone
 			chat.SenderType = 1
+			chat.SenderUser = username
 			chat.VoiceMilisecs = int(proto.Str2Num(ctx.FormValue("duration"), 10))
 			chat.ContentType = proto.ChatContentVoice
 			chat.Content = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +

@@ -158,6 +158,7 @@ type ChatInfo struct {
 	VoiceMilisecs int		`json:"milisecs"`
 	SenderType uint8	`json:"senderType"`
 	Sender string		`json:"sender"`
+	SenderUser string		`json:"senderUser"`
 	ReceiverType uint8
 	Receiver string
 	ContentType uint8
