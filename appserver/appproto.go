@@ -201,6 +201,10 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 }
 
 func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
+	if params.AccessToken == "" {
+		return true
+	}
+
 	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
 	for _, imei := range params.Devices {
 		imeiUint64 := proto.Str2Num(imei, 10)

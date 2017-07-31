@@ -20,7 +20,7 @@ import (
 
 var addConnChan chan *AppConnection
 var delConnChan chan *AppConnection
-var AppClientTable = map[uint64]map[string]*AppConnection{}
+var AppClientTable = map[uint64]map[string]map[string]*AppConnection{}
 var FenceIndex = uint64(0)
 
 var appServerChan chan *proto.AppMsgData
@@ -326,11 +326,20 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				for _, imei := range c.imeis {
 					subTable, ok := AppClientTable[imei]
 					if ok {
-						_, ok := subTable[c.user.GetAccessToken()]
+						connList, ok := subTable[c.user.GetAccessToken()]
 						if ok {
-							logging.Log("begin delete connection from AppClientTable")
-							delete(subTable, c.user.GetAccessToken())
-							logging.Log("connection deleted from AppClientTable")
+							if connList != nil && len(connList) > 0 {
+								for connID, connItem := range connList {
+									if c == connItem {
+										delete(connList, connID)
+										logging.Log("connection deleted from AppClientTable," + connID + ", " + (*c.conn).ID())
+									}
+								}
+							}
+
+							if len(connList) == 0{
+								delete(subTable, c.user.GetAccessToken())
+							}
 						} else {
 							logging.Log("will delete connection from appClientTable, but connection not found")
 						}
@@ -350,10 +359,11 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				for _, imei := range c.imeis {
 					_, ok := AppClientTable[imei]
 					if !ok {   //不存在，则首先创建新表，然后加入
-						AppClientTable[imei] = map[string]*AppConnection{}
+						AppClientTable[imei] = map[string]map[string]*AppConnection{}
+						AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
 					}
 
-					AppClientTable[imei][c.user.GetAccessToken()] = c
+					AppClientTable[imei][c.user.GetAccessToken()][(*c.conn).ID()] = c
 				}
 
 				logging.Log("after add conn:" + fmt.Sprint(AppClientTable))
@@ -399,16 +409,20 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 						break
 					}
 
-					c := getAppClientsByAccessToken(msg.Imei,  params.Params.AccessToken)
-					if c != nil {
-						result := proto.HttpAPIResult{ErrCode: 1, Data: proto.DeviceLocateNowSms}
-						appMsg := proto.AppMsgData{Cmd: proto.DeviceLocateNowAckCmdName,
-							Imei: msg.Imei, Data: proto.MakeStructToJson(&result)}
-						err =(*c.conn).EmitMessage([]byte(proto.MakeStructToJson(&appMsg)))
-						if err != nil {
-							logging.Log("send msg to app failed, " + err.Error())
-						}else{
-							logging.Log("send msg: " + fmt.Sprint(msg))
+					connList := getAppClientsByAccessToken(msg.Imei,  params.Params.AccessToken)
+					if connList != nil && len(connList) > 0 {
+						for _, c := range connList {
+							if c != nil {
+								result := proto.HttpAPIResult{ErrCode: 1, Data: proto.DeviceLocateNowSms}
+								appMsg := proto.AppMsgData{Cmd: proto.DeviceLocateNowAckCmdName,
+									Imei: msg.Imei, Data: proto.MakeStructToJson(&result)}
+								err =(*c.conn).EmitMessage([]byte(proto.MakeStructToJson(&appMsg)))
+								if err != nil {
+									logging.Log("send msg to app failed, " + err.Error())
+								}else{
+									logging.Log("send msg: " + fmt.Sprint(msg, c))
+								}
+							}
 						}
 					}
 
@@ -422,13 +436,22 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				subTable := getAppClientsByImei(msg)
 				if subTable != nil {
 					logging.Log(fmt.Sprint(msg.Imei, "app clients: ", subTable))
-					for _, c := range subTable{
-						data, err := json.Marshal(&msg)
-						err =(*c.conn).EmitMessage(data)
-						if err != nil {
-							logging.Log("send msg to app failed, " + err.Error())
-						}else{
-							logging.Log("send msg: " + fmt.Sprint(msg))
+					for _, connList := range subTable{
+						logging.Log(fmt.Sprint(msg.Imei, "app connlist: ", connList))
+						if connList != nil && len(connList) > 0 {
+							logging.Log(fmt.Sprint(msg.Imei, "app connlist len: ", len(connList)))
+							for _, c := range connList {
+								logging.Log(fmt.Sprint(msg.Imei, "app conn: ", c))
+								if c != nil {
+									data, err := json.Marshal(&msg)
+									err = (*c.conn).EmitMessage(data)
+									if err != nil {
+										logging.Log("send msg to app failed, " + err.Error())
+									} else {
+										logging.Log("send msg: " + fmt.Sprint(msg, c))
+									}
+								}
+							}
 						}
 					}
 				}
@@ -482,7 +505,7 @@ func OnClientConnected(conn websocket.Connection)  {
 	})
 }
 
-func getAppClientsByImei(msg *proto.AppMsgData)  map[string]*AppConnection {
+func getAppClientsByImei(msg *proto.AppMsgData)  map[string]map[string]*AppConnection {
 	subTable, ok := AppClientTable[msg.Imei]
 	if ok {
 		return subTable
@@ -550,10 +573,11 @@ func getAppClientsByImei(msg *proto.AppMsgData)  map[string]*AppConnection {
 			for _, imei := range c.imeis {
 				_, ok := AppClientTable[imei]
 				if !ok {   //不存在，则首先创建新表，然后加入
-					AppClientTable[imei] = map[string]*AppConnection{}
+					AppClientTable[imei] = map[string]map[string]*AppConnection{}
+					AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
 				}
 
-				AppClientTable[imei][c.user.GetAccessToken()] = c
+				AppClientTable[imei][c.user.GetAccessToken()][(*c.conn).ID()] = c
 			}
 
 			logging.Log("after add conn:" + fmt.Sprint(AppClientTable))
@@ -570,7 +594,7 @@ func getAppClientsByImei(msg *proto.AppMsgData)  map[string]*AppConnection {
 	}
 }
 
-func getAppClientsByAccessToken(imei uint64, accessToken string)  *AppConnection {
+func getAppClientsByAccessToken(imei uint64, accessToken string)  map[string]*AppConnection {
 	if imei == 0 || len(accessToken) == 0 {
 		logging.Log(fmt.Sprintf("bad input params for getAppClientsByAccessToken: %d, %s", imei, accessToken))
 		return nil
