@@ -361,6 +361,11 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 					if !ok {   //不存在，则首先创建新表，然后加入
 						AppClientTable[imei] = map[string]map[string]*AppConnection{}
 						AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
+					}else{
+						_, ok2 := AppClientTable[imei][c.user.GetAccessToken()]
+						if !ok2 {
+							AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
+						}
 					}
 
 					AppClientTable[imei][c.user.GetAccessToken()][(*c.conn).ID()] = c
@@ -575,6 +580,11 @@ func getAppClientsByImei(msg *proto.AppMsgData)  map[string]map[string]*AppConne
 				if !ok {   //不存在，则首先创建新表，然后加入
 					AppClientTable[imei] = map[string]map[string]*AppConnection{}
 					AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
+				}else{
+					_, ok2 := AppClientTable[imei][c.user.GetAccessToken()]
+					if !ok2 {
+						AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
+					}
 				}
 
 				AppClientTable[imei][c.user.GetAccessToken()][(*c.conn).ID()] = c
