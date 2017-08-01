@@ -564,6 +564,8 @@ func getAppClientsByImei(msg *proto.AppMsgData)  map[string]map[string]*AppConne
 			c.user.Logined = true
 			c.user.Name = msg.UserName
 
+			c.imeis = []uint64{}
+
 			for _, d := range devices.([]interface{}) {
 				device := d.(map[string]interface{})
 				imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)

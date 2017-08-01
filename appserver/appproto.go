@@ -294,6 +294,7 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 
 				//devicesLocationURL := "http://184.107.50.180:8012/GetMultiWatchData?systemno="
 				locations := []proto.LocationData{}
+				c.imeis = []uint64{}
 				for i, d := range devices.([]interface{}) {
 					device := d.(map[string]interface{})
 					imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
