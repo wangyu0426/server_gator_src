@@ -381,6 +381,7 @@ const (
 )
 
 var	ReloadEPOFileName 		= "epo"
+var	ReloadConfigFileName 	= "config"
 
 var	ModelFieldName 			= "Model"
 
@@ -725,7 +726,7 @@ func init()  {
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()
-	LoadEPOFromFile(false)
+	LoadEPOFromFile()
 	//utcNow := time.Now().UTC()
 	//iCurrentGPSHour := utc_to_gps_hour(utcNow.Year(), int(utcNow.Month()),utcNow.Day(), utcNow.Hour())
 	//segment := (uint32(iCurrentGPSHour) - StartGPSHour) / 6
@@ -840,25 +841,22 @@ func GetTimeZone(uiIP uint32) int32 {
 	return 0
 }
 
-func LoadEPOFromFile(reload bool) error {
-
+func LoadEPOFromFile() error {
 	mtk30,err := os.Open("./EPO/MTK30.EPO")
 	if err != nil {
-		if reload {
-			return err
+		fmt.Println("MTK30.EPO not found, will load from 36H.EPO")
+		err2 := ReloadEPO()
+		if err2 != nil {
+			fmt.Println("36H.EPO not found, " + err.Error())
+			os.Exit(-1)
 		}
-
-		panic(err)
 	}
 	defer mtk30.Close()
 
 	epo36h, err := os.OpenFile("./EPO/36H.EPO", os.O_CREATE | os.O_WRONLY | os.O_TRUNC, 0666)
 	if err != nil {
-		if reload {
-			return err
-		}
-
-		panic(err)
+		fmt.Println("36H.EPO not create, " + err.Error())
+		os.Exit(-1)
 	}
 	defer epo36h.Close()
 
@@ -883,6 +881,40 @@ func LoadEPOFromFile(reload bool) error {
 	EPOInfoList = tmpEPOInfoList
 	EpoInfoListLock.Unlock()
 
+	return nil
+}
+
+
+func ReloadEPO() error {
+	epo36h,err := os.Open("./EPO/36H.EPO")
+	if err != nil {
+		fmt.Println("reload epo failed to open epo file, ", err.Error())
+		return err
+	}
+
+	defer epo36h.Close()
+
+	tmpEPOInfoList := []*EPOInfo{}
+	tmpStartGPSHour := uint32(0)
+	hourBuf := make([]byte, 4)
+	epo36h.Read(hourBuf)
+	tmpStartGPSHour = binary.LittleEndian.Uint32(hourBuf)
+	tmpStartGPSHour &= 0x00FFFFFF
+	atomic.StoreUint32(&StartGPSHour, tmpStartGPSHour)
+	epo36h.Seek(0,  os.SEEK_SET)
+
+	for  i := 0; i < MTKEPO_DATA_ONETIME; i++ {
+		epoInfo := &EPOInfo{}
+		epoInfo.EPOBuf = make([]byte, MTKEPO_SV_NUMBER*MTKEPO_RECORD_SIZE)
+		tmpEPOInfoList = append(tmpEPOInfoList, epoInfo)
+		epo36h.Read(tmpEPOInfoList[i].EPOBuf)
+	}
+
+	EpoInfoListLock.Lock()
+	EPOInfoList = tmpEPOInfoList
+	EpoInfoListLock.Unlock()
+
+	fmt.Println(fmt.Sprintf("reload epo ok, StartGPSHour: %x", binary.BigEndian.Uint32(hourBuf)))
 	return nil
 }
 

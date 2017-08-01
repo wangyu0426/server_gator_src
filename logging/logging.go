@@ -119,6 +119,11 @@ func PanicLogAndExit(errmsg string){
 	panic("panic error cause exit")
 }
 
+func SendMailToDefaultReceiver(body string)  {
+	SendMail("38945787@qq.com", "38945787@qq.com",  "Go Server Msg", body, "",
+		"smtp.qq.com", 587, "38945787@qq.com", "dumaakzcswglbibe")
+}
+
 func SendMail(from, to, subject, text, attachmentFile, mailServer  string, mailPort int, user, password string)  {
 	m := gomail.NewMessage()
 	m.SetHeader("From", from)

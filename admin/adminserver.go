@@ -175,10 +175,16 @@ func AdminServerLoop(exitServerFunc func())  {
 
 		switch fileName {
 		case proto.ReloadEPOFileName:
-			err := proto.LoadEPOFromFile(true)
+			err := proto.ReloadEPO()
 			if err == nil {
 				result = "ok"
+			}else{
+				result = "reload epo failed: " + err.Error()
+				logging.Log(result)
+				logging.SendMailToDefaultReceiver(result)
 			}
+		case proto.ReloadConfigFileName:
+
 		default:
 		}
 
