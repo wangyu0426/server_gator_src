@@ -220,7 +220,9 @@ func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 		result.Minichat = append(result.Minichat, proto.GetChatListForApp(imeiUint64, params.UserName)...)
 
 		alarms := svrctx.QueryLocations(imeiUint64, svrctx.Get().PGPool, beginTime, endTime, false, true)
-		result.Alarms = append(result.Alarms, (*alarms)...)
+		if alarms != nil {
+			result.Alarms = append(result.Alarms, (*alarms)...)
+		}
 	}
 
 	//chat := proto.ChatInfo{}

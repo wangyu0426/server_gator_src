@@ -7,7 +7,6 @@ import (
 	"time"
 	"sync"
 	"gopkg.in/gomail.v2"
-	"bytes"
 )
 
 
@@ -110,7 +109,7 @@ func PanicLogAndExit(errmsg string){
 		return
 	}
 
-	errText := fmt.Sprint("get panic: ",  errmsg, ", ", err, ", ", string(PanicTrace(64)))
+	errText := fmt.Sprint("get panic: ",  errmsg, ", ", err, ", ", string(PanicTrace(128)))
 	Log(errText)
 
 	SendMail("38945787@qq.com", "38945787@qq.com",  "Go Server Panic", errText, "",
@@ -145,23 +144,27 @@ func SendMail(from, to, subject, text, attachmentFile, mailServer  string, mailP
 }
 
 func PanicTrace(kb int) []byte {
-	s := []byte("/src/runtime/panic.go")
-	e := []byte("/ngoroutine ")
-	line := []byte("/n")
-	stack := make([]byte, kb<<10) //4KB
-	length := runtime.Stack(stack, true)
-	start := bytes.Index(stack, s)
-	stack = stack[start:length]
-	start = bytes.Index(stack, line) + 1
-	stack = stack[start:]
-	end := bytes.LastIndex(stack, line)
-	if end != -1 {
-		stack = stack[:end]
-	}
-	end = bytes.Index(stack, e)
-	if end != -1 {
-		stack = stack[:end]
-	}
-	stack = bytes.TrimRight(stack, "/n")
+	//s := []byte("/src/runtime/panic.go")
+	//e := []byte("/ngoroutine ")
+	//line := []byte("/n")
+	//stack := make([]byte, kb * 1024)
+	//length := runtime.Stack(stack, true)
+	//start := bytes.Index(stack, s)
+	//stack = stack[start:length]
+	//start = bytes.Index(stack, line) + 1
+	//stack = stack[start:]
+	//end := bytes.LastIndex(stack, line)
+	//if end != -1 {
+	//	stack = stack[:end]
+	//}
+	//end = bytes.Index(stack, e)
+	//if end != -1 {
+	//	stack = stack[:end]
+	//}
+	//stack = bytes.TrimRight(stack, "/n")
+	//stack := make([]byte, kb * 1024)
+
+	stack := make([]byte, kb * 1024)
+	runtime.Stack(stack, true)
 	return stack
 }
