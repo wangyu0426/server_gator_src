@@ -849,6 +849,8 @@ func LoadEPOFromFile() error {
 		if err2 != nil {
 			fmt.Println("36H.EPO not found, " + err.Error())
 			os.Exit(-1)
+		}else{
+			return nil
 		}
 	}
 	defer mtk30.Close()
