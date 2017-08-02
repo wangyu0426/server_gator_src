@@ -933,7 +933,7 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 				logging.Log(fmt.Sprintf("send hide timer to [%d]:  %s", imei, string(msg.Data)))
 
 			default:
-				return nil
+				//return nil
 			}
 
 			msgList = append(msgList, &msg)
