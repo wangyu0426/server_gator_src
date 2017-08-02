@@ -225,12 +225,14 @@ type HeartbeatParams struct {
 	AccessToken string `json:"accessToken"`
 	Timestamp int64 `json:"timestamp"`
 	Devices []string `json:"devices"`
+	SelectedDevice string `json:"selectedDevice"`
 }
 
 type HeartbeatResult struct {
 	Timestamp string `json:"timestamp"`
 	Locations []LocationData`json:"locations"`
 	Minichat []ChatInfo`json:"minichat"`
+	Alarms []LocationData`json:"alarms"`
 }
 
 

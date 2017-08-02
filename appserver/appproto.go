@@ -201,15 +201,26 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 }
 
 func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
-	if params.AccessToken == "" {
+	if params.AccessToken == ""{
 		return true
 	}
 
 	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
-	for _, imei := range params.Devices {
-		imeiUint64 := proto.Str2Num(imei, 10)
+	if params.SelectedDevice == "" {
+		for _, imei := range params.Devices {
+			imeiUint64 := proto.Str2Num(imei, 10)
+			result.Locations = append(result.Locations, svrctx.GetDeviceData(imeiUint64, svrctx.Get().PGPool))
+			result.Minichat = append(result.Minichat, proto.GetChatListForApp(imeiUint64, params.UserName)...)
+		}
+	}else{
+		imeiUint64 := proto.Str2Num(params.SelectedDevice, 10)
+		endTime := uint64(params.Timestamp)
+		beginTime := endTime - endTime %1000000
 		result.Locations = append(result.Locations, svrctx.GetDeviceData(imeiUint64, svrctx.Get().PGPool))
 		result.Minichat = append(result.Minichat, proto.GetChatListForApp(imeiUint64, params.UserName)...)
+
+		alarms := svrctx.QueryLocations(imeiUint64, svrctx.Get().PGPool, beginTime, endTime, false, true)
+		result.Alarms = append(result.Alarms, (*alarms)...)
 	}
 
 	//chat := proto.ChatInfo{}
