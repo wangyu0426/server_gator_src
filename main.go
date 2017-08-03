@@ -1,6 +1,7 @@
 package main
 
 import (
+	"./monitor"
 	"./svrctx"
 	"./logging"
 	"./tcpserver"
@@ -9,6 +10,8 @@ import (
 )
 
 func main() {
+	monitor.PrintName()
+
 	defer logging.PanicLogAndExit("main: ")
 
 	//str := []byte("357593030571505")
