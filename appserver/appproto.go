@@ -681,6 +681,13 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 						}
 					}
 
+					for i, ava := range deviceInfoResult.ContactAvatar{
+						if len(ava) > 0 {
+							deviceInfoResult.ContactAvatar[i] = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName,
+								svrctx.Get().WSPort, svrctx.Get().HttpStaticURL + ava)
+						}
+					}
+
 					deviceInfoResult.FamilyNumber = params.MySimID
 					resultJson, _ := json.Marshal(&deviceInfoResult)
 					result.Data = string([]byte(resultJson))
@@ -1084,6 +1091,13 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 					if deviceInfo.Avatar[0] == '/'{
 						deviceInfoResult.Avatar = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort, svrctx.Get().HttpStaticURL +
 							deviceInfoResult.Avatar)
+					}
+				}
+
+				for i, ava := range deviceInfoResult.ContactAvatar{
+					if len(ava) > 0 {
+						deviceInfoResult.ContactAvatar[i] = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName,
+							svrctx.Get().WSPort, svrctx.Get().HttpStaticURL + ava)
 					}
 				}
 
