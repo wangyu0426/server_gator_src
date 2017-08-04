@@ -1915,9 +1915,13 @@ func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
 		if(blockIndex == (*appNewPhotoList)[0].Data.BlockCount) {
 			//确认完毕，删除该新头像通知信息
 			if len(*appNewPhotoList) > 1 {
+				logging.Log(fmt.Sprintf("%d AppNewPhotoList begin len: %d", service.imei, len(*appNewPhotoList)))
 				(*appNewPhotoList) = (*appNewPhotoList)[1:]
+				logging.Log(fmt.Sprintf("%d AppNewPhotoList end len: %d", service.imei, len(*appNewPhotoList)))
 			}else{
+				logging.Log(fmt.Sprintf("%d AppNewPhotoList begin len: %d", service.imei, len(*AppNewPhotoList[service.imei])))
 				AppNewPhotoList[service.imei] = &[]*PhotoSettingTask{}
+				logging.Log(fmt.Sprintf("%d AppNewPhotoList end len: %d", service.imei, len(*AppNewPhotoList[service.imei])))
 			}
 			logging.Log(fmt.Sprintf("[%d] block count %d is all finished", service.imei, blockIndex))
 		}else{
@@ -3384,10 +3388,14 @@ func AddPhotoData(imei uint64, photoData PhotoSettingInfo) {
 	AppNewPhotoListLock.Lock()
 	photoList, ok := AppNewPhotoList[imei]
 	if ok {
+		logging.Log(fmt.Sprintf("%d AppNewPhotoList begin len: %d", imei, len(*photoList)))
 		*photoList = append(*photoList, &photoTask)
+		logging.Log(fmt.Sprintf("%d AppNewPhotoList end len: %d", imei, len(*photoList)))
 	}else {
+		logging.Log(fmt.Sprintf("%d AppNewPhotoList begin len: %d", imei, len(*AppNewPhotoList[imei])))
 		AppNewPhotoList[imei] = &[]*PhotoSettingTask{}
 		*AppNewPhotoList[imei] = append(*AppNewPhotoList[imei], &photoTask)
+		logging.Log(fmt.Sprintf("%d AppNewPhotoList end len: %d", imei, len(*AppNewPhotoList[imei])))
 	}
 	AppNewPhotoListLock.Unlock()
 }

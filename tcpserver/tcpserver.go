@@ -702,6 +702,7 @@ func BackgroundCleanerLoop(serverCtx *svrctx.ServerContext) {
 		proto.AppNewPhotoListLock.Lock()
 		for imei, item := range proto.AppNewPhotoList{
 			if item != nil{
+				logging.Log(fmt.Sprintf("%d AppNewPhotoList begin len: %d", imei, len(*item)))
 				for _, subItem := range *item{
 					if subItem != nil {
 						timeout := (proto.NewMsgID() -  subItem.Info.CreateTime) / uint64(time.Second)
@@ -721,6 +722,8 @@ func BackgroundCleanerLoop(serverCtx *svrctx.ServerContext) {
 				if len(*item) == 0{
 					delete(proto.AppNewPhotoList, imei)
 				}
+
+				logging.Log(fmt.Sprintf("%d AppNewPhotoList end len: %d", imei, len(*item)))
 			}
 		}
 		proto.AppNewPhotoListLock.Unlock()
