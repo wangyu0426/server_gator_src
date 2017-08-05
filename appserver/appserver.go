@@ -72,12 +72,21 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	app.StaticWeb(svrctx.Get().HttpStaticURL, svrctx.Get().HttpStaticDir)
 
 	app.Get("/api/get-locations", func(ctx *iris.Context) {
-		systemno := ctx.FormValue("systemno")
-		imei := proto.Str2Num("3575" + systemno, 10)
+		systemno := proto.Str2Num(ctx.FormValue("systemno"), 10)
+		proto.SystemNo2ImeiMapLock.RLock()
+		imei, ok := proto.SystemNo2ImeiMap[systemno]
+		proto.SystemNo2ImeiMapLock.RUnlock()
+		if ok == false || imei == 0 {
+			logging.Log(fmt.Sprintf("bad imei for systemno %d ", systemno))
+			dataResult := proto.PhpQueryLocationsResult{Result: -1, ResultStr: "",  Systemno: systemno}
+			ctx.JSON(200, dataResult)
+			return
+		}
+
 		datatype := ctx.FormValue("datatype")
 		var locations *[]proto.LocationData
 		if datatype == "1"{
-			dataResult := proto.PhpQueryLocationsResult{Result: 0, ResultStr: "",  Systemno: proto.Str2Num(systemno, 10)}
+			dataResult := proto.PhpQueryLocationsResult{Result: 0, ResultStr: "",  Systemno: systemno}
 			data := svrctx.GetDeviceData(imei, svrctx.Get().PGPool)
 			dataResult.Data = append(dataResult.Data, data.DataTime)
 			dataResult.Data = append(dataResult.Data, uint64(data.Lat * 1000000))
@@ -91,7 +100,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			dataResult.Data = append(dataResult.Data, data.Accracy)
 			ctx.JSON(200, dataResult)
 		}else if(datatype == "2"){
-			dataResult := proto.PhpQueryLocationsResult{Result: 0, ResultStr: "",  Systemno: proto.Str2Num(systemno, 10)}
+			dataResult := proto.PhpQueryLocationsResult{Result: 0, ResultStr: "",  Systemno: systemno}
 			beginTime := proto.Str2Num("20" + ctx.FormValue("start"), 10)
 			endTime := proto.Str2Num("20" + ctx.FormValue("end"), 10)
 

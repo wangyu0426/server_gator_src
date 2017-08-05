@@ -616,6 +616,9 @@ var EPOInfoList []*EPOInfo
 var EpoInfoListLock = sync.RWMutex{}
 var DeviceInfoList = &map[uint64]*DeviceInfo{}
 var DeviceInfoListLock =  sync.RWMutex{}
+var SystemNo2ImeiMap = map[uint64]uint64{}
+var SystemNo2ImeiMapLock =  sync.RWMutex{}
+
 var company_blacklist = []string {
 	"UES",
 }
@@ -1056,6 +1059,8 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 	)
 
 	tmpDeviceInfoList := &map[uint64]*DeviceInfo{}
+	tmpSystemNo2ImeiMap := map[uint64]uint64{}
+
 	for rows.Next() {
 		deviceInfo := &DeviceInfo{}
 		err := rows.Scan(&IMEI, &OwnerName, &PhoneNumbers, &ContactAvatar, &TimeZone, &CountryCode, &Avatar, &SimID,
@@ -1088,6 +1093,8 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		deviceInfo.Company = parseUint8Array(Company)
 
 		(*tmpDeviceInfoList)[deviceInfo.Imei] = deviceInfo
+
+		tmpSystemNo2ImeiMap[deviceInfo.Imei % 100000000000] = deviceInfo.Imei
 	}
 
 	fmt.Println("deviceinfo list len: ", len(*tmpDeviceInfoList))
@@ -1095,6 +1102,11 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 	DeviceInfoListLock.Lock()
 	DeviceInfoList = tmpDeviceInfoList
 	DeviceInfoListLock.Unlock()
+
+	SystemNo2ImeiMapLock.Lock()
+	SystemNo2ImeiMap = tmpSystemNo2ImeiMap
+	SystemNo2ImeiMapLock.Unlock()
+
 	return true
 }
 
