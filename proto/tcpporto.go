@@ -460,15 +460,19 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		bufOffset++
 		cLocateTag := msg.Data[bufOffset]
 		bufOffset += 2
-		service.cur.OrigAlarm = msg.Data[bufOffset] - '0'
-		bufOffset++
 
-		if msg.Data[bufOffset] != ',' {
-			szAlarm := []byte{msg.Data[bufOffset - 1], msg.Data[bufOffset]}
-			alarm, _ := strconv.ParseUint(string(szAlarm), 16, 0)
-			service.cur.OrigAlarm = uint8(alarm)
+		//报警字段
+		alarmBuf := []byte{}
+		for msg.Data[bufOffset] != ',' {
+			alarmBuf = append(alarmBuf, msg.Data[bufOffset])
 			bufOffset++
 		}
+
+		if len(alarmBuf) > 0 {
+			service.cur.OrigAlarm = uint8(Str2Num(string(alarmBuf), 16))
+		}
+
+		fmt.Println(string(alarmBuf), service.cur.OrigAlarm)
 
 		service.cur.AlarmType = service.cur.OrigAlarm
 		//去掉手表上报的低电和设备脱离状态，由服务器计算是否报警
@@ -584,14 +588,19 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	}else if service.cmd == DRT_HEART_BEAT {
 		// heart beat
 		bufOffset++
-		service.cur.AlarmType = msg.Data[bufOffset] - '0'
-		bufOffset++
-		if msg.Data[bufOffset] != ',' {
-			service.cur.OrigAlarm = uint8(Str2Num(string(msg.Data[bufOffset - 1 : bufOffset + 1]), 16))
+
+		//报警字段
+		alarmBuf := []byte{}
+		for msg.Data[bufOffset] != ',' {
+			alarmBuf = append(alarmBuf, msg.Data[bufOffset])
 			bufOffset++
 		}
 
-		bufOffset++
+		if len(alarmBuf) > 0 {
+			service.cur.OrigAlarm = uint8(Str2Num(string(alarmBuf), 16))
+		}
+
+		fmt.Println(string(alarmBuf), service.cur.OrigAlarm)
 
 		service.cur.AlarmType = service.cur.OrigAlarm
 		//去掉手表上报的低电和设备脱离状态，由服务器计算是否报警

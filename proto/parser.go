@@ -727,7 +727,8 @@ func init()  {
 	//if oldtime == 0 || (curtime / 1000000 ==  oldtime / 1000000) {
 	//	cursteps += oldsteps
 	//}
-	//fmt.Println(cursteps)
+	//a := Str2Num("A", 16)
+	//fmt.Println(a)
 	//os.Exit(0)
 
 	LoadIPInfosFromFile()
