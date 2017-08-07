@@ -2536,44 +2536,44 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 
 	//在进行出入届计算之前，先做容错的处理，仅对上次有数据的情况
 	stCurPoint, stDstPoint := TPoint{}, TPoint{}
-	if service.old.DataTime > 0{
-		stCurPoint.Latitude = service.cur.Lat
-		stCurPoint.LongtiTude = service.cur.Lng
-		stDstPoint.Latitude = service.old.Lat
-		stDstPoint.LongtiTude = service.old.Lng
-		iDistance := service.GetDisTance(&stCurPoint, &stDstPoint)
-		if service.cur.LocateType == LBS_JIZHAN && service.old.LocateType == LBS_WIFI {
-			//如果上一次是WiFi定位，这一次是基站定位，并且距离不超过200米，则认为是智能定位，不更新位置
-			if iDistance <= 200 {
-				i64Time := service.cur.DataTime
-				service.cur = service.old
-				service.cur.DataTime = i64Time
-				service.cur.LocateType = LBS_SMARTLOCATION
-				service.getSameWifi = true
-				logging.Log(fmt.Sprintf("[%d] distance <= 200, it is the same wifi location", service.imei))
-				return true
-			}
-		}
-
-		if iDistance >= 1800 && service.cur.LocateType != LBS_GPS {//GPS数据是完全可能1分钟移动800米距离的，比如在外开车
-			iTotalMin := uint32(0)
-			if service.cur.DataTime >= service.old.DataTime {
-				iTotalMin = deltaMinutes(service.old.DataTime, service.cur.DataTime)
-			}
-
-			if  iDistance >= iTotalMin * 800 { //如果两次距离超过1800，并且1分钟内距离超过800，
-				// 则认为是数据异常跳跃，不更新位置
-				i64Time := service.cur.DataTime
-				service.cur = service.old
-				service.cur.DataTime = i64Time
-				service.cur.LocateType = LBS_SMARTLOCATION
-				service.getSameWifi = true
-				logging.Log(fmt.Sprintf("[%d] distance %d >= 1800, total delta minutes %d, no need update location",
-					service.imei, iDistance, iTotalMin))
-				return true
-			}
-		}
-	}
+	//if service.old.DataTime > 0{
+	//	stCurPoint.Latitude = service.cur.Lat
+	//	stCurPoint.LongtiTude = service.cur.Lng
+	//	stDstPoint.Latitude = service.old.Lat
+	//	stDstPoint.LongtiTude = service.old.Lng
+	//	iDistance := service.GetDisTance(&stCurPoint, &stDstPoint)
+	//	if service.cur.LocateType == LBS_JIZHAN && service.old.LocateType == LBS_WIFI {
+	//		//如果上一次是WiFi定位，这一次是基站定位，并且距离不超过200米，则认为是智能定位，不更新位置
+	//		if iDistance <= 200 {
+	//			i64Time := service.cur.DataTime
+	//			service.cur = service.old
+	//			service.cur.DataTime = i64Time
+	//			service.cur.LocateType = LBS_SMARTLOCATION
+	//			service.getSameWifi = true
+	//			logging.Log(fmt.Sprintf("[%d] distance <= 200, it is the same wifi location", service.imei))
+	//			return true
+	//		}
+	//	}
+	//
+	//	if iDistance >= 1800 && service.cur.LocateType != LBS_GPS {//GPS数据是完全可能1分钟移动800米距离的，比如在外开车
+	//		iTotalMin := uint32(0)
+	//		if service.cur.DataTime >= service.old.DataTime {
+	//			iTotalMin = deltaMinutes(service.old.DataTime, service.cur.DataTime)
+	//		}
+	//
+	//		if  iDistance >= iTotalMin * 800 { //如果两次距离超过1800，并且1分钟内距离超过800，
+	//			// 则认为是数据异常跳跃，不更新位置
+	//			i64Time := service.cur.DataTime
+	//			service.cur = service.old
+	//			service.cur.DataTime = i64Time
+	//			service.cur.LocateType = LBS_SMARTLOCATION
+	//			service.getSameWifi = true
+	//			logging.Log(fmt.Sprintf("[%d] distance %d >= 1800, total delta minutes %d, no need update location",
+	//				service.imei, iDistance, iTotalMin))
+	//			return true
+	//		}
+	//	}
+	//}
 
 
 	//第二步，计算WiFi入界（WiFi不需要报出界）
