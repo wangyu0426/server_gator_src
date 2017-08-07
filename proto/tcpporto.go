@@ -612,6 +612,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			service.cur.AlarmType |= uint8(ALARM_DEVICE_DETACHED)
 		}
 
+		bufOffset++
 		//steps
 		service.cur.Steps = Str2Num(string(msg.Data[bufOffset : bufOffset + 8]), 16)
 		bufOffset += 9
