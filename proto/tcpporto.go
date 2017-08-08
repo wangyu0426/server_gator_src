@@ -836,6 +836,8 @@ func makeHideTimerReplyMsgString(imei, id uint64) string {
 		for _, timer := range device.HideTimerList {
 			if len(timer.Begin) > 0{
 				body += fmt.Sprintf("%d,%s,%s,%d,",  timer.Enabled, timer.Begin[0:4], timer.End[0:4], timer.Days)
+			}else{
+				body += fmt.Sprintf("%d,%s,%s,%d,",  0, "0", "0", 0)
 			}
 		}
 	}
