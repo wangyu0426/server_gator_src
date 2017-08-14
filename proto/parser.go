@@ -224,7 +224,12 @@ type HeartbeatParams struct {
 	UserName string `json:"username"`
 	AccessToken string `json:"accessToken"`
 	Timestamp int64 `json:"timestamp"`
+	DeviceToken    string   `json:"deviceToken"`
+	UUID           string   `json:"uuid"`
 	Devices []string `json:"devices"`
+	FamilyNumbers []string `json:"familyNumbers"`
+	Platform  string `json:"platform"`
+	Language string `json:"language"`
 	SelectedDevice string `json:"selectedDevice"`
 }
 
@@ -336,6 +341,7 @@ type DeleteVoicesParams struct {
 	DeleteVoices []ChatInfo  `json:"deleteVoices"`
 }
 
+
 type IPInfo struct {
 	StartIP uint32
 	EndIP uint32
@@ -363,6 +369,7 @@ const (
 	ALARM_SOS = 2
 	ALARM_OUTZONE = 4
 	ALARM_BATTERYLOW = 8
+	ALARM_NEW_MINICHAT = uint8(16)
 	ALARM_DEVICE_DETACHED = 32
 )
 

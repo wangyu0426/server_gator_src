@@ -52,6 +52,7 @@ type RequestContext struct {
 	DeviceMinichatBaseUrl string
 	AndroidAppURL string
 	IOSAppURL string
+	APNSServerBaseURL string
 	Pgpool *pgx.ConnPool
 	MysqlPool *sql.DB
 	WritebackChan chan *MsgData
@@ -951,7 +952,34 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 				logging.Log(fmt.Sprintf("send hide timer to [%d]:  %s", imei, string(msg.Data)))
 
 			default:
-				//return nil
+				//if strings.Contains(setting.FieldName,  FenceFieldName) {
+				//	//(0035357593060571398AP27,3C:46:D8:27:2E:63,48:3C:0C:F5:56:48,0000000000000021)
+				//	body := fmt.Sprintf("%015dAP27,%s,%s,%016X)", imei,
+				//		info.SafeZoneList[0].Wifi.BSSID, info.SafeZoneList[1].Wifi.BSSID,
+				//		msg.Header.Header.ID)
+				//	msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				//
+				//	//if setting.Index == 1 || setting.Index == 2 {
+				//	//	DeviceInfoListLock.RLock()
+				//	//	info, ok := (*DeviceInfoList)[imei]
+				//	//	if ok && info != nil {
+				//	//		newFence := SafeZone{}
+				//	//		err := json.Unmarshal([]byte(setting.CurValue), &newFence)
+				//	//		if err == nil {
+				//	//			if info.SafeZoneList[setting.Index - 1].Wifi.BSSID != newFence.Wifi.BSSID {
+				//	//				//(0035357593060571398AP27,3C:46:D8:27:2E:63,48:3C:0C:F5:56:48,0000000000000021)
+				//	//				body := fmt.Sprintf("%015dAP27,%s,%s,%016X)", imei,
+				//	//					info.SafeZoneList[0].Wifi.BSSID, info.SafeZoneList[1].Wifi.BSSID,
+				//	//					msg.Header.Header.ID)
+				//	//				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				//	//			}
+				//	//		} else {
+				//	//			logging.Log(fmt.Sprintf("%d new fence bad json data %s", imei, setting.NewValue))
+				//	//		}
+				//	//	}
+				//	//	DeviceInfoListLock.RUnlock()
+				//	//}
+				//}
 			}
 
 			msgList = append(msgList, &msg)
@@ -1276,11 +1304,11 @@ func (service *GT06Service)  NotifyAppWithNewLocation() bool  {
 }
 
 func (service *GT06Service)  NotifyAppWithNewMinichat(chat ChatInfo) bool  {
-	return NotifyAppWithNewMinichat(service.imei, service.reqCtx.AppNotifyChan, chat)
+	return NotifyAppWithNewMinichat(service.reqCtx.APNSServerBaseURL, service.imei, service.reqCtx.AppNotifyChan, chat)
 }
 
 
-func NotifyAppWithNewMinichat(imei uint64, appNotifyChan chan *AppMsgData,  chat ChatInfo) bool  {
+func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan *AppMsgData,  chat ChatInfo) bool  {
 	result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
 
 	fmt.Println("heartbeat-ack: ", MakeStructToJson(result))
@@ -1290,6 +1318,22 @@ func NotifyAppWithNewMinichat(imei uint64, appNotifyChan chan *AppMsgData,  chat
 	appNotifyChan  <- &AppMsgData{Cmd: HearbeatAckCmdName,
 		Imei: imei,
 		Data: MakeStructToJson(result), Conn: nil}
+
+	if apiBaseURL != "" {
+		DeviceInfoListLock.RLock()
+		deviceInfo, ok := (*DeviceInfoList)[imei]
+		if ok && deviceInfo != nil {
+			ownerName := deviceInfo.OwnerName
+			if ownerName == "" {
+				ownerName = Num2Str(imei, 10)
+			}
+
+			PushNotificationToApp(apiBaseURL, imei, "",  ownerName, chat.DateTime, ALARM_NEW_MINICHAT, "")
+		}
+
+		DeviceInfoListLock.RUnlock()
+	}
+
 	return true
 }
 
@@ -2823,6 +2867,20 @@ func (service *GT06Service) NotifyAlarmMsg() bool {
 	//}
 	//
 	//logging.Log(fmt.Sprintf("[%d] read php notify api response:, %s", service.imei, body))
+
+	DeviceInfoListLock.RLock()
+	deviceInfo, ok := (*DeviceInfoList)[service.imei]
+	if ok && deviceInfo != nil {
+		ownerName := deviceInfo.OwnerName
+		if ownerName == "" {
+			ownerName = Num2Str(service.imei, 10)
+		}
+
+		PushNotificationToApp(service.reqCtx.APNSServerBaseURL, service.imei, "",  ownerName,
+			service.cur.DataTime, service.cur.AlarmType, service.cur.ZoneName)
+	}
+
+	DeviceInfoListLock.RUnlock()
 
 	return true
 }

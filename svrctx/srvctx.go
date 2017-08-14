@@ -38,6 +38,7 @@ type ServerContext struct {
 	HttpStaticDir string
 	HttpStaticAvatarDir string
 	HttpStaticMinichatDir string
+	APNSServerApiBase string
 	AcceptTimeout time.Duration
 	RecvTimeout   time.Duration
 	MaxDeviceIdleTimeSecs int

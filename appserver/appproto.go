@@ -205,6 +205,12 @@ func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 		return true
 	}
 
+	for i, imei := range params.Devices {
+		imeiUint64 := proto.Str2Num(imei, 10)
+		proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, params.FamilyNumbers[i],
+			params.UUID, params.DeviceToken, params.Platform, params.Language)
+	}
+
 	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
 	if params.SelectedDevice == "" {
 		for _, imei := range params.Devices {
@@ -996,6 +1002,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 
 func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams, isAddDevice bool,
 	familyNumber string) bool {
+	extraMsgNotifyDataList := []*proto.MsgData{}
 	isNeedNotifyDevice := make([]bool, len(params.Settings))
 	valulesIsString := make([]bool, len(params.Settings))
 	imei := proto.Str2Num(params.Imei, 10)
@@ -1024,11 +1031,48 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 		case proto.HideTimer1FieldName:
 		case proto.HideTimer2FieldName:
 		case proto.HideTimer3FieldName:
-			//上面都是需要通知手表更新设置的
+
+		//上面都是需要通知手表更新设置的
+		case proto.FenceFieldName:
+			isNeedNotifyDevice[i] = false
+			if setting.Index == 1 || setting.Index == 2{
+				proto.DeviceInfoListLock.RLock()
+				info, ok := (*proto.DeviceInfoList)[imei]
+				if ok && info != nil {
+					newFence := proto.SafeZone{}
+					err := json.Unmarshal([]byte(setting.NewValue), &newFence)
+					if err == nil {
+						if info.SafeZoneList[setting.Index - 1].Wifi.BSSID != newFence.Wifi.BSSID{
+							//isNeedNotifyDevice[i] = true
+							//(0035357593060571398AP27,3C:46:D8:27:2E:63,48:3C:0C:F5:56:48,0000000000000021)
+							msg := proto.MsgData{}
+							msg.Header.Header.Imei = imei
+							msg.Header.Header.ID = proto.NewMsgID()
+							msg.Header.Header.Status = 1
+
+							newBSSID0, newBSSID1 := info.SafeZoneList[0].Wifi.BSSID, info.SafeZoneList[1].Wifi.BSSID
+							if setting.Index == 1 {
+								newBSSID0 = newFence.Wifi.BSSID
+							}else if setting.Index == 2{
+								newBSSID1 = newFence.Wifi.BSSID
+							}
+
+							body := fmt.Sprintf("%015dAP27,%s,%s,%016X)", imei,
+								newBSSID0, newBSSID1,
+								msg.Header.Header.ID)
+							msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+							extraMsgNotifyDataList = append(extraMsgNotifyDataList, &msg)
+							logging.Log("update home or school wifi to device, " + string(msg.Data))
+						}
+					}else{
+						logging.Log(fmt.Sprintf("%d new fence bad json data %s", imei, setting.NewValue))
+					}
+				}
+				proto.DeviceInfoListLock.RUnlock()
+			}
 
 		case proto.CountryCodeFieldName:
 		case proto.SimIDFieldName:
-		case proto.FenceFieldName:
 		case proto.AvatarFieldName:
 			isNeedNotifyDevice[i] = false
 		default:
@@ -1061,6 +1105,10 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 
 				break
 			}
+		}
+
+		for _, extraMsgNotify := range extraMsgNotifyDataList  {
+			svrctx.Get().TcpServerChan <- extraMsgNotify
 		}
 	}
 

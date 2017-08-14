@@ -307,7 +307,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			proto.AddChatForApp(chat)
 
 			//这里应该通知APP，微聊列表有新的项
-			proto.NotifyAppWithNewMinichat(imeiUint64, appServerChan, chat)
+			proto.NotifyAppWithNewMinichat("", imeiUint64, appServerChan, chat)
 			//result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
 				//svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)
 

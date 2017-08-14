@@ -511,6 +511,7 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 					serverCtx.WSPort, serverCtx.HttpStaticURL + serverCtx.HttpStaticMinichatDir),
 				AndroidAppURL: serverCtx.AndroidAppURL,
 				IOSAppURL: serverCtx.IOSAppURL,
+				APNSServerBaseURL: serverCtx.APNSServerApiBase,
 				Pgpool: serverCtx.PGPool,
 				MysqlPool: serverCtx.MySQLPool,
 				WritebackChan: serverCtx.TcpServerChan,
