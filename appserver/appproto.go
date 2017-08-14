@@ -207,8 +207,13 @@ func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 
 	for i, imei := range params.Devices {
 		imeiUint64 := proto.Str2Num(imei, 10)
-		proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, params.FamilyNumbers[i],
-			params.UUID, params.DeviceToken, params.Platform, params.Language)
+		if params.FamilyNumbers == nil || len(params.FamilyNumbers) < (i + 1) {
+			proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, "",
+				params.UUID, params.DeviceToken, params.Platform, params.Language)
+		}else{
+			proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, params.FamilyNumbers[i],
+				params.UUID, params.DeviceToken, params.Platform, params.Language)
+		}
 	}
 
 	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
