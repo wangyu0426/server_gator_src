@@ -240,7 +240,7 @@ func AdminServerLoop(exitServerFunc func())  {
 		newValue := in.Args[2]
 		result := "failed"
 
-		proto.DeviceInfoListLock.RLock()
+		proto.DeviceInfoListLock.Lock()
 		device, ok := (*proto.DeviceInfoList)[imei]
 		if ok {
 			switch fieldName {
@@ -254,9 +254,17 @@ func AdminServerLoop(exitServerFunc func())  {
 					}
 					result = "ok"
 				}
+			case proto.RedirectServerFieldName:
+				if newValue == "1" {
+					device.RedirectServer = true
+					result = "ok"
+				}else if newValue == "0" {
+					device.RedirectServer = false
+					result = "ok"
+				}
 			}
 		}
-		proto.DeviceInfoListLock.RUnlock()
+		proto.DeviceInfoListLock.Unlock()
 
 		if ok == false {
 			if fieldName == proto.ModelFieldName {
