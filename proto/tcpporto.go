@@ -368,15 +368,6 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	//logging.Log("Get Input Msg: " + string(msg.Data))
 	logging.Log(fmt.Sprintf("imei: %d cmd: %s; go routines: %d", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd), runtime.NumGoroutine()))
 
-	DeviceInfoListLock.RLock()
-	_, ok := (*DeviceInfoList)[msg.Header.Header.Imei]
-	if ok == false {
-		DeviceInfoListLock.RUnlock()
-		logging.Log(fmt.Sprintf("invalid deivce, imei: %d cmd: %s", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd)))
-		return false
-	}
-	DeviceInfoListLock.RUnlock()
-
 	ret := true
 	bufOffset := uint32(0)
 	service.msgSize = uint64(msg.Header.Header.Size)
@@ -385,12 +376,33 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 
 	service.cur.Imei = service.imei
 
-	service.GetWatchDataInfo(service.imei)
-
 	if IsDeviceInCompanyBlacklist(service.imei) {
 		logging.Log(fmt.Sprintf("device %d  is in the company black list", service.imei))
 		return false
 	}
+
+	DeviceInfoListLock.RLock()
+	deviceInfo, ok := (*DeviceInfoList)[msg.Header.Header.Imei]
+	if ok == false {
+		DeviceInfoListLock.RUnlock()
+		logging.Log(fmt.Sprintf("invalid deivce, imei: %d cmd: %s", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd)))
+		return false
+	}else{
+		if deviceInfo != nil  && deviceInfo.CompanyHost != "" && deviceInfo.CompanyPort != 0{
+			id := makeId()
+			resp := &ResponseItem{CMD_AP01, service.makeReplyMsg(false,
+				service.makeResetHostPortReplyMsg(deviceInfo.CompanyHost, deviceInfo.CompanyPort, id), id)}
+			service.rspList = append(service.rspList, resp)
+
+			DeviceInfoListLock.RUnlock()
+			logging.Log(fmt.Sprintf("%d reset server to host:port %s:%d", msg.Header.Header.Imei,
+				deviceInfo.CompanyHost, deviceInfo.CompanyPort))
+			return true
+		}
+	}
+	DeviceInfoListLock.RUnlock()
+
+	service.GetWatchDataInfo(service.imei)
 
 	if service.cmd == DRT_SET_IP_PORT_ACK  ||       // 同BP01，手表设置服务器IP端口的ACK
 		service.cmd == DRT_SET_APN_ACK     ||        // 同BP02，手表设置APN的ACK
@@ -1050,6 +1062,14 @@ func (service *GT06Service)makeSendLocationReplyMsg() ([]byte, uint64) {
 func (service *GT06Service)makeDeviceLoginReplyMsg() []byte {
 	//(0019357593060153353AP31)
 	body := fmt.Sprintf("%015dAP31)", service.imei)
+	size := fmt.Sprintf("(%04X", 5 + len(body))
+
+	return []byte(size + body)
+}
+
+func (service *GT06Service)makeResetHostPortReplyMsg(host string, port int, id uint64) ([]byte) {
+	//(003B357593060571398AP01221.18.79.110#123,0000000000000001)
+	body := fmt.Sprintf("%015dAP01%s#%d,%016X)", service.imei, host, port, id)
 	size := fmt.Sprintf("(%04X", 5 + len(body))
 
 	return []byte(size + body)
