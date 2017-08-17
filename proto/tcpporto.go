@@ -1274,7 +1274,7 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 
 	service.CountSteps()
 
-	if service.cur.AlarmType != 0 {
+	if service.cur.AlarmType & ALARM_INZONE  != 0 || service.cur.AlarmType & ALARM_OUTZONE  != 0 {
 		service.cur.LastAlarmType = service.cur.AlarmType
 		if service.cur.ZoneIndex >= 0 {
 			service.cur.LastZoneIndex = service.cur.ZoneIndex
