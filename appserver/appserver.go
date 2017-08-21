@@ -245,7 +245,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)//timestampString
 			chat.FileID = proto.Str2Num(timestampString, 10)
 			if len(ctx.FormValue("timestamp")) == 14 {
-				chat.DateTime = proto.Str2Num( ctx.FormValue("timestamp")[2:12], 10)
+				chat.DateTime = proto.Str2Num( ctx.FormValue("timestamp")[2:14], 10)
 			}else{
 				chat.DateTime = proto.Str2Num(timestampString[0:12], 10)
 			}
