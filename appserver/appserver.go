@@ -244,7 +244,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			chat.Content = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
 				svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)//timestampString
 			chat.FileID = proto.Str2Num(timestampString, 10)
-			chat.DateTime = proto.Str2Num(timestampString[0:12], 10)
+			chat.DateTime = proto.Str2Num( ctx.FormValue("timestamp"), 10) //timestampString[0:12], 10)
 
 			args := fmt.Sprintf("-i %s -acodec amr_nb -ab 3.2k -ar 8000 %s", filePath, fileAmrPath)
 			err9, _ := proto.ExecCmd("ffmpeg",  strings.Split(args, " ")...)
