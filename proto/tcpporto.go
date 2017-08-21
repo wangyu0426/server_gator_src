@@ -2103,7 +2103,7 @@ func (service *GT06Service) ProcessRspChat() bool {
 	if service.reqCtx.GetChatDataFunc != nil {
 		chatData := service.reqCtx.GetChatDataFunc(service.imei, 0)
 		if len(chatData) > 0 {
-			//voiceFileName :=fmt.Sprintf("/usr/share/nginx/html/tracker/web/upload/minichat/app/%d/%s.amr",
+			//voiceFileName :=fmt.Sprintf("/usr/share/nginx/html/web/upload/minichat/app/%d/%s.amr",
 			//	service.imei, chatData[0].Content)
 			voiceFileName :=fmt.Sprintf("%s%d/%d.amr", service.reqCtx.MinichatUploadDir,
 				service.imei, chatData[0].FileID)
@@ -2863,7 +2863,7 @@ func (service *GT06Service) UpdateWatchBattery() bool {
 
 func (service *GT06Service) NotifyAlarmMsg() bool {
 	//strRequestBody := "r=app/auth/alarm&"
-	//strReqURL := "http://service.gatorcn.com/tracker/web/index.php"
+	//strReqURL := "http://service.gatorcn.com/web/index.php"
 	//value := fmt.Sprintf("systemno=%d&data=%d,%d,%d,%d,%d,%d,%d,%d,%s,%s",
 	//	service.imei % 100000000000, service.cur.DataTime, int(service.cur.Lat * 1000000), int(service.cur.Lng * 1000000),
 	//	service.cur.Steps, service.cur.Battery, service.cur.AlarmType, service.cur.ReadFlag,

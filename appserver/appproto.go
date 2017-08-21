@@ -262,9 +262,9 @@ func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 }
 
 func login(c *AppConnection, username, password string, isRegister bool) bool {
-	urlRequest := "http://127.0.0.1/tracker/web/index.php?r=app/auth/"
+	urlRequest := "http://127.0.0.1/web/index.php?r=app/auth/"
 	if svrctx.Get().IsDebugLocal {
-		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+		urlRequest = "http://120.25.214.188/web/index.php?r=app/auth/"
 	}
 	reqType := "login"
 	if isRegister {
@@ -403,9 +403,9 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 
 //忘记密码，通过服务器重设秘密
 func resetPassword(c *AppConnection, username string) bool {
-	urlRequest := "http://127.0.0.1/tracker/web/index.php?r=app/auth/"
+	urlRequest := "http://127.0.0.1/web/index.php?r=app/auth/"
 	if svrctx.Get().IsDebugLocal {
-		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+		urlRequest = "http://120.25.214.188/web/index.php?r=app/auth/"
 	}
 
 	reqType := "reset"
@@ -435,9 +435,9 @@ func resetPassword(c *AppConnection, username string) bool {
 
 //有旧密码，重设新密码
 func modifyPassword(c *AppConnection, username, accessToken, oldPasswd, newPasswd  string) bool {
-	requesetURL := "http://127.0.0.1/tracker/web/index.php?r=app/service/modpwd&access-token=" + accessToken
+	requesetURL := "http://127.0.0.1/web/index.php?r=app/service/modpwd&access-token=" + accessToken
 	if svrctx.Get().IsDebugLocal {
-		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/modpwd&access-token=" + accessToken
+		requesetURL = "http://120.25.214.188/web/index.php?r=app/service/modpwd&access-token=" + accessToken
 	}
 
 	logging.Log("url: " + requesetURL)
@@ -463,9 +463,9 @@ func modifyPassword(c *AppConnection, username, accessToken, oldPasswd, newPassw
 
 
 func handleFeedback(c *AppConnection, username, accessToken, feedback string) bool {
-	requesetURL := "http://127.0.0.1/tracker/web/index.php?r=app/service/feedback&access-token=" + accessToken
+	requesetURL := "http://127.0.0.1/web/index.php?r=app/service/feedback&access-token=" + accessToken
 	if svrctx.Get().IsDebugLocal {
-		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/feedback&access-token=" + accessToken
+		requesetURL = "http://120.25.214.188/web/index.php?r=app/service/feedback&access-token=" + accessToken
 	}
 
 	logging.Log("url: " + requesetURL)
@@ -491,7 +491,7 @@ func handleFeedback(c *AppConnection, username, accessToken, feedback string) bo
 
 
 func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceBaseParams) bool {
-	//url := fmt.Sprintf("http://service.gatorcn.com/tracker/web/index.php?r=app/service/verify-code&SystemNo=%s&access-token=%s",
+	//url := fmt.Sprintf("http://service.gatorcn.com/web/index.php?r=app/service/verify-code&SystemNo=%s&access-token=%s",
 	//	string(params.Imei[4: ]), params.AccessToken)
 	//logging.Log("get verify code url: " + url)
 	//resp, err := http.Get(url)
