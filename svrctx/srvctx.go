@@ -336,6 +336,7 @@ func AddChatData(imei uint64, chatData proto.ChatInfo) {
 	}else {
 		proto.AppSendChatList[imei] = &[]*proto.ChatTask{}
 		*proto.AppSendChatList[imei] = append(*proto.AppSendChatList[imei], &chatTask)
+		logging.Log(fmt.Sprintf("%d after append AppSendChatList len: %d", imei, len(*proto.AppSendChatList[imei])))
 	}
 	proto.AppSendChatListLock.Unlock()
 

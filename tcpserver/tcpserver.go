@@ -660,12 +660,14 @@ func BackgroundCleanerLoop(serverCtx *svrctx.ServerContext) {
 								imei, timeout / 3600))
 						}else{
 							tempChatTaskList = append(tempChatTaskList, subItem)
+							logging.Log(fmt.Sprintf("%d after append tempChatTaskList(AppSendChatList) len: %d", imei, len(tempChatTaskList)))
 						}
 					}
 				}
 
 				if len(tempChatTaskList) > 0 {
 					proto.AppSendChatList[imei] = &tempChatTaskList
+					logging.Log(fmt.Sprintf("%d after append AppSendChatList len: %d", imei, len(*proto.AppSendChatList[imei])))
 				}
 
 				if len(*item) == 0{
