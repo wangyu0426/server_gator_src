@@ -6,6 +6,7 @@ import (
 	"strings"
 	"../logging"
 	"io"
+	"fmt"
 )
 
 type reportJSONData struct {
@@ -34,6 +35,7 @@ type pushJSON struct {
 func ReportDevieeToken(apiBaseURL string, imei uint64, familyNumber, uuid, deviceToken, platform, lang  string )  {
 	urlRequest := apiBaseURL + "/report"
 	reportInfo := reportJSON{Imei: imei, UUID: uuid, Data: reportJSONData{familyNumber, deviceToken, platform, lang}}
+	logging.Log(fmt.Sprintf("%d report device token: %s", MakeStructToJson(&reportInfo)))
 	reader := strings.NewReader(MakeStructToJson(&reportInfo))
 	requestAPNS(urlRequest, imei, reader)
 }
@@ -43,6 +45,7 @@ func PushNotificationToApp(apiBaseURL string, imei uint64, familyNumber,  ownerN
 	alarmType uint8, zoneName string)  {
 	urlRequest := apiBaseURL + "/push"
 	pushInfo := pushJSON{imei, familyNumber, ownerName, datatime, alarmType, zoneName}
+	logging.Log(fmt.Sprintf("%d push notification: %s", MakeStructToJson(&pushInfo)))
 	reader := strings.NewReader(MakeStructToJson(&pushInfo))
 	requestAPNS(urlRequest, imei, reader)
 }
