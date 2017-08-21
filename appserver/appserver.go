@@ -633,6 +633,9 @@ func GetLocationsByURL(ctx *iris.Context) {
 
 				dataResult.Data = append(dataResult.Data, dataItem)
 			}
+		}else{
+			dataItem := []interface{}{}
+			dataResult.Data = append(dataResult.Data, dataItem)
 		}
 
 		ctx.JSON(200, dataResult)
