@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 	"encoding/json"
+	"../logging"
 )
 
 const (
@@ -907,7 +908,7 @@ func LoadEPOFromFile() error {
 func ReloadEPO() error {
 	epo36h,err := os.Open("./EPO/36H.EPO")
 	if err != nil {
-		fmt.Println("reload epo failed to open epo file, ", err.Error())
+		logging.Log(fmt.Sprint("reload epo failed to open epo file, ", err.Error()))
 		return err
 	}
 
@@ -933,7 +934,7 @@ func ReloadEPO() error {
 	EPOInfoList = tmpEPOInfoList
 	EpoInfoListLock.Unlock()
 
-	fmt.Println(fmt.Sprintf("reload epo ok, StartGPSHour: %x", binary.BigEndian.Uint32(hourBuf)))
+	logging.Log(fmt.Sprint(fmt.Sprintf("reload epo ok, StartGPSHour: %x", binary.BigEndian.Uint32(hourBuf))))
 	return nil
 }
 
