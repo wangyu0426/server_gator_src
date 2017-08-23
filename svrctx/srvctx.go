@@ -76,7 +76,7 @@ type ServerContext struct {
 var serverCtx ServerContext
 
 var DeviceTable = map[uint64]*proto.DeviceCache{}
-var DeviceTableLock = &sync.RWMutex{}
+var DeviceTableLock = &sync.Mutex{}
 
 func init()  {
 	fmt.Println("server contextinit...")
@@ -226,7 +226,7 @@ func Get() *ServerContext {
 
 func GetChatData(imei uint64, index int)  []proto.ChatInfo {
 	chatData := []proto.ChatInfo{}
-	proto.AppSendChatListLock.RLock()
+	proto.AppSendChatListLock.Lock()
 	chatList, ok := proto.AppSendChatList[imei]
 	if ok {
 		if len(*chatList) > 0 {
@@ -241,14 +241,14 @@ func GetChatData(imei uint64, index int)  []proto.ChatInfo {
 			}
 		}
 	}
-	proto.AppSendChatListLock.RUnlock()
+	proto.AppSendChatListLock.Unlock()
 
 	return chatData
 }
 
 func GetPhotoData(imei uint64, index int)  []proto.PhotoSettingInfo {
 	photosData := []proto.PhotoSettingInfo{}
-	proto.AppNewPhotoListLock.RLock()
+	proto.AppNewPhotoListLock.Lock()
 	photoList, ok := proto.AppNewPhotoList[imei]
 	if ok {
 		if len(*photoList) > 0 {
@@ -263,14 +263,14 @@ func GetPhotoData(imei uint64, index int)  []proto.PhotoSettingInfo {
 			}
 		}
 	}
-	proto.AppNewPhotoListLock.RUnlock()
+	proto.AppNewPhotoListLock.Unlock()
 
 	return photosData
 }
 
 func IsPhoneNumberInFamilyList(imei uint64, phone string) bool {
 	isInvalid := false
-	proto.DeviceInfoListLock.RLock()
+	proto.DeviceInfoListLock.Lock()
 	device, ok := (*proto.DeviceInfoList)[imei]
 	if ok && device != nil {
 		for _, member := range device.Family{
@@ -283,7 +283,7 @@ func IsPhoneNumberInFamilyList(imei uint64, phone string) bool {
 	}else{
 		logging.Log(fmt.Sprintf("[%d] not found phone %s", imei, phone))
 	}
-	proto.DeviceInfoListLock.RUnlock()
+	proto.DeviceInfoListLock.Unlock()
 
 	return isInvalid
 }
@@ -346,14 +346,14 @@ func AddChatData(imei uint64, chatData proto.ChatInfo) {
 func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 	isQueryDB := false
 	deviceData := proto.LocationData{Imei: imei}
-	DeviceTableLock.RLock()
+	DeviceTableLock.Lock()
 	device, ok := DeviceTable[imei]
 	if ok {
 		deviceData = device.CurrentLocation
 	}else {
 		isQueryDB = true
 	}
-	DeviceTableLock.RUnlock()
+	DeviceTableLock.Unlock()
 
 	if isQueryDB == false {
 		deviceData.Imei = imei

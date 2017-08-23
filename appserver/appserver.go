@@ -590,9 +590,9 @@ func getAppClientsByAccessToken(imei uint64, accessToken string)  map[string]*Ap
 
 func GetLocationsByURL(ctx *iris.Context) {
 	systemno := proto.Str2Num(ctx.FormValue("systemno"), 10)
-	proto.SystemNo2ImeiMapLock.RLock()
+	proto.SystemNo2ImeiMapLock.Lock()
 	imei, ok := proto.SystemNo2ImeiMap[systemno]
-	proto.SystemNo2ImeiMapLock.RUnlock()
+	proto.SystemNo2ImeiMapLock.Unlock()
 	if ok == false || imei == 0 {
 		logging.Log(fmt.Sprintf("bad imei for systemno %d ", systemno))
 		dataResult := proto.PhpQueryLocationsResult{Result: -1, ResultStr: "",  Systemno: systemno}

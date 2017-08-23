@@ -207,7 +207,7 @@ func AdminServerLoop(exitServerFunc func())  {
 		fieldName := in.Args[1]
 		result := "nil"
 
-		proto.DeviceInfoListLock.RLock()
+		proto.DeviceInfoListLock.Lock()
 		device, ok := (*proto.DeviceInfoList)[imei]
 		if ok {
 			switch fieldName {
@@ -219,7 +219,7 @@ func AdminServerLoop(exitServerFunc func())  {
 				result = proto.MakeStructToJson(device)
 			}
 		}
-		proto.DeviceInfoListLock.RUnlock()
+		proto.DeviceInfoListLock.Unlock()
 		out.WriteInlineString(result)
 		return nil
 	})

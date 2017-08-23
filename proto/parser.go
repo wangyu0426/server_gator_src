@@ -622,14 +622,14 @@ type WatchStatus struct {
 
 var offsets = []uint8{2, 2, 1, 1, 2, 8, 8, 4, 4, 4, 4}
 var IPInfoList []*IPInfo
-var ipinfoListLock = sync.RWMutex{}
+var ipinfoListLock = sync.Mutex{}
 var StartGPSHour uint32
 var EPOInfoList []*EPOInfo
-var EpoInfoListLock = sync.RWMutex{}
+var EpoInfoListLock = sync.Mutex{}
 var DeviceInfoList = &map[uint64]*DeviceInfo{}
-var DeviceInfoListLock =  sync.RWMutex{}
+var DeviceInfoListLock =  sync.Mutex{}
 var SystemNo2ImeiMap = map[uint64]uint64{}
-var SystemNo2ImeiMapLock =  sync.RWMutex{}
+var SystemNo2ImeiMapLock =  sync.Mutex{}
 
 var company_blacklist = []string {
 	"UES",
@@ -821,8 +821,8 @@ func LoadIPInfosFromFile()  {
 }
 
 func GetTimeZone(uiIP uint32) int32 {
-	ipinfoListLock.RLock()
-	defer ipinfoListLock.RUnlock()
+	ipinfoListLock.Lock()
+	defer ipinfoListLock.Unlock()
 
 	uiStartIP := IPInfoList[0].StartIP
 	uiEndIP := IPInfoList[len(IPInfoList) - 1].EndIP
@@ -1435,8 +1435,8 @@ func Decode(data []byte)  (*MsgData) {
 }
 
 func IsDeviceInCompanyBlacklist(imei uint64) bool{
-	DeviceInfoListLock.RLock()
-	defer DeviceInfoListLock.RUnlock()
+	DeviceInfoListLock.Lock()
+	defer DeviceInfoListLock.Unlock()
 
 	deviceInfo, ok := (*DeviceInfoList)[imei]
 	if ok {

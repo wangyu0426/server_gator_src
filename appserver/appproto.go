@@ -336,7 +336,7 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 					//json.Unmarshal([]byte(proto.MakeStructToJson(d)), &deviceInfoResult)
 					//fmt.Println("deviceinfoResult: ", deviceInfoResult)
 
-					proto.DeviceInfoListLock.RLock()
+					proto.DeviceInfoListLock.Lock()
 					deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 					if ok && deviceInfo != nil {
 						deviceInfoResult = proto.MakeDeviceInfoResult(deviceInfo)
@@ -357,7 +357,7 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 						loginData["devices"].([]interface{})[i] = deviceInfoResult
 						fmt.Println("deviceinfoResult: ", proto.MakeStructToJson(&deviceInfoResult))
 					}
-					proto.DeviceInfoListLock.RUnlock()
+					proto.DeviceInfoListLock.Unlock()
 				}
 
 				jsonLocations, _ := json.Marshal(locations)
@@ -514,12 +514,12 @@ func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceBaseParams) bool 
 	imei, verifyCode := proto.Str2Num(params.Imei, 10), ""
 	isAdmin, _,_,_ := queryIsAdmin(params.Imei, params.UserName)
 	if isAdmin {
-		proto.DeviceInfoListLock.RLock()
+		proto.DeviceInfoListLock.Lock()
 		deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 		if ok && deviceInfo != nil {
 			verifyCode = deviceInfo.VerifyCode
 		}
-		proto.DeviceInfoListLock.RUnlock()
+		proto.DeviceInfoListLock.Unlock()
 	}
 
 	appServerChan <- &proto.AppMsgData{Cmd: proto.VerifyCodeAckCmdName, Imei: imei,
@@ -584,16 +584,16 @@ func queryIsAdmin(imei, userName string) (bool, bool, string, error) {
 func getDeviceInfoByImei(c *AppConnection, params *proto.DeviceAddParams) bool {
 	deviceInfoResult := proto.DeviceInfo{}
 	imei := proto.Str2Num(params.Imei, 10)
-	proto.DeviceInfoListLock.RLock()
+	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 	if ok && deviceInfo != nil {
 		deviceInfoResult = *deviceInfo
 	}else{
-		proto.DeviceInfoListLock.RUnlock()
+		proto.DeviceInfoListLock.Unlock()
 		logging.Log(params.Imei + "  imei not found")
 		return false
 	}
-	proto.DeviceInfoListLock.RUnlock()
+	proto.DeviceInfoListLock.Unlock()
 
 	deviceInfoResult.VerifyCode = ""
 
@@ -617,14 +617,14 @@ func getDeviceInfoByImei(c *AppConnection, params *proto.DeviceAddParams) bool {
 
 func checkVerifyCode(imei, code string) bool {
 	matched := false
-	proto.DeviceInfoListLock.RLock()
+	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[proto.Str2Num(imei, 10)]
 	if ok && deviceInfo != nil {
 		matched = deviceInfo.VerifyCode == code
 	}else{
 		matched = true
 	}
-	proto.DeviceInfoListLock.RUnlock()
+	proto.DeviceInfoListLock.Unlock()
 
 	return matched
 }
@@ -678,7 +678,7 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 				result.ErrCode = -2
 				result.ErrMsg = "the device was added duplicately"
 
-				proto.DeviceInfoListLock.RLock()
+				proto.DeviceInfoListLock.Lock()
 				deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 				if ok && deviceInfo != nil {
 					deviceInfoResult := proto.MakeDeviceInfoResult(deviceInfo)
@@ -703,7 +703,7 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 					resultJson, _ := json.Marshal(&deviceInfoResult)
 					result.Data = string([]byte(resultJson))
 				}
-				proto.DeviceInfoListLock.RUnlock()
+				proto.DeviceInfoListLock.Unlock()
 			}else{
 				strSqlUpdateDeviceInfo := ""
 				isFound := false
@@ -1041,7 +1041,7 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 		case proto.FenceFieldName:
 			isNeedNotifyDevice[i] = false
 			if setting.Index == 1 || setting.Index == 2{
-				proto.DeviceInfoListLock.RLock()
+				proto.DeviceInfoListLock.Lock()
 				info, ok := (*proto.DeviceInfoList)[imei]
 				if ok && info != nil {
 					newFence := proto.SafeZone{}
@@ -1073,7 +1073,7 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 						logging.Log(fmt.Sprintf("%d new fence bad json data %s", imei, setting.NewValue))
 					}
 				}
-				proto.DeviceInfoListLock.RUnlock()
+				proto.DeviceInfoListLock.Unlock()
 			}
 
 		case proto.CountryCodeFieldName:
@@ -1133,7 +1133,7 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 		//settingResultJson := fmt.Sprintf("{\"count\": \"%d\", %s}", len(settingResult.Settings), concatStr)
 		//result.Data = string(base64Encode([]byte(settingResultJson)))
 		if isAddDevice{
-			proto.DeviceInfoListLock.RLock()
+			proto.DeviceInfoListLock.Lock()
 			deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 			if ok && deviceInfo != nil {
 				deviceInfoResult := proto.MakeDeviceInfoResult(deviceInfo)
@@ -1158,7 +1158,7 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 				resultJson, _ := json.Marshal(&deviceInfoResult)
 				result.Data = string([]byte(resultJson))
 			}
-			proto.DeviceInfoListLock.RUnlock()
+			proto.DeviceInfoListLock.Unlock()
 		}else{
 			settingResult := proto.DeviceSettingResult{Settings: params.Settings}
 			settingResultJson, _ := json.Marshal(settingResult)

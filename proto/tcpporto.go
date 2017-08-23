@@ -255,22 +255,22 @@ const BASE_TITUDE  =1
 const EARTH_RADIUS = 6378.137
 
 var DeviceChatTaskTable = map[uint64]map[uint64]*ChatTask{}
-var DeviceChatTaskTableLock = &sync.RWMutex{}
+var DeviceChatTaskTableLock = &sync.Mutex{}
 
 var EPOTaskTable = map[uint64]*DataBlock{}
-var EPOTaskTableLock = &sync.RWMutex{}
+var EPOTaskTableLock = &sync.Mutex{}
 
 var AppSendChatList = map[uint64]*[]*ChatTask{}
-var AppSendChatListLock = &sync.RWMutex{}
+var AppSendChatListLock = &sync.Mutex{}
 
 var AppChatList = map[uint64]map[uint64]ChatInfo{}
-var AppChatListLock = &sync.RWMutex{}
+var AppChatListLock = &sync.Mutex{}
 
 var AppNewPhotoList = map[uint64]*[]*PhotoSettingTask{}
-var AppNewPhotoListLock = &sync.RWMutex{}
+var AppNewPhotoListLock = &sync.Mutex{}
 
 var AppNewPhotoPendingList = map[uint64]*[]*PhotoSettingTask{}
-var AppNewPhotoPendingListLock = &sync.RWMutex{}
+var AppNewPhotoPendingListLock = &sync.Mutex{}
 
 func HandleTcpRequest(reqCtx RequestContext)  bool{
 	service := &GT06Service{reqCtx: reqCtx}
@@ -381,10 +381,10 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		return false
 	}
 
-	DeviceInfoListLock.RLock()
+	DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*DeviceInfoList)[msg.Header.Header.Imei]
 	if ok == false {
-		DeviceInfoListLock.RUnlock()
+		DeviceInfoListLock.Unlock()
 		logging.Log(fmt.Sprintf("invalid deivce, imei: %d cmd: %s", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd)))
 		return false
 	}else{
@@ -394,13 +394,13 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 				service.makeResetHostPortReplyMsg(deviceInfo.CompanyHost, deviceInfo.CompanyPort, id), id)}
 			service.rspList = append(service.rspList, resp)
 
-			DeviceInfoListLock.RUnlock()
+			DeviceInfoListLock.Unlock()
 			logging.Log(fmt.Sprintf("%d reset server to host:port %s:%d", msg.Header.Header.Imei,
 				deviceInfo.CompanyHost, deviceInfo.CompanyPort))
 			return true
 		}
 	}
-	DeviceInfoListLock.RUnlock()
+	DeviceInfoListLock.Unlock()
 
 	service.GetWatchDataInfo(service.imei)
 
@@ -843,7 +843,7 @@ func makeHideTimerReplyMsgString(imei, id uint64) string {
 	body := fmt.Sprintf("%015dAP22,1,", imei)
 	tail := fmt.Sprintf("%016X)", id)
 
-	DeviceInfoListLock.RLock()
+	DeviceInfoListLock.Lock()
 	device, ok := (*DeviceInfoList)[imei]
 	if ok && device != nil {
 		for _, timer := range device.HideTimerList {
@@ -854,7 +854,7 @@ func makeHideTimerReplyMsgString(imei, id uint64) string {
 			}
 		}
 	}
-	DeviceInfoListLock.RUnlock()
+	DeviceInfoListLock.Unlock()
 
 	return (fmt.Sprintf("(%04X", 5 + len(body) + len(tail)) + body + tail)
 }
@@ -896,14 +896,14 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 					msg.Header.Header.ID = params.MsgId
 				}
 
-				DeviceInfoListLock.RLock()
+				DeviceInfoListLock.Lock()
 				deviceInfo, ok := (*DeviceInfoList)[imei]
 				if ok && deviceInfo != nil {
 					body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
 						makeDeviceFamilyPhoneNumbers(&deviceInfo.Family),   msgId)
 					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
 				}
-				DeviceInfoListLock.RUnlock()
+				DeviceInfoListLock.Unlock()
 
 				if ok == false {
 					return nil
@@ -972,7 +972,7 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 				//	msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
 				//
 				//	//if setting.Index == 1 || setting.Index == 2 {
-				//	//	DeviceInfoListLock.RLock()
+				//	//	DeviceInfoListLock.Lock()
 				//	//	info, ok := (*DeviceInfoList)[imei]
 				//	//	if ok && info != nil {
 				//	//		newFence := SafeZone{}
@@ -989,7 +989,7 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 				//	//			logging.Log(fmt.Sprintf("%d new fence bad json data %s", imei, setting.NewValue))
 				//	//		}
 				//	//	}
-				//	//	DeviceInfoListLock.RUnlock()
+				//	//	DeviceInfoListLock.Unlock()
 				//	//}
 				//}
 			}
@@ -1011,12 +1011,12 @@ func (service *GT06Service)makeSyncTimeReplyMsg() ([]byte, uint64) {
 	curTime := time.Now().UTC().Format("060102,150405")
 	c, timezone := 'e', 0
 
-	DeviceInfoListLock.RLock()
+	DeviceInfoListLock.Lock()
 	device, ok := (*DeviceInfoList)[service.imei]
 	if ok {
 		timezone = device.TimeZone
 	}
-	DeviceInfoListLock.RUnlock()
+	DeviceInfoListLock.Unlock()
 
 	if timezone == INVALID_TIMEZONE {
 		timezone = int(GetTimeZone(service.reqCtx.IP))
@@ -1340,7 +1340,7 @@ func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan
 		Data: MakeStructToJson(result), Conn: nil}
 
 	if apiBaseURL != "" {
-		DeviceInfoListLock.RLock()
+		DeviceInfoListLock.Lock()
 		deviceInfo, ok := (*DeviceInfoList)[imei]
 		if ok && deviceInfo != nil {
 			ownerName := deviceInfo.OwnerName
@@ -1351,7 +1351,7 @@ func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan
 			PushNotificationToApp(apiBaseURL, imei, "",  ownerName, chat.DateTime, ALARM_NEW_MINICHAT, "")
 		}
 
-		DeviceInfoListLock.RUnlock()
+		DeviceInfoListLock.Unlock()
 	}
 
 	return true
@@ -1717,12 +1717,12 @@ func (service *GT06Service) ProcessRspAGPSInfo() bool {
 	iReadLen := MTKEPO_DATA_ONETIME * MTKEPO_RECORD_SIZE * MTKEPO_SV_NUMBER
 	data := make([]byte, iReadLen)
 	offset := 0
-	EpoInfoListLock.RLock()
+	EpoInfoListLock.Lock()
 	for i := 0; i < MTKEPO_DATA_ONETIME; i++ {
 		copy(data[offset: offset + MTKEPO_RECORD_SIZE * MTKEPO_SV_NUMBER], EPOInfoList[i].EPOBuf)
 		offset += MTKEPO_RECORD_SIZE * MTKEPO_SV_NUMBER
 	}
-	EpoInfoListLock.RUnlock()
+	EpoInfoListLock.Unlock()
 
 	//接收到epo请求，首先清空之前的任务表，
 	// 然后重建任务表，并发送第一包
@@ -2151,7 +2151,7 @@ func (service *GT06Service) PushChatNum() bool {
 
 func (service *GT06Service) PushNewPhotoNum() bool {
 	newAvatars := 0
-	AppNewPhotoListLock.RLock()
+	AppNewPhotoListLock.Lock()
 	newPhotoList, ok := AppNewPhotoList[service.imei]
 	if ok && newPhotoList != nil {
 		//for _, photo := range *newPhotoList {
@@ -2162,7 +2162,7 @@ func (service *GT06Service) PushNewPhotoNum() bool {
 
 		newAvatars = len(*newPhotoList)
 	}
-	AppNewPhotoListLock.RUnlock()
+	AppNewPhotoListLock.Unlock()
 
 	if newAvatars > 0 {
 		resp := &ResponseItem{CMD_AP11,  service.makeReplyMsg(false,
@@ -2404,7 +2404,7 @@ func (service *GT06Service) ProcessWifiInfo(pszMsgBuf []byte) bool {
 	//service.GetWatchDataInfo(service.imei)
 
 	if service.wifiZoneIndex >= 0 {
-		DeviceInfoListLock.RLock()
+		DeviceInfoListLock.Lock()
 		safeZones := GetSafeZoneSettings(service.imei)
 		if safeZones != nil {
 			strLatLng := strings.Split(safeZones[service.wifiZoneIndex].Center, ",")
@@ -2415,7 +2415,7 @@ func (service *GT06Service) ProcessWifiInfo(pszMsgBuf []byte) bool {
 			logging.Log(fmt.Sprintf("Get location frome home zone by home wifi: %f, %f",
 				service.cur.Lat, service.cur.Lng))
 		}
-		DeviceInfoListLock.RUnlock()
+		DeviceInfoListLock.Unlock()
 	} else {
 		ret := service.GetLocation()
 		if ret == false {
@@ -2530,7 +2530,7 @@ func (service *GT06Service) ProcessMutilLocateInfo(pszMsgBuf []byte) bool {
 	//service.GetWatchDataInfo(service.imei)
 
 	if service.wifiZoneIndex >= 0  {
-		DeviceInfoListLock.RLock()
+		DeviceInfoListLock.Lock()
 		safeZones := GetSafeZoneSettings(service.imei)
 		if safeZones != nil {
 			strLatLng := strings.Split(safeZones[service.wifiZoneIndex].Center, ",")
@@ -2541,7 +2541,7 @@ func (service *GT06Service) ProcessMutilLocateInfo(pszMsgBuf []byte) bool {
 			logging.Log(fmt.Sprintf("Get location frome home zone by home wifi: %f, %f",
 				service.cur.Lat, service.cur.Lng))
 		}
-		DeviceInfoListLock.RUnlock()
+		DeviceInfoListLock.Unlock()
 	} else {
 		ret := service.GetLocation()
 		if ret == false {
@@ -2651,7 +2651,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 			(service.old.LastAlarmType & ALARM_INZONE  == 0) ||
 			(service.old.AlarmType & ALARM_INZONE  != 0) && int16(service.old.ZoneIndex) != service.wifiZoneIndex &&
 				(service.old.LastAlarmType & ALARM_INZONE  != 0) && int16(service.old.LastZoneIndex) != service.wifiZoneIndex {
-			DeviceInfoListLock.RLock()
+			DeviceInfoListLock.Lock()
 			safeZones := GetSafeZoneSettings(service.imei)
 			if safeZones != nil {
 				service.cur.ZoneIndex = int32(service.wifiZoneIndex)
@@ -2662,7 +2662,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 					service.cur.AlarmType,  service.cur.ZoneIndex, service.old.AlarmType,  service.old.ZoneIndex))
 				logging.Log("service.old:  " + MakeStructToJson(&service.old) + ";   service.cur:  " + MakeStructToJson(&service.cur))
 			}
-			DeviceInfoListLock.RUnlock()
+			DeviceInfoListLock.Unlock()
 			return true
 		}
 	}
@@ -2678,7 +2678,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 	stCurPoint.Latitude = service.cur.Lat
 	stCurPoint.LongtiTude = service.cur.Lng
 
-	DeviceInfoListLock.RLock()
+	DeviceInfoListLock.Lock()
 	safeZones := GetSafeZoneSettings(service.imei)
 
 	if safeZones != nil {
@@ -2771,7 +2771,7 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 		}
 	}
 
-	DeviceInfoListLock.RUnlock()
+	DeviceInfoListLock.Unlock()
 
 	return true
 }
@@ -2888,7 +2888,7 @@ func (service *GT06Service) NotifyAlarmMsg() bool {
 	//
 	//logging.Log(fmt.Sprintf("[%d] read php notify api response:, %s", service.imei, body))
 
-	DeviceInfoListLock.RLock()
+	DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*DeviceInfoList)[service.imei]
 	if ok && deviceInfo != nil {
 		ownerName := deviceInfo.OwnerName
@@ -2900,7 +2900,7 @@ func (service *GT06Service) NotifyAlarmMsg() bool {
 			service.cur.DataTime, service.cur.AlarmType, service.cur.ZoneName)
 	}
 
-	DeviceInfoListLock.RUnlock()
+	DeviceInfoListLock.Unlock()
 
 	return true
 }
@@ -3047,12 +3047,12 @@ func  (service *GT06Service) GetWatchDataInfo(imei uint64)  {
 
 func  (service *GT06Service) GetLocation()  bool{
 	useGooglemap := true
-	DeviceInfoListLock.RLock()
+	DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*DeviceInfoList)[service.imei]
 	if ok && strings.Contains(deviceInfo.CountryCode, "86") {
 		useGooglemap = false
 	}
-	DeviceInfoListLock.RUnlock()
+	DeviceInfoListLock.Unlock()
 
 	if useGooglemap {
 		return service.GetLocationByGoogle()
@@ -3147,7 +3147,7 @@ func  (service *GT06Service) ParseWifiInfo(pszMsgBuf []byte, shBufLen *uint32)  
 		service.wiFiNum = MAX_WIFI_NUM
 	}
 
-	DeviceInfoListLock.RLock()
+	DeviceInfoListLock.Lock()
 	safeZones := GetSafeZoneSettings(service.imei)
 	if safeZones != nil {
 		for j := 0; j < len(safeZones); j++ {
@@ -3159,7 +3159,7 @@ func  (service *GT06Service) ParseWifiInfo(pszMsgBuf []byte, shBufLen *uint32)  
 			}
 		}
 	}
-	DeviceInfoListLock.RUnlock()
+	DeviceInfoListLock.Unlock()
 
 	return true
 }
@@ -3438,7 +3438,7 @@ func DeleteVoicesForApp(imei uint64, chatList []ChatInfo) bool {
 
 func GetChatListForApp(imei uint64, username string) []ChatInfo{
 	chatList:= []ChatInfo{}
-	AppChatListLock.RLock()
+	AppChatListLock.Lock()
 	chatMap, ok := AppChatList[imei]
 	if ok  &&  chatMap != nil {
 		for _, chat := range chatMap {
@@ -3451,7 +3451,7 @@ func GetChatListForApp(imei uint64, username string) []ChatInfo{
 			}
 		}
 	}
-	AppChatListLock.RUnlock()
+	AppChatListLock.Unlock()
 
 	return chatList
 }
@@ -3494,7 +3494,7 @@ func ResolvePendingPhotoData(imei, msgId uint64) {
 	isFound := false
 	var resolvedItem *PhotoSettingTask
 	tempList:= []*PhotoSettingTask{}
-	AppNewPhotoPendingListLock.RLock()
+	AppNewPhotoPendingListLock.Lock()
 	photoList, ok := AppNewPhotoPendingList[imei]
 	if ok && photoList != nil {
 		for _, photo := range *photoList{
@@ -3506,7 +3506,7 @@ func ResolvePendingPhotoData(imei, msgId uint64) {
 			}
 		}
 	}
-	AppNewPhotoPendingListLock.RUnlock()
+	AppNewPhotoPendingListLock.Unlock()
 
 	if isFound{
 		AppNewPhotoPendingListLock.Lock()
