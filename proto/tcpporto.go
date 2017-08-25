@@ -3241,11 +3241,19 @@ func  (service *GT06Service) GetLocationByGoogle() bool  {
 		return false
 	}
 
-	resp, err := http.NewRequest("POST",
+	req, err := http.NewRequest("POST",
 		"https://www.googleapis.com/geolocation/v1/geolocate?key=AIzaSyAbvNjmCijnZv9od3cC0MwmTC6HTBG6R60",
-		strings.NewReader(string(jsonStr)))
+		bytes.NewBuffer(jsonStr))
 	if err != nil {
 		logging.Log(fmt.Sprintf("[%d] call google map api  failed,  %s", service.imei, err.Error()))
+		return false
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] do request of google map api  failed,  %s", service.imei, err.Error()))
 		return false
 	}
 
