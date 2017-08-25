@@ -3265,8 +3265,10 @@ func  (service *GT06Service) GetLocationByGoogle() bool  {
 		return false
 	}
 
+	bodyStr := strings.Replace(string(body), "\n", "", -1)
+
 	result := GooglemapResult{}
-	err = json.Unmarshal(body, &result)
+	err = json.Unmarshal([]byte(bodyStr), &result)
 	if err != nil {
 		logging.Log(fmt.Sprintf("[%d] parse google map response failed, %s", service.imei, err.Error()))
 		return false
