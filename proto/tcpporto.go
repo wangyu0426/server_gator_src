@@ -89,7 +89,7 @@ type GooglemapResult struct {
 			 Lat float64 `json:"lat"`
 			 Lng float64 `json:"lng"`
 		 } `json:"location"`
-	Accuracy int `json:"accuracy"`
+	Accuracy float64 `json:"accuracy"`
 }
 
 type AmapResult struct {
