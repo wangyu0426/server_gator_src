@@ -58,6 +58,24 @@ func init() {
 
 }
 
+func LocalAPIServerRunLoop(serverCtx *svrctx.ServerContext) {
+	defer logging.PanicLogAndExit("LocalAPIServerRunLoop")
+
+	app := iris.New()
+	//app.Adapt(iris.DevLogger())
+	app.Adapt(httprouter.New())
+
+	app.Get("/api/get-locations", GetLocationsByURL)
+
+	app.Get("GetWatchData", GetLocationsByURL)
+	//GetWatchData?systemno={systemno}&datatype=2&callback={callback}&end={end}&start={start}
+
+	addr := fmt.Sprintf("%s:%d", serverCtx.LocalAPIBindAddr, serverCtx.LocalAPIPort)
+	logging.Log("LocalAPIServer listen:  " + addr)
+	app.Listen(addr)
+
+}
+
 func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	defer logging.PanicLogAndExit("AppServerRunLoop")
 
@@ -70,12 +88,6 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	ws.OnConnection(OnClientConnected)
 
 	app.StaticWeb(svrctx.Get().HttpStaticURL, svrctx.Get().HttpStaticDir)
-
-	app.Get("/api/get-locations", GetLocationsByURL)
-
-	app.Get("GetWatchData", GetLocationsByURL)
-	//GetWatchData?systemno={systemno}&datatype=2&callback={callback}&end={end}&start={start}
-
 
 	app.Post(svrctx.Get().HttpUploadURL, func(ctx *iris.Context) {
 		result := proto.HttpAPIResult{

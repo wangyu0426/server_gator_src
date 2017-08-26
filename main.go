@@ -29,6 +29,7 @@ func main() {
 
 	//fmt.Println("server config: ", *svrctx.Get())
 
+	go appserver.LocalAPIServerRunLoop(svrctx.Get())
 	go tcpserver.TcpServerRunLoop(svrctx.Get())
 	go appserver.AppServerRunLoop(svrctx.Get())
 
