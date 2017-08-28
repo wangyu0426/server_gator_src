@@ -264,7 +264,7 @@ func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 func login(c *AppConnection, username, password string, isRegister bool) bool {
 	urlRequest := "http://127.0.0.1/web/index.php?r=app/auth/"
 	if svrctx.Get().IsDebugLocal {
-		urlRequest = "http://120.25.214.188/web/index.php?r=app/auth/"
+		urlRequest = "http://watch.gatorcn.com/web/index.php?r=app/auth/"
 	}
 	reqType := "login"
 	if isRegister {

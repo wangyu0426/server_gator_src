@@ -89,7 +89,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 	app.StaticWeb(svrctx.Get().HttpStaticURL, svrctx.Get().HttpStaticDir)
 
-	app.Get("/api/gator3-version", GetAppVersionOnline)
+	app.Post("/api/gator3-version", GetAppVersionOnline)
 	app.Post(svrctx.Get().HttpUploadURL, func(ctx *iris.Context) {
 		result := proto.HttpAPIResult{
 			ErrCode: 0,
@@ -660,16 +660,20 @@ func GetLocationsByURL(ctx *iris.Context) {
 }
 
 func GetAppVersionOnline(ctx *iris.Context)  {
-	platform := ctx.GetString("platform")
+	result := proto.HttpQueryAppVersionResult{}
+	result.Status = -1
+
+	platform := ctx.FormValue("platform")
 	reqUrl := ""
 	if platform=="android" {
 		reqUrl = svrctx.Get().AndroidAppURL
-	}else{
+	}else if platform=="ios" {
 		reqUrl = svrctx.Get().IOSAppURL
+	}else{
+		logging.Log("get app verion from online store failed, " + "bad params")
+		ctx.JSON(500, proto.MakeStructToJson(&result))
+		return
 	}
-
-	result := proto.HttpQueryAppVersionResult{}
-	result.Status = -1
 
 	resp, err := http.Get(reqUrl)
 	if err != nil {
