@@ -253,6 +253,59 @@ type HttpAPIResult struct {
 	Data  string  			`json:"data"`
 }
 
+type HttpQueryAppVersionResult struct {
+	Status int				`json:"status"`
+	Version []string  			`json:"version"`
+	AppUrl string  			`json:"appUrl"`
+}
+
+type IOSAppInfo struct {
+	ResultCount int `json:"resultCount"`
+	Results     []struct {
+		IsGameCenterEnabled              bool          `json:"isGameCenterEnabled"`
+		IpadScreenshotUrls               []string      `json:"ipadScreenshotUrls"`
+		AppletvScreenshotUrls            []interface{} `json:"appletvScreenshotUrls"`
+		ArtworkURL60                     string        `json:"artworkUrl60"`
+		ArtworkURL512                    string        `json:"artworkUrl512"`
+		ArtworkURL100                    string        `json:"artworkUrl100"`
+		ArtistViewURL                    string        `json:"artistViewUrl"`
+		Kind                             string        `json:"kind"`
+		Features                         []string      `json:"features"`
+		SupportedDevices                 []string      `json:"supportedDevices"`
+		ScreenshotUrls                   []string      `json:"screenshotUrls"`
+		Advisories                       []string      `json:"advisories"`
+		TrackCensoredName                string        `json:"trackCensoredName"`
+		LanguageCodesISO2A               []string      `json:"languageCodesISO2A"`
+		FileSizeBytes                    string        `json:"fileSizeBytes"`
+		ContentAdvisoryRating            string        `json:"contentAdvisoryRating"`
+		TrackViewURL                     string        `json:"trackViewUrl"`
+		TrackContentRating               string        `json:"trackContentRating"`
+		SellerName                       string        `json:"sellerName"`
+		GenreIds                         []string      `json:"genreIds"`
+		CurrentVersionReleaseDate        time.Time     `json:"currentVersionReleaseDate"`
+		ReleaseNotes                     string        `json:"releaseNotes"`
+		Currency                         string        `json:"currency"`
+		WrapperType                      string        `json:"wrapperType"`
+		Version                          string        `json:"version"`
+		Description                      string        `json:"description"`
+		ArtistID                         int           `json:"artistId"`
+		ArtistName                       string        `json:"artistName"`
+		Genres                           []string      `json:"genres"`
+		Price                            float64       `json:"price"`
+		TrackID                          int           `json:"trackId"`
+		TrackName                        string        `json:"trackName"`
+		BundleID                         string        `json:"bundleId"`
+		PrimaryGenreName                 string        `json:"primaryGenreName"`
+		IsVppDeviceBasedLicensingEnabled bool          `json:"isVppDeviceBasedLicensingEnabled"`
+		ReleaseDate                      time.Time     `json:"releaseDate"`
+		FormattedPrice                   string        `json:"formattedPrice"`
+		MinimumOsVersion                 string        `json:"minimumOsVersion"`
+		PrimaryGenreID                   int           `json:"primaryGenreId"`
+		AverageUserRating                float64       `json:"averageUserRating,omitempty"`
+		UserRatingCount                  int           `json:"userRatingCount,omitempty"`
+	} `json:"results"`
+}
+
 type LoginParams struct {
 	UserName string  	`json:"username"`
 	Password string		`json:"password"`

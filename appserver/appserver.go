@@ -89,6 +89,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 	app.StaticWeb(svrctx.Get().HttpStaticURL, svrctx.Get().HttpStaticDir)
 
+	app.Get("/api/gator3-version", GetAppVersionOnline)
 	app.Post(svrctx.Get().HttpUploadURL, func(ctx *iris.Context) {
 		result := proto.HttpAPIResult{
 			ErrCode: 0,
@@ -656,4 +657,79 @@ func GetLocationsByURL(ctx *iris.Context) {
 
 		ctx.JSON(200, dataResult)
 	}
+}
+
+func GetAppVersionOnline(ctx *iris.Context)  {
+	platform := ctx.GetString("platform")
+	reqUrl := ""
+	if platform=="android" {
+		reqUrl = svrctx.Get().AndroidAppURL
+	}else{
+		reqUrl = svrctx.Get().IOSAppURL
+	}
+
+	result := proto.HttpQueryAppVersionResult{}
+	result.Status = -1
+
+	resp, err := http.Get(reqUrl)
+	if err != nil {
+		logging.Log("get app verion from online store failed, " + err.Error() + " , " + reqUrl)
+		ctx.JSON(500, proto.MakeStructToJson(&result))
+		return
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
+		ctx.JSON(500, proto.MakeStructToJson(&result))
+		return
+	}
+
+	if platform=="android" {
+		pos := strings.Index(string(body), "softwareVersion")
+		if pos < 0 {
+			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
+			ctx.JSON(500, proto.MakeStructToJson(&result))
+			return
+		}
+
+		if len(body[pos:]) < 30 {
+			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
+			ctx.JSON(500, proto.MakeStructToJson(&result))
+			return
+		}
+
+		strVer := string(body[pos: pos + 30])
+		arr := strings.Split(strVer, " ")
+		if len(arr) < 2 {
+			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
+			ctx.JSON(500, proto.MakeStructToJson(&result))
+			return
+		}
+
+		result.Version = strings.Split(arr[1], ".")
+		result.AppUrl = svrctx.Get().AndroidAppURL
+	}else{
+		info := proto.IOSAppInfo{}
+		err = json.Unmarshal(body, &info)
+		if err != nil {
+			logging.Log("parse  response as json failed, " + err.Error() +
+				", response: " + string(body))
+			ctx.JSON(500, proto.MakeStructToJson(&result))
+			return
+		}
+
+		if len(info.Results) < 3 {
+			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
+			ctx.JSON(500, proto.MakeStructToJson(&result))
+			return
+		}
+
+		result.Version = strings.Split(info.Results[2].Version, ".")
+		result.AppUrl = svrctx.Get().IOSAppURL
+	}
+
+	ctx.JSON(200, proto.MakeStructToJson(&result))
 }
