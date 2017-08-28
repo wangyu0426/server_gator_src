@@ -56,7 +56,7 @@ func createLogFile()  {
 
 func GetLogDir() string {
 	if runtime.GOOS == "darwin" {
-		return "/Users/macpc/logs"
+		return "~/logs"
 	}else{
 		return "/home/work/logs"
 	}

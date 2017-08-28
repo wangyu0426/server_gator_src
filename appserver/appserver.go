@@ -748,5 +748,6 @@ func GetAppVersionOnline(ctx *iris.Context)  {
 		result.AppUrl = svrctx.Get().IOSAppURL
 	}
 
+	result.Status = 0
 	ctx.JSON(200, proto.MakeStructToJson(&result))
 }
