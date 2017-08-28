@@ -725,13 +725,26 @@ func GetAppVersionOnline(ctx *iris.Context)  {
 			return
 		}
 
-		if len(info.Results) < 3 {
+		foundIndex := -1
+		if len(info.Results) > 0 {
+			for idx, item := range info.Results {
+				if item.TrackName == "Gator 3" {
+					foundIndex = idx
+					break
+				}
+			}
+		}
+
+		if foundIndex < 0 {
 			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
 			ctx.JSON(500, proto.MakeStructToJson(&result))
 			return
 		}
 
-		result.Version = strings.Split(info.Results[2].Version, ".")
+
+		fmt.Println(info.Results[foundIndex].TrackName, info.Results[foundIndex].Version)
+
+		result.Version = strings.Split(info.Results[foundIndex].Version, ".")
 		result.AppUrl = svrctx.Get().IOSAppURL
 	}
 
