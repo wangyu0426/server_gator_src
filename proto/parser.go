@@ -255,7 +255,7 @@ type HttpAPIResult struct {
 
 type HttpQueryAppVersionResult struct {
 	Status int				`json:"status"`
-	Version []string  			`json:"version"`
+	Version []string  		`json:"version"`
 	AppUrl string  			`json:"appUrl"`
 }
 
