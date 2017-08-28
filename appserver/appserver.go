@@ -668,7 +668,7 @@ func GetAppVersionOnline(ctx *iris.Context)  {
 	if platform=="android" {
 		reqUrl = svrctx.Get().AndroidAppURL
 	}else if platform=="ios" {
-		reqUrl = svrctx.Get().IOSAppURL
+		reqUrl = "http://itunes.apple.com/search?term=gator-group-co.-ltd&entity=software"
 	}else{
 		logging.Log("get app verion from online store failed, " + "bad params")
 		ctx.JSON(500, proto.MakeStructToJson(&result))
