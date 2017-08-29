@@ -3265,12 +3265,20 @@ func  (service *GT06Service) GetLocationByGoogle() bool  {
 		return false
 	}
 
+	logging.Log(fmt.Sprintf("%d google location result: %s", service.imei, string(body)))
+
 	bodyStr := strings.Replace(string(body), "\n", "", -1)
 
 	result := GooglemapResult{}
 	err = json.Unmarshal([]byte(bodyStr), &result)
 	if err != nil {
 		logging.Log(fmt.Sprintf("[%d] parse google map response failed, %s", service.imei, err.Error()))
+		return false
+	}
+
+	if result.Location.Lat == 0 || result.Location.Lng == 0 {
+		logging.Log(fmt.Sprintf("%d bad location :%06f, %06f", service.imei,
+			result.Location.Lat, result.Location.Lng))
 		return false
 	}
 
@@ -3358,8 +3366,13 @@ func  (service *GT06Service) GetLocationByAmap() bool  {
 		return false
 	}
 
-	 dLontiTude := Str2Float(latlng[0]) //经度
+	dLontiTude := Str2Float(latlng[0]) //经度
 	dLatitude := Str2Float(latlng[1]) //纬度
+	if dLatitude == 0 || dLontiTude == 0 {
+		logging.Log(fmt.Sprintf("%d bad location :%06f, %06f", service.imei, dLatitude, dLontiTude))
+		return false
+	}
+
 	gcj_To_Gps84(dLatitude, dLontiTude, &service.cur.Lat, &service.cur.Lng)
 	service.cur.LocateType = uint8(Str2Num(result.Result.Type, 10))
 	service.cur.Accracy = uint32(Str2Num(result.Result.Radius, 10))
