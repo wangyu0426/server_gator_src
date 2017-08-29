@@ -619,8 +619,8 @@ func GetLocationsByURL(ctx *iris.Context) {
 		dataResult := proto.PhpQueryLocationsResult{Result: 0, ResultStr: "",  Systemno: systemno}
 		data := svrctx.GetDeviceData(imei, svrctx.Get().PGPool)
 		dataResult.Data = append(dataResult.Data, data.DataTime)
-		dataResult.Data = append(dataResult.Data, uint64(data.Lat * 1000000))
-		dataResult.Data = append(dataResult.Data, uint64(data.Lng * 1000000))
+		dataResult.Data = append(dataResult.Data, int64(data.Lat * 1000000))
+		dataResult.Data = append(dataResult.Data, int64(data.Lng * 1000000))
 		dataResult.Data = append(dataResult.Data, data.Steps)
 		dataResult.Data = append(dataResult.Data, data.Battery)
 		dataResult.Data = append(dataResult.Data, data.AlarmType)
@@ -639,8 +639,8 @@ func GetLocationsByURL(ctx *iris.Context) {
 			for _, data := range *locations {
 				dataItem := []interface{}{}
 				dataItem = append(dataItem, data.DataTime)
-				dataItem = append(dataItem, uint64(data.Lat * 1000000))
-				dataItem = append(dataItem, uint64(data.Lng * 1000000))
+				dataItem = append(dataItem, int64(data.Lat * 1000000))
+				dataItem = append(dataItem, int64(data.Lng * 1000000))
 				dataItem = append(dataItem, data.Steps)
 				dataItem = append(dataItem, data.Battery)
 				dataItem = append(dataItem, data.AlarmType)
