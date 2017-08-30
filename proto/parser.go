@@ -611,6 +611,7 @@ type DeviceInfoResult struct {
 	IMEI,
 	Model,
 	SimID,
+	Company,
 	OwnerName,
 	PhoneNumbers,
 	FamilyNumber,
@@ -1043,6 +1044,7 @@ func MakeDeviceInfoResult(deviceInfo *DeviceInfo) DeviceInfoResult {
 	result := DeviceInfoResult{}
 	result.IMEI = Num2Str(deviceInfo.Imei, 10)
 	result.Model = ModelNameList[deviceInfo.Model]
+	result.Company = deviceInfo.Company
 	result.SimID = deviceInfo.SimID
 	result.OwnerName = deviceInfo.OwnerName
 	result.PhoneNumbers = MakeFamilyPhoneNumbers(&deviceInfo.Family)
