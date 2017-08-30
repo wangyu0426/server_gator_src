@@ -1190,12 +1190,12 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 
 var CompanyListToHideVoiceMonitor = []string{
 	"MSA invest",
-	//"Msa Invest AS",
+	"Msa Invest AS",
 }
 
 func IsHideVoiceMonitor(companyName string)  bool  {
 	for _, name := range CompanyListToHideVoiceMonitor {
-		if name == companyName {
+		if name == companyName || strings.Contains(companyName, name) {
 			return true
 		}
 	}
