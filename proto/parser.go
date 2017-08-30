@@ -589,6 +589,7 @@ type DeviceInfo struct {
 	CompanyHost string
 	CompanyPort int
 	RedirectServer bool
+	HideVoiceMonitor bool
 	CountryCode string
 	Avatar string
 	SimID string
@@ -647,6 +648,7 @@ type DeviceInfoResult struct {
 	SocketModeOff,
 	Volume uint8
 	ContactAvatar [MAX_FAMILY_MEMBER_NUM]string
+	HideVoiceMonitor bool
 }
 
 type WIFIInfo  struct  {
@@ -1082,6 +1084,7 @@ func MakeDeviceInfoResult(deviceInfo *DeviceInfo) DeviceInfoResult {
 	result.HideTimer1 = MakeStructToJson(&deviceInfo.HideTimerList[1])
 	result.HideTimer2 = MakeStructToJson(&deviceInfo.HideTimerList[2])
 	result.HideTimer3 = MakeStructToJson(&deviceInfo.HideTimerList[3])
+	result.HideVoiceMonitor = deviceInfo.HideVoiceMonitor
 
 	return result
 }
@@ -1163,6 +1166,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		deviceInfo.CompanyHost = parseUint8Array(CompanyHost)
 		deviceInfo.CompanyPort = int(Str2Num(parseUint8Array(CompanyPort), 10))
 		deviceInfo.RedirectServer = parseUint8Array(RedirectServer) == "1"
+		deviceInfo.HideVoiceMonitor = IsHideVoiceMonitor(deviceInfo.Company)
 
 		(*tmpDeviceInfoList)[deviceInfo.Imei] = deviceInfo
 
@@ -1180,6 +1184,21 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 	SystemNo2ImeiMapLock.Unlock()
 
 	return true
+}
+
+var CompanyListToHideVoiceMonitor = []string{
+	"MSA invest",
+	//"Msa Invest AS",
+}
+
+func IsHideVoiceMonitor(companyName string)  bool  {
+	for _, name := range CompanyListToHideVoiceMonitor {
+		if name == companyName {
+			return true
+		}
+	}
+
+	return false
 }
 
 func ParseDeviceModel(model string) int {
