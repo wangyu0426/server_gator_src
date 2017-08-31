@@ -658,6 +658,100 @@ func GetLocationsByURL(ctx *iris.Context) {
 		ctx.JSON(200, dataResult)
 	}
 }
+//
+//func GetAppVersionOnline(ctx *iris.Context)  {
+//	result := proto.HttpQueryAppVersionResult{}
+//	result.Status = -1
+//
+//	platform := ctx.FormValue("platform")
+//	reqUrl := ""
+//	if platform=="android" {
+//		reqUrl = svrctx.Get().AndroidAppURL
+//	}else if platform=="ios" {
+//		reqUrl = "http://itunes.apple.com/search?term=gator-group-co.-ltd&entity=software"
+//	}else{
+//		logging.Log("get app verion from online store failed, " + "bad params")
+//		ctx.JSON(500, proto.MakeStructToJson(&result))
+//		return
+//	}
+//
+//	resp, err := http.Get(reqUrl)
+//	if err != nil {
+//		logging.Log("get app verion from online store failed, " + err.Error() + " , " + reqUrl)
+//		ctx.JSON(500, proto.MakeStructToJson(&result))
+//		return
+//	}
+//
+//	defer resp.Body.Close()
+//
+//	body, err := ioutil.ReadAll(resp.Body)
+//	if err != nil {
+//		logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
+//		ctx.JSON(500, proto.MakeStructToJson(&result))
+//		return
+//	}
+//
+//	if platform=="android" {
+//		pos := strings.Index(string(body), "softwareVersion")
+//		if pos < 0 {
+//			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
+//			ctx.JSON(500, proto.MakeStructToJson(&result))
+//			return
+//		}
+//
+//		if len(body[pos:]) < 30 {
+//			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
+//			ctx.JSON(500, proto.MakeStructToJson(&result))
+//			return
+//		}
+//
+//		strVer := string(body[pos: pos + 30])
+//		arr := strings.Split(strVer, " ")
+//		if len(arr) < 2 {
+//			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
+//			ctx.JSON(500, proto.MakeStructToJson(&result))
+//			return
+//		}
+//
+//		result.Version = strings.Split(arr[1], ".")
+//		result.AppUrl = svrctx.Get().AndroidAppURL
+//	}else{
+//		info := proto.IOSAppInfo{}
+//		err = json.Unmarshal(body, &info)
+//		if err != nil {
+//			logging.Log("parse  response as json failed, " + err.Error() +
+//				", response: " + string(body))
+//			ctx.JSON(500, proto.MakeStructToJson(&result))
+//			return
+//		}
+//
+//		foundIndex := -1
+//		if len(info.Results) > 0 {
+//			for idx, item := range info.Results {
+//				if item.TrackName == "Gator 3" {
+//					foundIndex = idx
+//					break
+//				}
+//			}
+//		}
+//
+//		if foundIndex < 0 {
+//			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
+//			ctx.JSON(500, proto.MakeStructToJson(&result))
+//			return
+//		}
+//
+//
+//		fmt.Println(info.Results[foundIndex].TrackName, info.Results[foundIndex].Version)
+//
+//		result.Version = strings.Split(info.Results[foundIndex].Version, ".")
+//		result.AppUrl = svrctx.Get().IOSAppURL
+//	}
+//
+//	result.Status = 0
+//	ctx.JSON(200, proto.MakeStructToJson(&result))
+//}
+
 
 func GetAppVersionOnline(ctx *iris.Context)  {
 	result := proto.HttpQueryAppVersionResult{}
@@ -668,7 +762,7 @@ func GetAppVersionOnline(ctx *iris.Context)  {
 	if platform=="android" {
 		reqUrl = svrctx.Get().AndroidAppURL
 	}else if platform=="ios" {
-		reqUrl = "http://itunes.apple.com/search?term=gator-group-co.-ltd&entity=software"
+		reqUrl = svrctx.Get().IOSAppURL
 	}else{
 		logging.Log("get app verion from online store failed, " + "bad params")
 		ctx.JSON(500, proto.MakeStructToJson(&result))
@@ -716,35 +810,31 @@ func GetAppVersionOnline(ctx *iris.Context)  {
 		result.Version = strings.Split(arr[1], ".")
 		result.AppUrl = svrctx.Get().AndroidAppURL
 	}else{
-		info := proto.IOSAppInfo{}
-		err = json.Unmarshal(body, &info)
-		if err != nil {
-			logging.Log("parse  response as json failed, " + err.Error() +
-				", response: " + string(body))
-			ctx.JSON(500, proto.MakeStructToJson(&result))
-			return
-		}
-
-		foundIndex := -1
-		if len(info.Results) > 0 {
-			for idx, item := range info.Results {
-				if item.TrackName == "Gator 3" {
-					foundIndex = idx
-					break
-				}
-			}
-		}
-
-		if foundIndex < 0 {
+		pos := strings.Index(string(body), "softwareVersion")
+		if pos < 0 {
 			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
 			ctx.JSON(500, proto.MakeStructToJson(&result))
 			return
 		}
 
+		if len(body[pos:]) < 25 {
+			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
+			ctx.JSON(500, proto.MakeStructToJson(&result))
+			return
+		}
 
-		fmt.Println(info.Results[foundIndex].TrackName, info.Results[foundIndex].Version)
+		strVer := string(body[pos: pos + 25])
+		leftPos := strings.Index(strVer, ">")
+		rightPos := strings.Index(strVer, "<")
+		if leftPos < 0 || rightPos < 0 || len(strVer) < (leftPos + 2) || len(strVer) < (rightPos + 1){
+			logging.Log("get app verion from online store response has err, leftPos < 0 || rightPos < 0")
+			ctx.JSON(500, proto.MakeStructToJson(&result))
+			return
+		}
 
-		result.Version = strings.Split(info.Results[foundIndex].Version, ".")
+		ver := strVer[leftPos + 1: rightPos]
+
+		result.Version = strings.Split(ver, ".")
 		result.AppUrl = svrctx.Get().IOSAppURL
 	}
 
