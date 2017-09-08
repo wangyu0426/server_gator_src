@@ -208,11 +208,15 @@ func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 	for i, imei := range params.Devices {
 		imeiUint64 := proto.Str2Num(imei, 10)
 		if params.FamilyNumbers == nil || len(params.FamilyNumbers) < (i + 1) {
-			proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, "",
-				params.UUID, params.DeviceToken, params.Platform, params.Language)
+			if params.UUID != "" &&  params.DeviceToken != "" {
+				proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, "",
+					params.UUID, params.DeviceToken, params.Platform, params.Language)
+			}
 		}else{
-			proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, params.FamilyNumbers[i],
-				params.UUID, params.DeviceToken, params.Platform, params.Language)
+			if params.UUID != "" &&  params.DeviceToken != "" {
+				proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, params.FamilyNumbers[i],
+					params.UUID, params.DeviceToken, params.Platform, params.Language)
+			}
 		}
 	}
 
@@ -839,6 +843,10 @@ func deleteDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 	appServerChan <- &proto.AppMsgData{Cmd: proto.DeleteDeviceAckCmdName, Imei: imei,
 		UserName: params.UserName, AccessToken:params.AccessToken,
 		Data: string(resultData), Conn: c}
+
+	if params.UUID != "" {
+		proto.DeleteDevieeToken(svrctx.Get().APNSServerApiBase, imei, params.UUID)
+	}
 
 	return true
 }

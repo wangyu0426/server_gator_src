@@ -22,6 +22,11 @@ type reportJSON struct {
 	Data  reportJSONData `json:"data" binding:"required"`
 }
 
+type deleteJSON struct {
+	Imei     uint64 `json:"imei" binding:"required"`
+	UUID        string `json:"uuid" binding:"required"`
+}
+
 type pushJSON struct {
 	Imei     uint64 `json:"imei" binding:"required"`
 	FamilyNumber string `json:"familyNumber"`
@@ -40,6 +45,13 @@ func ReportDevieeToken(apiBaseURL string, imei uint64, familyNumber, uuid, devic
 	requestAPNS(urlRequest, imei, reader)
 }
 
+func DeleteDevieeToken(apiBaseURL string, imei uint64, uuid string )  {
+	urlRequest := apiBaseURL + "/delete"
+	deleteInfo := deleteJSON{Imei: imei, UUID: uuid}
+	logging.Log(fmt.Sprintf("%d delete device token: %s", imei, uuid))
+	reader := strings.NewReader(MakeStructToJson(&deleteInfo))
+	requestAPNS(urlRequest, imei, reader)
+}
 
 func PushNotificationToApp(apiBaseURL string, imei uint64, familyNumber,  ownerName string, datatime uint64,
 	alarmType uint8, zoneName string)  {

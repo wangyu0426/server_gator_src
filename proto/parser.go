@@ -361,6 +361,7 @@ type DeviceAddParams struct {
 	UserName string		`json:"username"`
 	AccessToken string		`json:"accessToken"`
 	UserId string			`json:"userId"`
+	UUID string				`json:"uuid"`
 	OwnerName string		`json:"ownerName"`
 	DeviceSimCountryCode string		`json:"deviceSimCountryCode"`
 	DeviceSimID string		`json:"deviceSimID"`
