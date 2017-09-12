@@ -1369,7 +1369,7 @@ func checkTimeZoneOffset(tz string) bool {
 			return false
 		}
 
-		if !CheckStrIsNumber(sub)  || num > 11 {
+		if !CheckStrIsNumber(sub)  || num > 12 {
 			return false
 		}
 
