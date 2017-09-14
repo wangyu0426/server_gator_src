@@ -543,6 +543,8 @@ func queryIsAdmin(imei, userName string) (bool, bool, string, error) {
 		return false, false, "", err
 	}
 
+	defer rows.Close()
+
 	usersCount := 0
 	matched := false
 	deviceRecId := ""
@@ -568,6 +570,8 @@ func queryIsAdmin(imei, userName string) (bool, bool, string, error) {
 				logging.Log(fmt.Sprintf("[%s] query watchinfo recid  in db failed, %s", imei, err.Error()))
 				return false, false, "", err
 			}
+
+			defer rowsDeviceRecid.Close()
 
 			for rowsDeviceRecid.Next(){
 				err = rowsDeviceRecid.Scan(&deviceRecId)

@@ -1129,6 +1129,8 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		os.Exit(1)
 	}
 
+	defer rows.Close()
+
 	var(
 		IMEI      		,
 		OwnerName  		,

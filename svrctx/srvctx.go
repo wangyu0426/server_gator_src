@@ -371,6 +371,8 @@ func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 			return deviceData
 		}
 
+		defer rows.Close()
+
 		if rows.Next() {
 			values , err := rows.Values()
 			logging.Log(fmt.Sprint("get device data: ", values, err))
@@ -434,6 +436,8 @@ func QueryLocations(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64
 		logging.Log(fmt.Sprintf("[%d] pg query failed, %s",  imei, err.Error()))
 		return nil
 	}
+
+	defer rows.Close()
 
 	for rows.Next() {
 		values , _ := rows.Values()
