@@ -15,6 +15,9 @@ import (
 	"strings"
 	"encoding/json"
 	"../logging"
+	"net/http"
+	"net/url"
+	"io/ioutil"
 )
 
 const (
@@ -968,27 +971,27 @@ func LoadEPOFromFile() error {
 
 
 func ReloadEPO() error {
-	//urlRequest := "http://service.gatorcn.com/tracker/web/download36h.php?action=down36h"
-	//resp, err := http.PostForm(urlRequest, url.Values{"username": {"getepo"}, "password": {"n8vZB9belqO4ydnx"}})
-	//if err != nil {
-	//	logging.Log("request epo from service.gatorcn.com failed, " + err.Error())
-	//	return err
-	//}
-	//
-	//defer resp.Body.Close()
-	//
-	//body, err := ioutil.ReadAll(resp.Body)
-	//if err != nil {
-	//	logging.Log("epo response has err, " + err.Error())
-	//	return err
-	//}
-	//
-	//if len(body) != 27648 {
-	//	logging.Log(fmt.Sprintf("epo response size %d != 27648 ", len(body)))
-	//	return io.EOF
-	//}
-	//
-	//ioutil.WriteFile("./EPO/36H.EPO", body, 0666)
+	urlRequest := "http://service.gatorcn.com/tracker/web/download36h.php?action=down36h"
+	resp, err := http.PostForm(urlRequest, url.Values{"username": {"getepo"}, "password": {"n8vZB9belqO4ydnx"}})
+	if err != nil {
+		logging.Log("request epo from service.gatorcn.com failed, " + err.Error())
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logging.Log("epo response has err, " + err.Error())
+		return err
+	}
+
+	if len(body) != 27648 {
+		logging.Log(fmt.Sprintf("epo response size %d != 27648 ", len(body)))
+		return io.EOF
+	}
+
+	ioutil.WriteFile("./EPO/36H.EPO", body, 0666)
 
 	epo36h,err := os.Open("./EPO/36H.EPO")
 	if err != nil {
