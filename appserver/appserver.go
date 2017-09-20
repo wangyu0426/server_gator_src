@@ -89,6 +89,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 	app.StaticWeb(svrctx.Get().HttpStaticURL, svrctx.Get().HttpStaticDir)
 
+	app.Post("/api/cmd", HandleApiCmd)
 	app.Post("/api/gator3-version", GetAppVersionOnline)
 	app.Post(svrctx.Get().HttpUploadURL, func(ctx *iris.Context) {
 		result := proto.HttpAPIResult{
@@ -459,7 +460,7 @@ func OnClientConnected(conn websocket.Connection)  {
 			case <- c.closeChan:
 				return
 			case data := <- c.requestChan:
-				HandleAppRequest(c, appServerChan, data)
+				go HandleAppRequest(c, appServerChan, data)
 			}
 		}
 	}(connection)
@@ -840,4 +841,19 @@ func GetAppVersionOnline(ctx *iris.Context)  {
 
 	result.Status = 0
 	ctx.JSON(200, proto.MakeStructToJson(&result))
+}
+
+func HandleApiCmd(ctx *iris.Context)  {
+	var jsonData interface{}
+	err := ctx.ReadJSON(&jsonData)
+	if err != nil {
+		logging.Log("api cmd data is bad,  err: " + err.Error())
+		result := proto.HttpAPIResult{}
+		result.ErrCode = 500
+		result.ErrMsg = err.Error()
+		ctx.JSON(500, proto.MakeStructToJson(&result))
+		return
+	}
+
+	HandleAppURLRequest(ctx,  jsonData)
 }

@@ -1228,11 +1228,13 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 
 	if cLocateTag != 'G' && cLocateTag != 'g' {
 		if IsDeviceInCompanyBlacklist(service.imei) {
-		service.needSendLocation = false
-		logging.Log(fmt.Sprintf("device %d comamy is in the black list", service.imei))
-		return false
+			service.needSendLocation = false
+			logging.Log(fmt.Sprintf("device %d comamy is in the black list", service.imei))
+			return false
 		}
 	}
+
+	isDisableLBS :=  IsCompanyDisableLBS(service.imei)
 
 	if cLocateTag == 'G' || cLocateTag == 'g'  {
 		ret = service.ProcessGPSInfo(pszMsg)
@@ -1244,9 +1246,20 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 			return false
 		}
 	} else if cLocateTag == 'L' || cLocateTag == 'l'  {
-		 ret = service.ProcessLBSInfo(pszMsg)
+		if isDisableLBS == false {
+			ret = service.ProcessLBSInfo(pszMsg)
+		}else{
+			service.needSendLocation = false
+			logging.Log(fmt.Sprintf("device %d, LBS location and need disable lbs", service.imei))
+			return false
+		}
 	} else if cLocateTag == 'M' || cLocateTag == 'm'  {
 	 	ret = service.ProcessMutilLocateInfo(pszMsg)
+		if service.cur.LocateType == LBS_JIZHAN && isDisableLBS {
+			service.needSendLocation = false
+			logging.Log(fmt.Sprintf("device %d, LBS location and need disable lbs", service.imei))
+			return false
+		}
 	} else {
 		logging.Log(fmt.Sprintf("%d - Error Locate Info Tag(%c)", service.imei, cLocateTag))
 		return false

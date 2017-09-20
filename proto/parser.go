@@ -15,9 +15,6 @@ import (
 	"strings"
 	"encoding/json"
 	"../logging"
-	"net/http"
-	"net/url"
-	"io/ioutil"
 )
 
 const (
@@ -695,6 +692,11 @@ var company_blacklist = []string {
 	"UES",
 }
 
+var company_DisableLBS = []string {
+	"DisableLBS",
+	"Gotthard Handels AG",
+}
+
 func init()  {
 	//fmt.Println(time.Now().Unix())
 	//fmt.Println(time.Now().UnixNano() / int64(time.Millisecond )* 10)
@@ -966,27 +968,27 @@ func LoadEPOFromFile() error {
 
 
 func ReloadEPO() error {
-	urlRequest := "http://service.gatorcn.com/tracker/web/download36h.php?action=down36h"
-	resp, err := http.PostForm(urlRequest, url.Values{"username": {"getepo"}, "password": {"n8vZB9belqO4ydnx"}})
-	if err != nil {
-		logging.Log("request epo from service.gatorcn.com failed, " + err.Error())
-		return err
-	}
-
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		logging.Log("epo response has err, " + err.Error())
-		return err
-	}
-
-	if len(body) != 27648 {
-		logging.Log(fmt.Sprintf("epo response size %d != 27648 ", len(body)))
-		return io.EOF
-	}
-
-	ioutil.WriteFile("./EPO/36H.EPO", body, 0666)
+	//urlRequest := "http://service.gatorcn.com/tracker/web/download36h.php?action=down36h"
+	//resp, err := http.PostForm(urlRequest, url.Values{"username": {"getepo"}, "password": {"n8vZB9belqO4ydnx"}})
+	//if err != nil {
+	//	logging.Log("request epo from service.gatorcn.com failed, " + err.Error())
+	//	return err
+	//}
+	//
+	//defer resp.Body.Close()
+	//
+	//body, err := ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	logging.Log("epo response has err, " + err.Error())
+	//	return err
+	//}
+	//
+	//if len(body) != 27648 {
+	//	logging.Log(fmt.Sprintf("epo response size %d != 27648 ", len(body)))
+	//	return io.EOF
+	//}
+	//
+	//ioutil.WriteFile("./EPO/36H.EPO", body, 0666)
 
 	epo36h,err := os.Open("./EPO/36H.EPO")
 	if err != nil {
@@ -1544,6 +1546,23 @@ func IsDeviceInCompanyBlacklist(imei uint64) bool{
 	if ok {
 		for i := 0; i < len(company_blacklist); i++ {
 			if deviceInfo.Company == company_blacklist[i] {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+
+func IsCompanyDisableLBS(imei uint64) bool{
+	DeviceInfoListLock.Lock()
+	defer DeviceInfoListLock.Unlock()
+
+	deviceInfo, ok := (*DeviceInfoList)[imei]
+	if ok {
+		for i := 0; i < len(company_DisableLBS); i++ {
+			if deviceInfo.Company == company_DisableLBS[i] {
 				return true
 			}
 		}
