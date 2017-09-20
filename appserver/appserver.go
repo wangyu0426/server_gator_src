@@ -460,7 +460,7 @@ func OnClientConnected(conn websocket.Connection)  {
 			case <- c.closeChan:
 				return
 			case data := <- c.requestChan:
-				go HandleAppRequest(c, appServerChan, data)
+				HandleAppRequest(c, appServerChan, data)
 			}
 		}
 	}(connection)
