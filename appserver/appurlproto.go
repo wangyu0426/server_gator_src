@@ -146,7 +146,7 @@ func HandleAppURLRequest(c *iris.Context,  data interface{}) bool {
 //func resetPassword2(c *iris.Context, username string) bool {
 //	urlRequest := "http://127.0.0.1/web/index.php?r=app/auth/"
 //	if svrctx.Get().IsDebugLocal {
-//		urlRequest = "http://120.25.214.188/web/index.php?r=app/auth/"
+//		urlRequest = "http://watch.gatorcn.com/web/index.php?r=app/auth/"
 //	}
 //
 //	reqType := "reset"
@@ -178,7 +178,7 @@ func HandleAppURLRequest(c *iris.Context,  data interface{}) bool {
 //func modifyPassword(c *AppConnection, username, accessToken, oldPasswd, newPasswd  string) bool {
 //	requesetURL := "http://127.0.0.1/web/index.php?r=app/service/modpwd&access-token=" + accessToken
 //	if svrctx.Get().IsDebugLocal {
-//		requesetURL = "http://120.25.214.188/web/index.php?r=app/service/modpwd&access-token=" + accessToken
+//		requesetURL = "http://watch.gatorcn.com/web/index.php?r=app/service/modpwd&access-token=" + accessToken
 //	}
 //
 //	logging.Log("url: " + requesetURL)
@@ -206,7 +206,7 @@ func HandleAppURLRequest(c *iris.Context,  data interface{}) bool {
 //func handleFeedback(c *AppConnection, username, accessToken, feedback string) bool {
 //	requesetURL := "http://127.0.0.1/web/index.php?r=app/service/feedback&access-token=" + accessToken
 //	if svrctx.Get().IsDebugLocal {
-//		requesetURL = "http://120.25.214.188/web/index.php?r=app/service/feedback&access-token=" + accessToken
+//		requesetURL = "http://watch.gatorcn.com/web/index.php?r=app/service/feedback&access-token=" + accessToken
 //	}
 //
 //	logging.Log("url: " + requesetURL)

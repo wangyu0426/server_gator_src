@@ -49,26 +49,52 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 		return false
 	}
 
+	params := msg["data"].(map[string]interface{})
+
+	if ( params["accessToken"] == nil ||  params["accessToken"].(string) == "") { //没有accesstoken
+		//同时又不是注册和登录，那么认为是非法请求
+		if cmd.(string) != proto.LoginCmdName && cmd.(string) != proto.RegisterCmdName {
+			logging.Log("access token is bad, not login and register")
+			return false
+		}
+	}else{//有accesstoken，那么需要对token进行验证
+		accessToken := params["accessToken"].(string)
+		valid := false
+		AccessTokenTableLock.Lock()
+		logined, ok := AccessTokenTable[accessToken]
+		if ok && logined {
+			//验证通过
+			valid = true
+		}else{
+			//需要进行更多验证
+			if ValidAccessToken(accessToken) {
+				AccessTokenTable[accessToken] = true
+				valid = true
+			}
+		}
+		AccessTokenTableLock.Unlock()
+
+		if valid == false{
+			logging.Log("access token is not found")
+			return false
+		}
+	}
+
 	switch cmd{
 	case proto.LoginCmdName:
-		params := msg["data"].(map[string]interface{})
 		return login(c, params["username"].(string), params["password"].(string), false)
 
 	case proto.RegisterCmdName:
-		params := msg["data"].(map[string]interface{})
 		return login(c, params["username"].(string), params["password"].(string), true)
 
 	case proto.ResetPasswordCmdName:
-		params := msg["data"].(map[string]interface{})
 		return resetPassword(c, params["username"].(string))
 
 	case proto.ModifyPasswordCmdName:
-		params := msg["data"].(map[string]interface{})
 		return modifyPassword(c, params["username"].(string), params["accessToken"].(string),
 			params["oldPassword"].(string), params["newPassword"].(string))
 
 	case proto.FeedbackCmdName:
-		params := msg["data"].(map[string]interface{})
 		return handleFeedback(c, params["username"].(string), params["accessToken"].(string),params["feedback"].(string))
 
 	case proto.HearbeatCmdName:
@@ -200,6 +226,17 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 	return true
 }
 
+func SendMsgToApp(msg *proto.AppMsgData)  {
+	data, err := json.Marshal(msg)
+	c := msg.Conn.(*AppConnection)
+	err = (*c.conn).EmitMessage(data)
+	if err != nil {
+		logging.Log("send msg to app failed, " + err.Error())
+	} else {
+		logging.Log("send msg: " + fmt.Sprint(msg, c))
+	}
+}
+
 func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 	if params.AccessToken == ""{
 		return true
@@ -257,10 +294,10 @@ func handleHeartBeat(c *AppConnection, params *proto.HeartbeatParams) bool {
 
 	fmt.Println("heartbeat-ack: ", proto.MakeStructToJson(result))
 
-	appServerChan <- &proto.AppMsgData{Cmd: proto.HearbeatAckCmdName,
+	SendMsgToApp(&proto.AppMsgData{Cmd: proto.HearbeatAckCmdName,
 		UserName: params.UserName,
 		AccessToken: params.AccessToken,
-		Data: proto.MakeStructToJson(result), Conn: c}
+		Data: proto.MakeStructToJson(result), Conn: c})
 
 	return true
 }
@@ -318,9 +355,8 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 				c.user.Name = username
 				c.user.PasswordMD5 = password
 
-				addConnChan <- c
+				//addConnChan <- c
 
-				//devicesLocationURL := "http://184.107.50.180:8012/GetMultiWatchData?systemno="
 				locations := []proto.LocationData{}
 				c.imeis = []uint64{}
 				for i, d := range devices.([]interface{}) {
@@ -329,12 +365,6 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 					logging.Log("device: " + fmt.Sprint(imei))
 					c.imeis = append(c.imeis, imei)
 					locations = append(locations, svrctx.GetDeviceData(imei, svrctx.Get().PGPool))
-
-					//devicesLocationURL += device["IMEI"].(string)[4:]
-					//
-					//if i < len(devices.([]interface{})) - 1 {
-					//	devicesLocationURL += "|"
-					//}
 
 					deviceInfoResult := proto.DeviceInfoResult{}
 					//json.Unmarshal([]byte(proto.MakeStructToJson(d)), &deviceInfoResult)
@@ -364,10 +394,12 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 					proto.DeviceInfoListLock.Unlock()
 				}
 
+				AddNewAppClient(c)
+
 				jsonLocations, _ := json.Marshal(locations)
-				appServerChan <- &proto.AppMsgData{Cmd: proto.LoginAckCmdName,
+				SendMsgToApp( &proto.AppMsgData{Cmd: proto.LoginAckCmdName,
 					Data: (fmt.Sprintf("{\"user\": %s, \"location\": %s}",
-						proto.MakeStructToJson(&loginData), string(jsonLocations))), Conn: c}
+						proto.MakeStructToJson(&loginData), string(jsonLocations))), Conn: c})
 
 				//logging.Log("devicesLocationURL: " + devicesLocationURL)
 				//
@@ -385,20 +417,20 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 				//
 				//logging.Log("bodyLocation: " +  string(bodyLocation))
 			} else {
-				appServerChan <- &proto.AppMsgData{Cmd: proto.LoginAckCmdName,
-					Data: (fmt.Sprintf("{\"user\": %s, \"location\": []}", string(body))), Conn: c}
+				SendMsgToApp(&proto.AppMsgData{Cmd: proto.LoginAckCmdName,
+					Data: (fmt.Sprintf("{\"user\": %s, \"location\": []}", string(body))), Conn: c})
 			}
 		} else {
-			appServerChan <- &proto.AppMsgData{Cmd: proto.RegisterAckCmdName,
-				Data: (fmt.Sprintf("{\"user\": %s, \"location\": []}", string(body))), Conn: c}
+			SendMsgToApp(&proto.AppMsgData{Cmd: proto.RegisterAckCmdName,
+				Data: (fmt.Sprintf("{\"user\": %s, \"location\": []}", string(body))), Conn: c})
 		}
 	}else{
 		if isRegister{
-			appServerChan <- &proto.AppMsgData{Cmd: proto.RegisterAckCmdName,
-				Data: "{\"status\": -1}", Conn: c}
+			SendMsgToApp(&proto.AppMsgData{Cmd: proto.RegisterAckCmdName,
+				Data: "{\"status\": -1}", Conn: c})
 		}else{
-			appServerChan <- &proto.AppMsgData{Cmd: proto.LoginAckCmdName,
-				Data: "{\"status\": -1}", Conn: c}
+			SendMsgToApp(&proto.AppMsgData{Cmd: proto.LoginAckCmdName,
+				Data: "{\"status\": -1}", Conn: c})
 		}
 	}
 
@@ -409,7 +441,7 @@ func login(c *AppConnection, username, password string, isRegister bool) bool {
 func resetPassword(c *AppConnection, username string) bool {
 	urlRequest := "http://127.0.0.1/web/index.php?r=app/auth/"
 	if svrctx.Get().IsDebugLocal {
-		urlRequest = "http://120.25.214.188/web/index.php?r=app/auth/"
+		urlRequest = "http://watch.gatorcn.com/web/index.php?r=app/auth/"
 	}
 
 	reqType := "reset"
@@ -431,8 +463,8 @@ func resetPassword(c *AppConnection, username string) bool {
 
 	ioutil.WriteFile("error.html",  body, 0666)
 
-	appServerChan <- &proto.AppMsgData{Cmd: proto.ResetPasswordAckCmdName,
-		Data: string(body), Conn: c}
+	SendMsgToApp(&proto.AppMsgData{Cmd: proto.ResetPasswordAckCmdName,
+		Data: string(body), Conn: c})
 
 	return true
 }
@@ -441,7 +473,7 @@ func resetPassword(c *AppConnection, username string) bool {
 func modifyPassword(c *AppConnection, username, accessToken, oldPasswd, newPasswd  string) bool {
 	requesetURL := "http://127.0.0.1/web/index.php?r=app/service/modpwd&access-token=" + accessToken
 	if svrctx.Get().IsDebugLocal {
-		requesetURL = "http://120.25.214.188/web/index.php?r=app/service/modpwd&access-token=" + accessToken
+		requesetURL = "http://watch.gatorcn.com/web/index.php?r=app/service/modpwd&access-token=" + accessToken
 	}
 
 	logging.Log("url: " + requesetURL)
@@ -459,8 +491,8 @@ func modifyPassword(c *AppConnection, username, accessToken, oldPasswd, newPassw
 		return false
 	}
 
-	appServerChan <- &proto.AppMsgData{Cmd: proto.ModifyPasswordAckCmdName,
-		Data: (string(body)), Conn: c}
+	SendMsgToApp(&proto.AppMsgData{Cmd: proto.ModifyPasswordAckCmdName,
+		Data: (string(body)), Conn: c})
 
 	return true
 }
@@ -469,7 +501,7 @@ func modifyPassword(c *AppConnection, username, accessToken, oldPasswd, newPassw
 func handleFeedback(c *AppConnection, username, accessToken, feedback string) bool {
 	requesetURL := "http://127.0.0.1/web/index.php?r=app/service/feedback&access-token=" + accessToken
 	if svrctx.Get().IsDebugLocal {
-		requesetURL = "http://120.25.214.188/web/index.php?r=app/service/feedback&access-token=" + accessToken
+		requesetURL = "http://watch.gatorcn.com/web/index.php?r=app/service/feedback&access-token=" + accessToken
 	}
 
 	logging.Log("url: " + requesetURL)
@@ -487,8 +519,8 @@ func handleFeedback(c *AppConnection, username, accessToken, feedback string) bo
 		return false
 	}
 
-	appServerChan <- &proto.AppMsgData{Cmd: proto.FeedbackAckCmdName,
-		Data: (string(body)), Conn: c}
+	SendMsgToApp(&proto.AppMsgData{Cmd: proto.FeedbackAckCmdName,
+		Data: (string(body)), Conn: c})
 
 	return true
 }
@@ -526,9 +558,9 @@ func getDeviceVerifyCode(c *AppConnection, params *proto.DeviceBaseParams) bool 
 		proto.DeviceInfoListLock.Unlock()
 	}
 
-	appServerChan <- &proto.AppMsgData{Cmd: proto.VerifyCodeAckCmdName, Imei: imei,
+	SendMsgToApp(&proto.AppMsgData{Cmd: proto.VerifyCodeAckCmdName, Imei: imei,
 		UserName: params.UserName, AccessToken:params.AccessToken,
-			Data: fmt.Sprintf("{\"VerifyCode\": \"%s\", \"isAdmin\": %d}", verifyCode, proto.Bool2UInt8(isAdmin)), Conn: c}
+			Data: fmt.Sprintf("{\"VerifyCode\": \"%s\", \"isAdmin\": %d}", verifyCode, proto.Bool2UInt8(isAdmin)), Conn: c})
 
 	return true
 }
@@ -616,9 +648,9 @@ func getDeviceInfoByImei(c *AppConnection, params *proto.DeviceAddParams) bool {
 
 	resultData, _ := json.Marshal(&deviceInfoResult)
 
-	appServerChan <- &proto.AppMsgData{Cmd: proto.GetDeviceByImeiAckCmdName, Imei: imei,
+	SendMsgToApp(&proto.AppMsgData{Cmd: proto.GetDeviceByImeiAckCmdName, Imei: imei,
 		UserName: params.UserName, AccessToken:params.AccessToken,
-		Data: string(resultData), Conn: c}
+		Data: string(resultData), Conn: c})
 
 	return true
 }
@@ -820,9 +852,9 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 		return AppUpdateDeviceSetting(c, &newSettings, true, params.MySimID)
 	}else{
 		resultData, _ := json.Marshal(&result)
-		appServerChan <- &proto.AppMsgData{Cmd: proto.AddDeviceAckCmdName, Imei: imei,
+		SendMsgToApp(&proto.AppMsgData{Cmd: proto.AddDeviceAckCmdName, Imei: imei,
 			UserName: params.UserName, AccessToken:params.AccessToken,
-			Data: string(resultData), Conn: c}
+			Data: string(resultData), Conn: c})
 	}
 
 	return true
@@ -844,9 +876,9 @@ func deleteDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 	}
 
 	resultData, _ := json.Marshal(&result)
-	appServerChan <- &proto.AppMsgData{Cmd: proto.DeleteDeviceAckCmdName, Imei: imei,
+	SendMsgToApp(&proto.AppMsgData{Cmd: proto.DeleteDeviceAckCmdName, Imei: imei,
 		UserName: params.UserName, AccessToken:params.AccessToken,
-		Data: string(resultData), Conn: c}
+		Data: string(resultData), Conn: c})
 
 	if params.UUID != "" {
 		proto.DeleteDevieeToken(svrctx.Get().APNSServerApiBase, imei, params.UUID)
@@ -1180,9 +1212,9 @@ func AppUpdateDeviceSetting(c *AppConnection, params *proto.DeviceSettingParams,
 
 	jsonData, _ := json.Marshal(&result)
 
-	appServerChan <- &proto.AppMsgData{Cmd: cmdAck, Imei: imei,
+	SendMsgToApp(&proto.AppMsgData{Cmd: cmdAck, Imei: imei,
 		UserName: params.UserName, AccessToken:params.AccessToken,
-		Data: string(jsonData), Conn: c}
+		Data: string(jsonData), Conn: c})
 
 	return ret
 }
@@ -1275,10 +1307,10 @@ func AppQueryLocations(c *AppConnection, params *proto.QueryLocationsParams) boo
 
 	result := proto.QueryLocationsResult{Imei: params.Imei, BeginTime: params.BeginTime, EndTime: params.EndTime, Locations: *locations}
 
-	appServerChan <- &proto.AppMsgData{Cmd: cmdAck,
+	SendMsgToApp(&proto.AppMsgData{Cmd: cmdAck,
 		UserName: params.UserName,
 		AccessToken: params.AccessToken,
-		Data: proto.MakeStructToJson(result), Conn: c}
+		Data: proto.MakeStructToJson(result), Conn: c})
 
 	return true
 }
@@ -1294,10 +1326,10 @@ func AppDeleteAlarms(c *AppConnection, params *proto.QueryLocationsParams) bool 
 		result.ErrorCode = 500
 	}
 
-	appServerChan <- &proto.AppMsgData{Cmd: cmdAck,
+	SendMsgToApp(&proto.AppMsgData{Cmd: cmdAck,
 		UserName: params.UserName,
 		AccessToken: params.AccessToken,
-		Data: proto.MakeStructToJson(result), Conn: c}
+		Data: proto.MakeStructToJson(result), Conn: c})
 
 	return true
 }

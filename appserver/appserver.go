@@ -12,19 +12,24 @@ import (
 	"fmt"
 	"os"
 	"encoding/json"
-	"strconv"
 	"net/http"
 	"io/ioutil"
 	"strings"
+	"sync"
 )
 
-var addConnChan chan *AppConnection
-var delConnChan chan *AppConnection
+//var addConnChan chan *AppConnection
+//var delConnChan chan *AppConnection
+
+var AppClientTableLock = &sync.RWMutex{}
 var AppClientTable = map[uint64]map[string]map[string]*AppConnection{}
-var FenceIndex = uint64(0)
+//var FenceIndex = uint64(0)
+
+var AccessTokenTableLock = &sync.RWMutex{}
+var AccessTokenTable = map[string]bool{}
 
 var appServerChan chan *proto.AppMsgData
-var addDeviceManagerChan = make(chan *AddDeviceChanCtx, 1024 * 2)
+var addDeviceManagerChan = make(chan *AddDeviceChanCtx, 1024 * 20)
 
 type AddDeviceChanCtx struct {
 	cmd string
@@ -35,9 +40,9 @@ type AddDeviceChanCtx struct {
 func init() {
 	logging.Log("appserver init")
 	models.PrintSelf()
-
-	addConnChan = make(chan *AppConnection, 1024)
-	delConnChan = make(chan *AppConnection, 1024)
+	//
+	//addConnChan = make(chan *AppConnection, 1024)
+	//delConnChan = make(chan *AppConnection, 1024)
 
 	//a := StructTest2{"test",StructTest{"123", "456", "789", "abc"}}
 	//b, _ := json.Marshal(a)
@@ -289,102 +294,21 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 	go AddDeviceManagerLoop()
 
-	//负责管理连接、并且回发数据到app端
+	//负责转发数据到app端
 	go func() {
-		defer logging.PanicLogAndExit("appserver.go: 274")
+		defer logging.PanicLogAndExit("appserver.go: 300")
 
 		for  {
 			select {
-			case c := <- delConnChan:
-				if c == nil {
-					logging.Log("delete a nil app connection, exit")
-					os.Exit(1)
-				}
-
-				for _, imei := range c.imeis {
-					subTable, ok := AppClientTable[imei]
-					if ok {
-						connList, ok := subTable[c.user.GetAccessToken()]
-						if ok {
-							if connList != nil && len(connList) > 0 {
-								for connID, connItem := range connList {
-									if c == connItem {
-										delete(connList, connID)
-										logging.Log("connection deleted from AppClientTable," + connID + ", " + (*c.conn).ID())
-									}
-								}
-							}
-
-							if len(connList) == 0{
-								delete(subTable, c.user.GetAccessToken())
-							}
-						} else {
-							logging.Log("will delete connection from appClientTable, but connection not found")
-						}
-
-						if len(subTable) == 0 {
-							delete(AppClientTable, imei)
-						}
-					}
-				}
-				logging.Log("after delete conn:" + fmt.Sprint(AppClientTable))
-			case c := <- addConnChan:
-				if c == nil {
-					logging.Log("add a nil app connection, exit")
-					os.Exit(1)
-				}
-
-				for _, imei := range c.imeis {
-					_, ok := AppClientTable[imei]
-					if !ok {   //不存在，则首先创建新表，然后加入
-						AppClientTable[imei] = map[string]map[string]*AppConnection{}
-						AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
-					}else{
-						_, ok2 := AppClientTable[imei][c.user.GetAccessToken()]
-						if !ok2 {
-							AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
-						}
-					}
-
-					AppClientTable[imei][c.user.GetAccessToken()][(*c.conn).ID()] = c
-				}
-
-				logging.Log("after add conn:" + fmt.Sprint(AppClientTable))
-			case msg := <- appServerChan:  //回发数据到APP
+			case msg := <- appServerChan:  //转发数据到APP
 				if msg == nil {
 					logging.Log("send  a nil msg data to app , exit")
 					os.Exit(1)
 				}
 
 				logging.Log("send data to app:" + fmt.Sprint(string(msg.Cmd)))
-				//如果是login请求，则与设备无关,无须查表，直接发送数据到APP客户端
-				if msg.Cmd == proto.LoginAckCmdName ||
-					msg.Cmd == proto.RegisterAckCmdName ||
-					msg.Cmd == proto.ResetPasswordAckCmdName ||
-					msg.Cmd == proto.ModifyPasswordAckCmdName ||
-					msg.Cmd == proto.FeedbackAckCmdName ||
-					(msg.Cmd == proto.HearbeatAckCmdName && msg.Conn != nil) ||
-					msg.Conn == proto.VerifyCodeAckCmdName ||
-					msg.Cmd == proto.GetDeviceByImeiAckCmdName ||
-					msg.Cmd == proto.AddDeviceAckCmdName ||
-					msg.Cmd == proto.DeleteDeviceAckCmdName ||
-					msg.Cmd == proto.GetLocationsAckCmdName ||
-					msg.Cmd == proto.GetAlarmsAckCmdName ||
-					msg.Cmd == proto.DeleteAlarmsAckCmdName {
 
-					if msg.Cmd == proto.HearbeatAckCmdName {
-						getAppClientsByImei(msg)
-					}
-					c := msg.Conn.(*AppConnection)
-					data, err := json.Marshal(&msg)
-					err = (*c.conn).EmitMessage(data)
-					if err != nil {
-						logging.Log("send msg to app failed, " + err.Error())
-					}else{
-						logging.Log("send msg: " + fmt.Sprint(msg))
-					}
-					break
-				}else if msg.Cmd == proto.DeviceLocateNowAckCmdName {
+				if msg.Cmd == proto.DeviceLocateNowAckCmdName {
 					params := proto.AppRequestTcpConnParams{}
 					err := json.Unmarshal([]byte(msg.Data), &params)
 					if err != nil {
@@ -392,6 +316,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 						break
 					}
 
+					AppClientTableLock.RLock()
 					connList := getAppClientsByAccessToken(msg.Imei,  params.Params.AccessToken)
 					if connList != nil && len(connList) > 0 {
 						for _, c := range connList {
@@ -409,6 +334,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 						}
 					}
 
+					AppClientTableLock.RUnlock()
 					break
 				}
 
@@ -416,6 +342,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 				//如果APP客户端已经登陆过，但服务器上没有该客户端关注的手表的数据，
 				//那么收到该APP客户端的第一个请求，应该首先读取该客户端关注的手表数据
 
+				AppClientTableLock.RLock()
 				subTable := getAppClientsByImei(msg)
 				if subTable != nil {
 					logging.Log(fmt.Sprint(msg.Imei, "app clients: ", subTable))
@@ -438,6 +365,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 						}
 					}
 				}
+				AppClientTableLock.RUnlock()
 			}
 		}
 	}()
@@ -446,18 +374,19 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 }
 
 func OnClientConnected(conn websocket.Connection)  {
-	FenceIndex++
 	logging.Log("websocket connected: " + conn.Context().RemoteAddr() + "Client ID: " + conn.ID())
-	connection := newAppConn(&conn, FenceIndex)
+	connection := newAppConn(&conn)
 	conn.SetValue("ctx", connection)
 
 	//for reading, 负责处理APP请求的业务逻辑
 	go func(c *AppConnection) {
-		defer logging.PanicLogAndExit("appserver.go: 407")
+		defer logging.PanicLogAndCatch("appserver.go: 458, app connection read loop")
 
+		logging.Log("websocket goroutine start: " + conn.Context().RemoteAddr() + "Client ID: " + conn.ID())
 		for  {
 			select {
 			case <- c.closeChan:
+				logging.Log("websocket goroutine end: " + conn.Context().RemoteAddr() + "Client ID: " + conn.ID())
 				return
 			case data := <- c.requestChan:
 				HandleAppRequest(c, appServerChan, data)
@@ -477,14 +406,14 @@ func OnClientConnected(conn websocket.Connection)  {
 	conn.OnDisconnect(func() {
 		logging.Log("websocket disconnected: " + conn.Context().RemoteAddr() + "Client ID: " + conn.ID())
 		c := conn.GetValue("ctx").(*AppConnection)
+		RemoveAppClient(c)
 		c.SetClosed()
 		close(c.requestChan)
 		close(c.responseChan)
 		close(c.closeChan)
 		(*c.conn).Disconnect()
 
-		FenceIndex++
-		delConnChan <- c
+		//FenceIndex++
 	})
 }
 
@@ -493,92 +422,92 @@ func getAppClientsByImei(msg *proto.AppMsgData)  map[string]map[string]*AppConne
 	if ok {
 		return subTable
 	}else {
-		if msg.Conn == nil || len(msg.AccessToken) == 0 {
-			return nil
-		}
-
-		url := "http://127.0.0.1/web/index.php?r=app/service/devices&access-token=" + msg.AccessToken
-		if svrctx.Get().IsDebugLocal {
-			url = "http://120.25.214.188/web/index.php?r=app/service/devices&access-token=" + msg.AccessToken
-		}
-
-		logging.Log("url: " + url)
-		resp, err := http.Get(url)
-		if err != nil {
-			logging.Log("get user devices failed, " + err.Error())
-			return nil
-		}
-
-		defer resp.Body.Close()
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			logging.Log("response has err, " + err.Error())
-			return nil
-		}
-
-		var itf interface{}
-		err = json.Unmarshal(body, &itf)
-		if err != nil {
-			logging.Log("parse login response as json failed, " + err.Error())
-			return nil
-		}
-
-		userDevicesData := itf.(map[string]interface{})
-		if userDevicesData == nil {
-			return nil
-		}
-
-		//logging.Log("userDevicesData: " + fmt.Sprint(userDevicesData))
-		status := userDevicesData["status"].(float64)
-		devices := userDevicesData["devices"]
-
-		//logging.Log("status: " + fmt.Sprint(status))
-		//logging.Log("accessToken: " + fmt.Sprint(accessToken))
-		//logging.Log("devices: " + fmt.Sprint(devices))
-		if status == 0 && devices != nil {
-			c := msg.Conn.(*AppConnection)
-			c.user.AccessToken = msg.AccessToken
-			c.user.Logined = true
-			c.user.Name = msg.UserName
-
-			c.imeis = []uint64{}
-
-			for _, d := range devices.([]interface{}) {
-				device := d.(map[string]interface{})
-				imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
-				logging.Log("device: " + fmt.Sprint(imei))
-				c.imeis = append(c.imeis, imei)
-			}
-
-			if msg.Cmd == proto.AddDeviceOKAckCmdName {
-				c.imeis = append(c.imeis, msg.Imei)
-			}
-
-			for _, imei := range c.imeis {
-				_, ok := AppClientTable[imei]
-				if !ok {   //不存在，则首先创建新表，然后加入
-					AppClientTable[imei] = map[string]map[string]*AppConnection{}
-					AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
-				}else{
-					_, ok2 := AppClientTable[imei][c.user.GetAccessToken()]
-					if !ok2 {
-						AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
-					}
-				}
-
-				AppClientTable[imei][c.user.GetAccessToken()][(*c.conn).ID()] = c
-			}
-
-			logging.Log("after add conn:" + fmt.Sprint(AppClientTable))
-
-			subTable, ok := AppClientTable[msg.Imei]
-			if ok {
-				return subTable
-			}else {
-				return nil
-			}
-		}
+		//if msg.Conn == nil || len(msg.AccessToken) == 0 {
+		//	return nil
+		//}
+		//
+		//url := "http://127.0.0.1/web/index.php?r=app/service/devices&access-token=" + msg.AccessToken
+		//if svrctx.Get().IsDebugLocal {
+		//	url = "http://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + msg.AccessToken
+		//}
+		//
+		//logging.Log("url: " + url)
+		//resp, err := http.Get(url)
+		//if err != nil {
+		//	logging.Log("get user devices failed, " + err.Error())
+		//	return nil
+		//}
+		//
+		//defer resp.Body.Close()
+		//
+		//body, err := ioutil.ReadAll(resp.Body)
+		//if err != nil {
+		//	logging.Log("response has err, " + err.Error())
+		//	return nil
+		//}
+		//
+		//var itf interface{}
+		//err = json.Unmarshal(body, &itf)
+		//if err != nil {
+		//	logging.Log("parse login response as json failed, " + err.Error())
+		//	return nil
+		//}
+		//
+		//userDevicesData := itf.(map[string]interface{})
+		//if userDevicesData == nil {
+		//	return nil
+		//}
+		//
+		////logging.Log("userDevicesData: " + fmt.Sprint(userDevicesData))
+		//status := userDevicesData["status"].(float64)
+		//devices := userDevicesData["devices"]
+		//
+		////logging.Log("status: " + fmt.Sprint(status))
+		////logging.Log("accessToken: " + fmt.Sprint(accessToken))
+		////logging.Log("devices: " + fmt.Sprint(devices))
+		//if status == 0 && devices != nil {
+		//	c := msg.Conn.(*AppConnection)
+		//	c.user.AccessToken = msg.AccessToken
+		//	c.user.Logined = true
+		//	c.user.Name = msg.UserName
+		//
+		//	c.imeis = []uint64{}
+		//
+		//	for _, d := range devices.([]interface{}) {
+		//		device := d.(map[string]interface{})
+		//		imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
+		//		logging.Log("device: " + fmt.Sprint(imei))
+		//		c.imeis = append(c.imeis, imei)
+		//	}
+		//
+		//	if msg.Cmd == proto.AddDeviceOKAckCmdName {
+		//		c.imeis = append(c.imeis, msg.Imei)
+		//	}
+		//
+		//	for _, imei := range c.imeis {
+		//		_, ok := AppClientTable[imei]
+		//		if !ok {   //不存在，则首先创建新表，然后加入
+		//			AppClientTable[imei] = map[string]map[string]*AppConnection{}
+		//			AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
+		//		}else{
+		//			_, ok2 := AppClientTable[imei][c.user.GetAccessToken()]
+		//			if !ok2 {
+		//				AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
+		//			}
+		//		}
+		//
+		//		AppClientTable[imei][c.user.GetAccessToken()][(*c.conn).ID()] = c
+		//	}
+		//
+		//	logging.Log("after add conn:" + fmt.Sprint(AppClientTable))
+		//
+		//	subTable, ok := AppClientTable[msg.Imei]
+		//	if ok {
+		//		return subTable
+		//	}else {
+		//		return nil
+		//	}
+		//}
 
 		return nil
 	}
@@ -856,4 +785,131 @@ func HandleApiCmd(ctx *iris.Context)  {
 	}
 
 	HandleAppURLRequest(ctx,  jsonData)
+}
+
+func AddNewAppClient(c *AppConnection) {
+	if c == nil {
+		logging.Log("add a nil app connection")
+		return
+	}
+
+	AppClientTableLock.Lock()
+	for _, imei := range c.imeis {
+		_, ok := AppClientTable[imei]
+		if !ok {   //不存在，则首先创建新表，然后加入
+			AppClientTable[imei] = map[string]map[string]*AppConnection{}
+			AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
+		}else{
+			_, ok2 := AppClientTable[imei][c.user.GetAccessToken()]
+			if !ok2 {
+				AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
+			}
+		}
+
+		AppClientTable[imei][c.user.GetAccessToken()][(*c.conn).ID()] = c
+	}
+
+	AppClientTableLock.Unlock()
+
+	//记录accesstoken
+	AccessTokenTableLock.Lock()
+	AccessTokenTable[c.user.GetAccessToken()] = true
+	AccessTokenTableLock.Unlock()
+
+	logging.Log("add conn:" + c.user.GetAccessToken())
+}
+
+func RemoveAppClient(c *AppConnection) {
+	if c == nil {
+		logging.Log("remove a nil app connection")
+		return
+	}
+
+	AppClientTableLock.Lock()
+	for _, imei := range c.imeis {
+		subTable, ok := AppClientTable[imei]
+		if ok {
+			connList, ok := subTable[c.user.GetAccessToken()]
+			if ok {
+				if connList != nil && len(connList) > 0 {
+					for connID, connItem := range connList {
+						if c == connItem {
+							delete(connList, connID)
+							logging.Log("connection deleted from AppClientTable," + connID + ", " + (*c.conn).ID())
+						}
+					}
+				}
+
+				if len(connList) == 0 {
+					delete(subTable, c.user.GetAccessToken())
+				}
+			} else {
+				logging.Log("will delete connection from appClientTable, but connection not found")
+			}
+
+			if len(subTable) == 0 {
+				delete(AppClientTable, imei)
+			}
+		}
+	}
+
+	AppClientTableLock.Unlock()
+
+	//删除accesstoken
+	AccessTokenTableLock.Lock()
+	_, ok := AccessTokenTable[c.user.GetAccessToken()]
+	if ok {
+		delete(AccessTokenTable, c.user.GetAccessToken())
+	}
+	AccessTokenTableLock.Unlock()
+
+	logging.Log("delete conn:" + c.user.GetAccessToken())
+}
+
+func ValidAccessToken(AccessToken string)  bool {
+	url := "http://127.0.0.1/web/index.php?r=app/service/devices&access-token=" + AccessToken
+	if svrctx.Get().IsDebugLocal {
+		url = "http://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
+	}
+
+	logging.Log("url: " + url)
+	resp, err := http.Get(url)
+	if err != nil {
+		logging.Log("get user devices failed, " + err.Error())
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logging.Log("response has err, " + err.Error())
+		return false
+	}
+
+	var itf interface{}
+	err = json.Unmarshal(body, &itf)
+	if err != nil {
+		logging.Log("parse login response as json failed, " + err.Error())
+		return false
+	}
+
+	userDevicesData := itf.(map[string]interface{})
+	if userDevicesData == nil {
+		return false
+	}
+
+	//logging.Log("userDevicesData: " + fmt.Sprint(userDevicesData))
+	status := userDevicesData["status"].(float64)
+
+	//logging.Log("status: " + fmt.Sprint(status))
+	//logging.Log("accessToken: " + fmt.Sprint(accessToken))
+	//logging.Log("devices: " + fmt.Sprint(devices))
+	if status == 0  {
+		return true
+	}else{
+		return false
+	}
+
+	return true
 }

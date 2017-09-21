@@ -31,8 +31,8 @@ func newConn(conn *net.TCPConn)  *Connection{
 		IP:  binary.BigEndian.Uint32(addr.IP.To4()),
 		Port: addr.Port,
 		closeChan: make(chan struct{}),
-		requestChan: make(chan *proto.MsgData, 2*1024),
-		responseChan: make(chan *proto.MsgData, 2*1024),
+		requestChan: make(chan *proto.MsgData, 20*1024),
+		responseChan: make(chan *proto.MsgData, 20*1024),
 	}
 }
 

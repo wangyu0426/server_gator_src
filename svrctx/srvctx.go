@@ -89,7 +89,7 @@ func init()  {
 	//serverCtx.BindAddr = "0.0.0.0"
 	//serverCtx.Port = 7016
 	//
-	//serverCtx.HttpServerName = "http://120.25.214.188"  //"http://192.168.3.97"
+	//serverCtx.HttpServerName = "http://watch.gatorcn.com"  //"http://192.168.3.97"
 	//serverCtx.WSPort = 8015
 	//serverCtx.HttpUploadURL = "/api/upload"
 	//serverCtx.HttpStaticURL = "/static"
@@ -212,8 +212,8 @@ func init()  {
 	//	os.Exit(1)
 	//}
 
-	serverCtx.AppServerChan = make(chan *proto.AppMsgData, 1024)
-	serverCtx.TcpServerChan = make(chan *proto.MsgData, 1024)
+	serverCtx.AppServerChan = make(chan *proto.AppMsgData, 10240)
+	serverCtx.TcpServerChan = make(chan *proto.MsgData, 10240)
 
 	serverCtx.ServerExit = make(chan struct{})
 

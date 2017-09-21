@@ -21,13 +21,13 @@ type AppConnection struct {
 	responseChan chan  *proto.AppMsgData
 }
 
-func newAppConn(conn *websocket.Connection, fence uint64)  *AppConnection{
+func newAppConn(conn *websocket.Connection)  *AppConnection{
 	return &AppConnection{
-		fenceIndex: fence,
+		//fenceIndex: fence,
 		conn: conn,
 		closeChan: make(chan struct{}),
-		requestChan: make(chan []byte, 1024),
-		responseChan: make(chan *proto.AppMsgData, 1024),
+		requestChan: make(chan []byte, 10240),
+		responseChan: make(chan *proto.AppMsgData, 10240),
 	}
 }
 

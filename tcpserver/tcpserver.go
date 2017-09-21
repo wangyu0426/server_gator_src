@@ -29,8 +29,8 @@ func init()  {
 	//fmt.Println(string(MakeLatestTimeLocationReplyMsg(proto.CMD_AP14, 357593060571398, 0x00000DA2DB7AFA20, []byte("(0054357593060571398AP1422.587725,113.913641,0,2017,07,06,03,30,13,00000DA2DB7AFA18)"))))
 
 	logging.Log("tcpserver init")
-	addConnChan = make(chan *Connection, 1024)
-	delConnChan = make(chan *Connection, 1024)
+	addConnChan = make(chan *Connection, 10240)
+	delConnChan = make(chan *Connection, 10240)
 }
 
 func isCmdsMatched(reqCmd, ackCmd uint16) bool {

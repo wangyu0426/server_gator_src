@@ -118,6 +118,20 @@ func PanicLogAndExit(errmsg string){
 	panic("panic error cause exit")
 }
 
+
+func PanicLogAndCatch(errmsg string){
+	err := recover()
+	if err == nil {
+		return
+	}
+
+	errText := fmt.Sprint("get panic: ",  errmsg, ", ", err, ", ", string(PanicTrace(128)))
+	Log(errText)
+
+	SendMail("38945787@qq.com", "38945787@qq.com",  "Go Server Panic", errText, "",
+		"smtp.qq.com", 587, "38945787@qq.com", "dumaakzcswglbibe")
+}
+
 func SendMailToDefaultReceiver(body string)  {
 	SendMail("38945787@qq.com", "38945787@qq.com",  "Go Server Msg", body, "",
 		"smtp.qq.com", 587, "38945787@qq.com", "dumaakzcswglbibe")

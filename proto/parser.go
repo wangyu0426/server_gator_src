@@ -213,8 +213,11 @@ type AppMsgData struct {
 	Cmd string  	`json:"cmd"`
 	Imei uint64		`json:"imei,omitempty"`
 	Data string		`json:"data"`
+	AppVer string	`json:"appver"`
+	LabelVer string	`json:"labelver"`
+	ProtoVer string	`json:"protover"`
 	UserName string `json:"username,omitempty"`
-	AccessToken string `json:"accessTken,omitempty"`
+	AccessToken string `json:"accessToken,omitempty"`
 	Conn interface{}  `json:"-"`
 }
 
