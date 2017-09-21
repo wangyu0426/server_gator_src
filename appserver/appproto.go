@@ -793,22 +793,32 @@ func addDeviceByUser(c *AppConnection, params *proto.DeviceAddParams) bool {
 						result.ErrCode = 500
 						result.ErrMsg = "server failed to update db"
 					}else{
-						proto.DeviceInfoListLock.Lock()
-						deviceInfo, ok := (*proto.DeviceInfoList)[imei]
-						if ok && deviceInfo != nil {
-							deviceInfo.VerifyCode = newVerifycode
-						}
-						proto.DeviceInfoListLock.Unlock()
-
-						strSqlInsertDeviceUser :=  fmt.Sprintf("insert into vehiclesinuser (userid, vehid, FamilyNumber, Name, " +
-							"CountryCode)  values('%s', '%s', '%s', '%s', '%s') ", params.UserId, deviceRecId, params.MySimID,
-							params.MyName, params.MySimCountryCode )
-						logging.Log("SQL: " + strSqlInsertDeviceUser)
-						_, err := svrctx.Get().MySQLPool.Exec(strSqlInsertDeviceUser)
+						strSQLUpdateSimID := fmt.Sprintf("UPDATE device SET SimID=%s  where systemNo=%d",
+							params.DeviceSimID, imei % 100000000000)
+						logging.Log("SQL: " + strSQLUpdateSimID)
+						_, err := svrctx.Get().MySQLPool.Exec(strSQLUpdateSimID)
 						if err != nil {
-							logging.Log(fmt.Sprintf("[%s] insert into vehiclesinuser db failed, %s", imei, err.Error()))
+							logging.Log(fmt.Sprintf("[%d] update %s into db failed, %s", imei, "SimID", err.Error()))
 							result.ErrCode = 500
 							result.ErrMsg = "server failed to update db"
+						}else{
+							proto.DeviceInfoListLock.Lock()
+							deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+							if ok && deviceInfo != nil {
+								deviceInfo.VerifyCode = newVerifycode
+							}
+							proto.DeviceInfoListLock.Unlock()
+
+							strSqlInsertDeviceUser :=  fmt.Sprintf("insert into vehiclesinuser (userid, vehid, FamilyNumber, Name, " +
+								"CountryCode)  values('%s', '%s', '%s', '%s', '%s') ", params.UserId, deviceRecId, params.MySimID,
+								params.MyName, params.MySimCountryCode )
+							logging.Log("SQL: " + strSqlInsertDeviceUser)
+							_, err := svrctx.Get().MySQLPool.Exec(strSqlInsertDeviceUser)
+							if err != nil {
+								logging.Log(fmt.Sprintf("[%s] insert into vehiclesinuser db failed, %s", imei, err.Error()))
+								result.ErrCode = 500
+								result.ErrMsg = "server failed to update db"
+							}
 						}
 					}
 				}else{
