@@ -324,12 +324,13 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 								result := proto.HttpAPIResult{ErrCode: 1, Data: proto.DeviceLocateNowSms}
 								appMsg := proto.AppMsgData{Cmd: proto.DeviceLocateNowAckCmdName,
 									Imei: msg.Imei, Data: proto.MakeStructToJson(&result)}
-								err =(*c.conn).EmitMessage([]byte(proto.MakeStructToJson(&appMsg)))
-								if err != nil {
-									logging.Log("send msg to app failed, " + err.Error())
-								}else{
-									logging.Log("send msg: " + fmt.Sprint(msg, c))
-								}
+								c.responseChan <- &appMsg
+								//err =(*c.conn).EmitMessage([]byte(proto.MakeStructToJson(&appMsg)))
+								//if err != nil {
+								//	logging.Log("send msg to app failed, " + err.Error())
+								//}else{
+								//	logging.Log("send msg: " + fmt.Sprint(msg, c))
+								//}
 							}
 						}
 					}
@@ -380,19 +381,30 @@ func OnClientConnected(conn websocket.Connection)  {
 
 	//for reading, 负责处理APP请求的业务逻辑
 	go func(c *AppConnection) {
-		defer logging.PanicLogAndExit("appserver.go: 458, app connection read loop")
+		defer logging.PanicLogAndExit("appserver.go: app connection read loop")
 
-		logging.Log("websocket goroutine start: " + conn.Context().RemoteAddr() + "Client ID: " + conn.ID())
+		logging.Log("websocket goroutine start: " + "user: " + c.user.Name + ", IP: " + conn.Context().RemoteAddr() + ", Client ID: " + conn.ID())
 		for  {
 			select {
 			case <- c.closeChan:
-				logging.Log("websocket goroutine end: " + conn.Context().RemoteAddr() + "Client ID: " + conn.ID())
+				RemoveAppClient(c)
+				c.SetClosed()
+				close(c.requestChan)
+				close(c.responseChan)
+				(*c.conn).Disconnect()
+				logging.Log("websocket goroutine end: " + "user: " + c.user.Name + ", IP: " + conn.Context().RemoteAddr() + ", Client ID: " + conn.ID())
 				return
+			case msg := <- c.responseChan:
+				if msg != nil {
+					SendMsgToApp(msg)
+				}
+
 			case data := <- c.requestChan:
 				HandleAppRequest(c, appServerChan, data)
 			}
 		}
 	}(connection)
+
 
 	conn.OnMessage(func(data []byte) {
 		logging.Log("recv from client: " + string(data))
@@ -406,12 +418,7 @@ func OnClientConnected(conn websocket.Connection)  {
 	conn.OnDisconnect(func() {
 		logging.Log("websocket disconnected: " + conn.Context().RemoteAddr() + "Client ID: " + conn.ID())
 		c := conn.GetValue("ctx").(*AppConnection)
-		RemoveAppClient(c)
-		c.SetClosed()
-		close(c.requestChan)
-		close(c.responseChan)
 		close(c.closeChan)
-		(*c.conn).Disconnect()
 
 		//FenceIndex++
 	})
