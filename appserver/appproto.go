@@ -635,12 +635,16 @@ func getDeviceInfoByImei(c *AppConnection, params *proto.DeviceAddParams) bool {
 		deviceInfoResult = *deviceInfo
 		found = true
 	}else{
-		logging.Log(params.Imei + "  imei not found")
+		//logging.Log(params.Imei + "  imei not found")
 	}
 	proto.DeviceInfoListLock.Unlock()
 
 	deviceInfoResult.Imei = imei
 	deviceInfoResult.VerifyCode = ""
+
+	if found == false {
+		logging.Log(params.Imei + "  imei not found")
+	}
 
 	if found {
 		isAdmin, _, _, err := queryIsAdmin(params.Imei, params.UserName)
