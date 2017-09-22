@@ -380,7 +380,7 @@ func OnClientConnected(conn websocket.Connection)  {
 
 	//for reading, 负责处理APP请求的业务逻辑
 	go func(c *AppConnection) {
-		defer logging.PanicLogAndCatch("appserver.go: 458, app connection read loop")
+		defer logging.PanicLogAndExit("appserver.go: 458, app connection read loop")
 
 		logging.Log("websocket goroutine start: " + conn.Context().RemoteAddr() + "Client ID: " + conn.ID())
 		for  {

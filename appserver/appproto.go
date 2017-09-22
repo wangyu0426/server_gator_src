@@ -229,6 +229,10 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 func SendMsgToApp(msg *proto.AppMsgData)  {
 	data, err := json.Marshal(msg)
 	c := msg.Conn.(*AppConnection)
+	if c.IsClosed() || c.conn == nil {
+		return
+	}
+
 	err = (*c.conn).EmitMessage(data)
 	if err != nil {
 		logging.Log("send msg to app failed, " + err.Error())
