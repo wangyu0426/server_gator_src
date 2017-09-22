@@ -227,6 +227,10 @@ func HandleAppRequest(c *AppConnection, appserverChan chan *proto.AppMsgData, da
 }
 
 func SendMsgToApp(msg *proto.AppMsgData)  {
+	if msg == nil || msg.Conn == nil {
+		return
+	}
+
 	data, err := json.Marshal(msg)
 	c := msg.Conn.(*AppConnection)
 	if c.IsClosed() || c.conn == nil {
