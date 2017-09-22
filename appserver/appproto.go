@@ -626,28 +626,35 @@ func queryIsAdmin(imei, userName string) (bool, bool, string, error) {
 }
 
 func getDeviceInfoByImei(c *AppConnection, params *proto.DeviceAddParams) bool {
+	found := false
 	deviceInfoResult := proto.DeviceInfo{}
 	imei := proto.Str2Num(params.Imei, 10)
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 	if ok && deviceInfo != nil {
 		deviceInfoResult = *deviceInfo
+		found = true
 	}else{
-		proto.DeviceInfoListLock.Unlock()
 		logging.Log(params.Imei + "  imei not found")
-		return false
 	}
 	proto.DeviceInfoListLock.Unlock()
 
+	deviceInfoResult.Imei = imei
 	deviceInfoResult.VerifyCode = ""
 
-	isAdmin, _, _, err := queryIsAdmin(params.Imei, params.UserName)
-	if err != nil {
-		return false
+	if found {
+		isAdmin, _, _, err := queryIsAdmin(params.Imei, params.UserName)
+		if err != nil {
+			return false
+		}
+
+		if isAdmin {
+			deviceInfoResult.IsAdmin = 1
+		}
 	}
 
-	if isAdmin {
-		deviceInfoResult.IsAdmin = 1
+	if found == false {
+		deviceInfoResult.Imei = 0
 	}
 
 	resultData, _ := json.Marshal(&deviceInfoResult)
