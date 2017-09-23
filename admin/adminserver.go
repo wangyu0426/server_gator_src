@@ -8,6 +8,7 @@ import (
 	"../logging"
 	"io/ioutil"
 	"os"
+	"runtime"
 )
 
 func init()  {
@@ -195,6 +196,11 @@ func AdminServerLoop(exitServerFunc func())  {
 	adminsvr.HandleFunc("hget", func(out *redeo.Responder, in *redeo.Request) error {
 		if len(in.Args) == 0 {
 			out.WriteInlineString("nil")
+			return nil
+		}
+
+		if len(in.Args) == 1 && in.Args[0] == "go" {
+			out.WriteInlineString(proto.Num2Str(uint64(runtime.NumGoroutine()), 10))
 			return nil
 		}
 
