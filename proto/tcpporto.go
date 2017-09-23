@@ -2660,10 +2660,8 @@ func (service *GT06Service) ProcessZoneAlarm() bool {
 	//那么上报这次的WiFi入界报警
 	//如果上一次并没有数据，那么直接报WiFi入界
 	if service.wifiZoneIndex >= 0  && service.wifiZoneIndex < MAX_SAFE_ZONE_NUM{
-		if service.old.DataTime == 0  || (service.old.AlarmType & ALARM_INZONE  == 0) &&
-			(service.old.LastAlarmType & ALARM_INZONE  == 0) ||
-			(service.old.AlarmType & ALARM_INZONE  != 0) && int16(service.old.ZoneIndex) != service.wifiZoneIndex &&
-				(service.old.LastAlarmType & ALARM_INZONE  != 0) && int16(service.old.LastZoneIndex) != service.wifiZoneIndex {
+		if service.old.DataTime == 0  || (service.old.LastAlarmType & ALARM_INZONE  == 0) ||
+			(service.old.LastAlarmType & ALARM_INZONE  != 0) && int16(service.old.LastZoneIndex) != service.wifiZoneIndex {
 			DeviceInfoListLock.Lock()
 			safeZones := GetSafeZoneSettings(service.imei)
 			if safeZones != nil {
