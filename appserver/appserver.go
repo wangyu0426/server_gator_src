@@ -494,6 +494,7 @@ func AppConnReadLoop(c *AppConnection) {
 			c.saved = true
 			addConnChan <- c
 		}else{
+			logging.Log(fmt.Sprintf("connid=%d, old user=%s, new user=%s", c.ID, c.user.Name, params["username"].(string)))
 			if c.user.Name != "" && c.ID != 0 && params["username"].(string) != "" && params["username"].(string) != c.user.Name {
 				info := UpdateAppConnInfo{}
 				info.connID = c.ID
