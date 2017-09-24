@@ -852,6 +852,7 @@ func UpdateAppConn(info *UpdateAppConnInfo) {
 	}
 
 	AppConnTable[info.usernameNew][info.connID] = info.conn
+	AppConnTable[info.usernameNew][info.connID].user.Name = info.usernameNew
 	logging.Log(fmt.Sprintf("update conn:  %d, from %s to  %s", info.connID, info.usernameOld, info.usernameNew))
 }
 
