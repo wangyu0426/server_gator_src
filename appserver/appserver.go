@@ -44,7 +44,7 @@ var delDeviceConnChan chan DeviceConnInfo
 var addConnAccessTokenChan chan ConnAccessTokenInfo
 
 var addConnChan chan *AppConnection
-var updateConnChan chan UpdateAppConnInfo
+var updateConnChan chan *UpdateAppConnInfo
 var delConnChan chan *AppConnection
 
 var AppDeviceTable = map[uint64]map[string]bool{}
@@ -67,7 +67,7 @@ func init() {
 	models.PrintSelf()
 
 	addConnChan = make(chan *AppConnection, 10240)
-	updateConnChan = make(chan UpdateAppConnInfo, 10240)
+	updateConnChan = make(chan *UpdateAppConnInfo, 10240)
 	delConnChan = make(chan *AppConnection, 10240)
 
 	addDeviceConnChan = make(chan DeviceConnInfo, 10240)
@@ -123,7 +123,7 @@ func AppConnManagerLoop() {
 			AddNewAppConn(c)
 
 		case info := <- updateConnChan:
-			logging.Log("update an app connection: " + proto.MakeStructToJson(&info))
+			logging.Log("update an app connection: " + proto.MakeStructToJson(info))
 
 			if info.conn == nil || info.connID == 0 || info.usernameOld == "" || info.usernameNew == ""{
 				logging.Log("update a nil app connection")
@@ -496,12 +496,12 @@ func AppConnReadLoop(c *AppConnection) {
 		}else{
 			logging.Log(fmt.Sprintf("connid=%d, old user=%s, new user=%s", c.ID, c.user.Name, params["username"].(string)))
 			if c.user.Name != "" && c.ID != 0 && params["username"].(string) != "" && params["username"].(string) != c.user.Name {
-				info := UpdateAppConnInfo{}
+				info := &UpdateAppConnInfo{}
 				info.connID = c.ID
 				info.usernameOld = c.user.Name
 				info.usernameNew = params["username"].(string)
 				info.conn = c
-				logging.Log("update an app connection: " + proto.MakeStructToJson(&info))
+				logging.Log("update an app connection: " + proto.MakeStructToJson(info))
 				updateConnChan <- info
 			}
 		}
@@ -828,7 +828,7 @@ func AddNewAppConn(c *AppConnection) {
 }
 
 
-func UpdateAppConn(info UpdateAppConnInfo) {
+func UpdateAppConn(info *UpdateAppConnInfo) {
 	if info.conn == nil || info.connID == 0 || info.usernameOld == "" || info.usernameNew == ""{
 		logging.Log("update a nil app connection")
 		return
