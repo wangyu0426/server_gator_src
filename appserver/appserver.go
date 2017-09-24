@@ -44,7 +44,7 @@ var delDeviceConnChan chan DeviceConnInfo
 var addConnAccessTokenChan chan ConnAccessTokenInfo
 
 var addConnChan chan *AppConnection
-var updateConnChan chan *UpdateAppConnInfo
+var updateConnChan chan UpdateAppConnInfo
 var delConnChan chan *AppConnection
 
 var AppDeviceTable = map[uint64]map[string]bool{}
@@ -67,7 +67,7 @@ func init() {
 	models.PrintSelf()
 
 	addConnChan = make(chan *AppConnection, 10240)
-	updateConnChan = make(chan *AppConnection, 10240)
+	updateConnChan = make(chan UpdateAppConnInfo, 10240)
 	delConnChan = make(chan *AppConnection, 10240)
 
 	addDeviceConnChan = make(chan DeviceConnInfo, 10240)
