@@ -2,10 +2,9 @@ package appserver
 
 import (
 	_ "github.com/go-sql-driver/mysql"
-	"gopkg.in/kataras/iris.v6"
 )
 
-func HandleAppURLRequest(c *iris.Context,  data interface{}) bool {
+func HandleAppURLRequest( data interface{}) bool {
 	//msg:= data.(map[string]interface{})
 	//cmd :=  msg["cmd"]
 	//if cmd == nil || msg["data"] == nil {
@@ -143,7 +142,7 @@ func HandleAppURLRequest(c *iris.Context,  data interface{}) bool {
 
 //
 ////忘记密码，通过服务器重设秘密
-//func resetPassword2(c *iris.Context, username string) bool {
+//func resetPassword2( username string) bool {
 //	urlRequest := "http://127.0.0.1/web/index.php?r=app/auth/"
 //	if svrctx.Get().IsDebugLocal {
 //		urlRequest = "http://watch.gatorcn.com/web/index.php?r=app/auth/"
