@@ -94,7 +94,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	//for managing connection, 对内负责管理APP连接对象，对外为TCP server提供通信接口
 	go AppConnManagerLoop()
 
-	//go AddDeviceManagerLoop()
+	go AddDeviceManagerLoop()
 
 	http.Handle("/wsapi", websocket.Handler(OnClientConnected))
 

@@ -135,7 +135,8 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 			UserName: datas["username"].(string),
 			AccessToken: datas["accessToken"].(string)}
 		//return getDeviceInfoByImei(connid, &params)
-		addDeviceManagerChan <- &AddDeviceChanCtx{cmd: proto.GetDeviceByImeiCmdName, connid: connid, params: &params}
+		addCtx := AddDeviceChanCtx{cmd: proto.GetDeviceByImeiCmdName, connid: connid, params: &params}
+		addDeviceManagerChan <- &addCtx
 	case proto.AddDeviceCmdName:
 		jsonString, _ := json.Marshal(msg["data"])
 		params := proto.DeviceAddParams{}
