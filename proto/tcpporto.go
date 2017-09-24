@@ -1332,7 +1332,7 @@ func (service *GT06Service)  NotifyAppWithNewLocation() bool  {
 
 	service.reqCtx.AppNotifyChan  <- &AppMsgData{Cmd: HearbeatAckCmdName,
 		Imei: service.imei,
-		Data: MakeStructToJson(result), Conn: nil}
+		Data: MakeStructToJson(result), ConnID: 0}
 	return true
 }
 
@@ -1350,7 +1350,7 @@ func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan
 
 	appNotifyChan  <- &AppMsgData{Cmd: HearbeatAckCmdName,
 		Imei: imei,
-		Data: MakeStructToJson(result), Conn: nil}
+		Data: MakeStructToJson(result), ConnID: 0}
 
 	if apiBaseURL != "" {
 		DeviceInfoListLock.Lock()

@@ -4,26 +4,27 @@ import (
 	"../proto"
 	"../models"
 	"sync/atomic"
-	"gopkg.in/kataras/iris.v6/adaptors/websocket"
 	"sync"
+	"golang.org/x/net/websocket"
 )
 
 type AppConnection struct {
-	fenceIndex uint64
+	ID uint64
 	closeFlag int32
 	saved bool
 	user models.User
 	imeis []uint64
-	conn *websocket.Connection
+	conn *websocket.Conn
 	closeOnce sync.Once
 	closeChan chan struct{}
 	requestChan chan  []byte
 	responseChan chan  *proto.AppMsgData
 }
 
-func newAppConn(conn *websocket.Connection)  *AppConnection{
+func newAppConn(conn *websocket.Conn)  *AppConnection{
 	return &AppConnection{
 		//fenceIndex: fence,
+		ID: proto.NewMsgID(),
 		conn: conn,
 		closeChan: make(chan struct{}),
 		requestChan: make(chan []byte, 10240),

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"os"
 	"time"
+	"encoding/json"
 )
 
 const (
@@ -123,16 +124,21 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 
 				//result := proto.HttpAPIResult{ErrCode: 1, Imei: proto.Num2Str(msg.Header.Header.Imei, 10), Data: msg.Data}
 
+				reqParams := proto.AppRequestTcpConnParams{}
 				switch msg.Header.Header.Cmd {
 				case proto.CMD_AP00:
 					cmdAckName = proto.DeviceLocateNowAckCmdName
+					_ = json.Unmarshal(msg.Data, &reqParams)
+
 				//case proto.CMD_AP16:
 				//	cmdAckName = proto.ActiveDeviceSosAckCmdName
 				}
 
-				serverCtx.AppServerChan  <- &proto.AppMsgData{Cmd: cmdAckName,
-					Imei: msg.Header.Header.Imei,
-					Data: string(msg.Data), Conn: nil}
+				if reqParams.ConnID != 0 && reqParams.Params.UserName != "" {
+					serverCtx.AppServerChan <- &proto.AppMsgData{Cmd: cmdAckName,
+						Imei: msg.Header.Header.Imei,
+						Data: string(msg.Data), ConnID: reqParams.ConnID, UserName: reqParams.Params.UserName}
+				}
 
 				break
 			}
@@ -442,7 +448,6 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 			break  //退出循环和go routine，连接关闭
 		}
 	}
-
 }
 
 //for writing, 写协程等待一个channel的数据，将channel收到的数据发送至客户端

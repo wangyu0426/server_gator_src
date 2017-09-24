@@ -7,7 +7,6 @@ import (
 	"time"
 	"sync"
 	"gopkg.in/gomail.v2"
-	"strings"
 )
 
 
@@ -65,9 +64,9 @@ func GetLogDir() string {
 
 func Log(msg string)  {
 	funcAddr, file, line, ok := runtime.Caller(1)
-	if strings.Contains(file, "appserver.go") || strings.Contains(file, "appproto.go") {
-		return
-	}
+	//if strings.Contains(file, "appserver.go") || strings.Contains(file, "appproto.go") {
+	//	return
+	//}
 
 	if ok {
 		funcName := runtime.FuncForPC(funcAddr).Name()

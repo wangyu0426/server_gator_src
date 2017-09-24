@@ -5,25 +5,43 @@ import (
 	"../svrctx"
 	"../models"
 	"../proto"
-
-	"gopkg.in/kataras/iris.v6"
-	"gopkg.in/kataras/iris.v6/adaptors/httprouter"
-	"gopkg.in/kataras/iris.v6/adaptors/websocket"
 	"fmt"
 	"os"
 	"encoding/json"
 	"net/http"
+	"golang.org/x/net/websocket"
 	"io/ioutil"
 	"strings"
 	"sync"
+	"time"
 )
 
-//var addConnChan chan *AppConnection
-//var delConnChan chan *AppConnection
+// go get github.com/golang/net
+//ln -s  /home/work/go/src/github.com/golang/net   /home/work/go/src/golang.org/x/net
+//go install golang.org/x/net/websocket
 
-var AppClientTableLock = &sync.RWMutex{}
-var AppClientTable = map[uint64]map[string]map[string]*AppConnection{}
-//var FenceIndex = uint64(0)
+type DeviceConnInfo struct {
+	imei uint64
+	username string
+}
+
+type ConnAccessTokenInfo struct {
+	connID uint64
+	username string
+	accessToken string
+}
+
+
+var addDeviceConnChan chan DeviceConnInfo
+var delDeviceConnChan chan DeviceConnInfo
+
+var addConnAccessTokenChan chan ConnAccessTokenInfo
+
+var addConnChan chan *AppConnection
+var delConnChan chan *AppConnection
+
+var AppDeviceTable = map[uint64]map[string]bool{}
+var AppConnTable = map[string]map[uint64]*AppConnection{}
 
 var AccessTokenTableLock = &sync.RWMutex{}
 var AccessTokenTable = map[string]bool{}
@@ -34,523 +52,545 @@ var addDeviceManagerChan = make(chan *AddDeviceChanCtx, 1024 * 20)
 type AddDeviceChanCtx struct {
 	cmd string
 	params *proto.DeviceAddParams
-	c *AppConnection
+	connid uint64
 }
 
 func init() {
 	logging.Log("appserver init")
 	models.PrintSelf()
-	//
-	//addConnChan = make(chan *AppConnection, 1024)
-	//delConnChan = make(chan *AppConnection, 1024)
 
-	//a := StructTest2{"test",StructTest{"123", "456", "789", "abc"}}
-	//b, _ := json.Marshal(a)
-	//fmt.Println(string(b))
+	addConnChan = make(chan *AppConnection, 10240)
+	delConnChan = make(chan *AppConnection, 10240)
 
-	//a := "{\"Username\":\"123\",\"Password\":\"456\"}"
-	//var test StructTest
-	//json.Unmarshal([]byte(a), &test)
-	//fmt.Println(test)
-	//b, _ := json.Marshal(test)
-	//fmt.Println(string(b))
-	//a := []byte("abcde")
-	//for i, letter := range a  {
-	//	fmt.Println(i, letter)
-	//}
-	//fmt.Println("rand verify code: ", makerRandomVerifyCode())
-	//os.Exit(0)
+	addDeviceConnChan = make(chan DeviceConnInfo, 10240)
+	delDeviceConnChan = make(chan DeviceConnInfo, 10240)
 
+	addConnAccessTokenChan  = make(chan ConnAccessTokenInfo, 10240)
 }
 
 func LocalAPIServerRunLoop(serverCtx *svrctx.ServerContext) {
 	defer logging.PanicLogAndExit("LocalAPIServerRunLoop")
 
-	app := iris.New()
-	//app.Adapt(iris.DevLogger())
-	app.Adapt(httprouter.New())
-
-	app.Get("/api/get-locations", GetLocationsByURL)
-
-	app.Get("GetWatchData", GetLocationsByURL)
-	//GetWatchData?systemno={systemno}&datatype=2&callback={callback}&end={end}&start={start}
-
+	http.HandleFunc("/api/get-locations", GetLocationsByURL)
+	http.HandleFunc("/GetWatchData", GetLocationsByURL)
 	addr := fmt.Sprintf("%s:%d", serverCtx.LocalAPIBindAddr, serverCtx.LocalAPIPort)
 	logging.Log("LocalAPIServer listen:  " + addr)
-	app.Listen(addr)
-
+	http.ListenAndServe(addr, nil)
 }
 
 func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	defer logging.PanicLogAndExit("AppServerRunLoop")
 
 	appServerChan = serverCtx.AppServerChan
-	app := iris.New()
-	//app.Adapt(iris.DevLogger())
-	app.Adapt(httprouter.New())
-	ws := websocket.New(websocket.Config{Endpoint: "/wsapi"})
-	app.Adapt(ws)
-	ws.OnConnection(OnClientConnected)
 
-	app.StaticWeb(svrctx.Get().HttpStaticURL, svrctx.Get().HttpStaticDir)
+	//for managing connection, 对内负责管理APP连接对象，对外为TCP server提供通信接口
+	go AppConnManagerLoop()
 
-	app.Post("/api/cmd", HandleApiCmd)
-	app.Post("/api/gator3-version", GetAppVersionOnline)
-	app.Post(svrctx.Get().HttpUploadURL, func(ctx *iris.Context) {
-		result := proto.HttpAPIResult{
-			ErrCode: 0,
-			ErrMsg: "",
-			Imei: "0",
-		}
+	//go AddDeviceManagerLoop()
 
-		imei := ctx.FormValue("imei")
-		username := ctx.FormValue("username")
-		fieldname := ctx.FormValue("fieldname")
-		uploadType := ctx.FormValue("type")
-		fmt.Println(uploadType)
+	http.Handle("/wsapi", websocket.Handler(OnClientConnected))
 
-		result.Imei = imei
+	//http.Handle(svrctx.Get().HttpStaticURL, http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
+	http.Handle("/",  http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
 
-		//_,fileInfo, err1 := ctx.FormFile(uploadType)
-		//if err1 != nil {
-		//	result.ErrCode = 500
-		//	ctx.JSON(500, result)
-		//	return
-		//}
-		//
-		//file,err2 :=fileInfo.Open()
-		//if err2 != nil {
-		//	result.ErrCode = 500
-		//	result.ErrMsg = "server failed to open the uploaded  file"
-		//	ctx.JSON(500, result)
-		//	return
-		//}
-		//
-		//defer file.Close()
-		//fileData, err3 :=ioutil.ReadAll(file)
-		//if err3 != nil {
-		//	result.ErrCode = 500
-		//	result.ErrMsg = "server failed to read the data of  the uploaded  file"
-		//	ctx.JSON(500, result)
-		//	return
-		//}
+	//http.HandleFunc("/api/cmd", HandleApiCmd)
+	http.HandleFunc("/api/gator3-version", GetAppVersionOnline)
+	http.HandleFunc(svrctx.Get().HttpUploadURL, HandleUploadFile)
 
-		if uploadType != "minichat" {
-			fileData, err := base64Decode([]byte(ctx.FormValue(uploadType)))
-			if err != nil {
-				result.ErrCode = 500
-				result.ErrMsg = "upload bad data"
-				ctx.JSON(500, result)
-				return
+	http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), nil)
+}
+
+//for managing connection, 对内负责管理APP连接对象，对外为TCP server提供通信接口
+func AppConnManagerLoop() {
+	defer logging.PanicLogAndExit("AppConnManagerLoop")
+
+	for  {
+		select {
+		case c := <- addConnChan:
+			if c == nil {
+				logging.Log("add a nil app connection")
+				os.Exit(-1)
 			}
 
-			os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir + imei, 0755)
-			fileName, timestampString := "", proto.MakeTimestampIdString()
+			AddNewAppConn(c)
 
-			if uploadType == "contactAvatar" {
-				contactIndex := ctx.FormValue("index")
-				fileName += "contact_" + contactIndex + "_"
+		case c := <- delConnChan:
+			if c == nil {
+				logging.Log("delete a nil app connection")
+				os.Exit(-1)
 			}
 
-			fileName += timestampString + ".jpg"
+			RemoveAppConn(c)
 
-			uploadTypeDir := svrctx.Get().HttpStaticAvatarDir
-
-			err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + uploadTypeDir + imei + "/" + fileName, fileData, 0666)
-			if err4 != nil {
-				result.ErrCode = 500
-				result.ErrMsg = "server failed to save the uploaded  file"
-				ctx.JSON(500, result)
-				return
+		case info := <- addConnAccessTokenChan:
+			if info.connID == 0  || info.username == "" ||   info.accessToken == ""{
+				logging.Log("add a nil app connection access token, exit")
+				os.Exit(-1)
 			}
 
-			settings := make([]proto.SettingParam, 1)
-			if uploadType == "contactAvatar" {
-				settings[0].Index = int(proto.Str2Num(ctx.FormValue("index"), 10))
-			}
-			settings[0].FieldName = fieldname
-			settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir +  imei + "/"  +  fileName
+			AddAppConnAccessToken(info)
 
-			ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
-			if ret {
-				if uploadType == "contactAvatar" {
-					photoInfo := proto.PhotoSettingInfo{}
-					photoInfo.CreateTime = proto.NewMsgID()
-					photoInfo.Member.Phone = ctx.FormValue("phone")
-					photoInfo.ContentType = proto.ChatContentPhoto
-					photoInfo.Content = fileName//proto.MakeTimestampIdString()
-					photoInfo.MsgId = proto.Str2Num(ctx.FormValue("msgId"), 10)
-					svrctx.AddPendingPhotoData(proto.Str2Num(imei, 10), photoInfo)
-				}
-
-				result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
-					svrctx.Get().HttpStaticAvatarDir +  imei + "/" +  fileName)
-				fmt.Println(fileName)
-				ctx.JSON(200, result)
-			}else{
-				result.ErrCode = 500
-				result.ErrMsg = "server failed to update the device setting in db"
-				ctx.JSON(500, result)
-				return
-			}
-		}else if uploadType == "minichat" {
-			imeiUint64 := proto.Str2Num(imei, 10)
-			phone := ctx.FormValue("phone")
-
-			if svrctx.IsPhoneNumberInFamilyList(imeiUint64, phone) == false {
-				result.ErrCode = 500
-				result.ErrMsg = fmt.Sprintf("phone number %s is not in the family phone list of %d", phone, imeiUint64)
-				ctx.JSON(500, result)
-				return
+		case info := <- addDeviceConnChan:
+			if info.imei == 0  ||  info.username == ""{
+				logging.Log("add a nil app device connection, exit")
+				os.Exit(-1)
 			}
 
-			_,fileInfo, err5 := ctx.FormFile(uploadType)
-			if err5 != nil {
-				result.ErrCode = 500
-				result.ErrMsg = "the uploaded type is not a file"
-				ctx.JSON(500, result)
-				return
+			AddAppDevice(info)
+
+		case info := <- delDeviceConnChan:
+			if info.imei == 0  ||  info.username == ""{
+				logging.Log("delete a nil app device connection")
+				os.Exit(-1)
 			}
 
-			file,err6 :=fileInfo.Open()
-			if err6 != nil {
-				result.ErrCode = 500
-				result.ErrMsg = "server failed to open the uploaded  file"
-				ctx.JSON(500, result)
-				return
+			RemoveAppDevice(info)
+
+		case msg := <- appServerChan:  //转发数据到APP
+			if msg == nil {
+				logging.Log("send  a nil msg data to app , exit")
+				os.Exit(-1)
 			}
 
-			defer file.Close()
-			fileData, err7 :=ioutil.ReadAll(file)
-			if err7 != nil {
-				result.ErrCode = 500
-				result.ErrMsg = "server failed to read the data of  the uploaded  file"
-				ctx.JSON(500, result)
-				return
-			}
+			logging.Log("send data to app:" + fmt.Sprint(string(msg.Cmd)))
 
-			if len(fileData) == 0 {
-				result.ErrCode = 500
-				result.ErrMsg = "no content in the uploaded  file (size is 0)"
-				ctx.JSON(500, result)
-				return
-			}
-
-			os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticMinichatDir + imei, 0755)
-			fileName, timestampString := "", proto.MakeTimestampIdString()
-			fileName += timestampString + ".aac"
-
-			uploadTypeDir := svrctx.Get().HttpStaticMinichatDir
-			filePath := svrctx.Get().HttpStaticDir + uploadTypeDir +  imei + "/" + fileName
-			fileAmrPath := svrctx.Get().HttpStaticDir + uploadTypeDir +  imei + "/" +  timestampString + ".amr"
-
-				err8 := ioutil.WriteFile(filePath, fileData, 0666)
-			if err8 != nil {
-				result.ErrCode = 500
-				result.ErrMsg = "server failed to save the uploaded  file"
-				ctx.JSON(500, result)
-				return
-			}
-
-			chat := proto.ChatInfo{}
-			chat.CreateTime = proto.NewMsgID()
-			chat.Imei = imeiUint64
-			chat.Sender = phone
-			chat.SenderType = 1
-			chat.SenderUser = username
-			chat.VoiceMilisecs = int(proto.Str2Num(ctx.FormValue("duration"), 10))
-			chat.ContentType = proto.ChatContentVoice
-			chat.Content = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
-				svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)//timestampString
-			chat.FileID = proto.Str2Num(timestampString, 10)
-			if len(ctx.FormValue("timestamp")) == 14 {
-				chat.DateTime = proto.Str2Num( ctx.FormValue("timestamp")[2:14], 10)
-			}else{
-				chat.DateTime = proto.Str2Num(timestampString[0:12], 10)
-			}
-
-
-			args := fmt.Sprintf("-i %s -acodec amr_nb -ab 3.2k -ar 8000 %s", filePath, fileAmrPath)
-			err9, _ := proto.ExecCmd("ffmpeg",  strings.Split(args, " ")...)
-			if err9 != nil {
-				logging.Log(fmt.Sprintf("[%d] ffmpeg %s failed, %s", imeiUint64, args, err9.Error()))
-			}
-
-			logging.Log(fmt.Sprintf("[%d] app upload chat: %s", imeiUint64, proto.MakeStructToJson(chat)))
-			svrctx.AddChatData(imeiUint64, chat)
-			proto.AddChatForApp(chat)
-
-			//这里应该通知APP，微聊列表有新的项
-			proto.NotifyAppWithNewMinichat("", imeiUint64, appServerChan, chat)
-			//result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
-				//svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)
-
-			fmt.Println(fileName)
-			ctx.JSON(200, result)
-			return
-		}else{
-		}
-	})
-
-	go AddDeviceManagerLoop()
-
-	//负责转发数据到app端
-	go func() {
-		defer logging.PanicLogAndExit("appserver.go: 300")
-
-		for  {
-			select {
-			case msg := <- appServerChan:  //转发数据到APP
-				if msg == nil {
-					logging.Log("send  a nil msg data to app , exit")
-					os.Exit(1)
-				}
-
-				logging.Log("send data to app:" + fmt.Sprint(string(msg.Cmd)))
-
-				if msg.Cmd == proto.DeviceLocateNowAckCmdName {
-					params := proto.AppRequestTcpConnParams{}
-					err := json.Unmarshal([]byte(msg.Data), &params)
-					if err != nil {
-						logging.Log("parse json data for locate now ack failed, " + err.Error() + ", " + msg.Data)
-						break
-					}
-
-					AppClientTableLock.RLock()
-					connList := getAppClientsByAccessToken(msg.Imei,  params.Params.AccessToken)
-					if connList != nil && len(connList) > 0 {
-						for _, c := range connList {
-							if c != nil {
-								result := proto.HttpAPIResult{ErrCode: 1, Data: proto.DeviceLocateNowSms}
-								appMsg := proto.AppMsgData{Cmd: proto.DeviceLocateNowAckCmdName,
-									Imei: msg.Imei, Data: proto.MakeStructToJson(&result)}
-								c.responseChan <- &appMsg
-								//err =(*c.conn).EmitMessage([]byte(proto.MakeStructToJson(&appMsg)))
-								//if err != nil {
-								//	logging.Log("send msg to app failed, " + err.Error())
-								//}else{
-								//	logging.Log("send msg: " + fmt.Sprint(msg, c))
-								//}
-							}
-						}
-					}
-
-					AppClientTableLock.RUnlock()
+			if msg.Cmd == proto.DeviceLocateNowAckCmdName {
+				params := proto.AppRequestTcpConnParams{}
+				err := json.Unmarshal([]byte(msg.Data), &params)
+				if err != nil {
+					logging.Log("parse json data for locate now ack failed, " + err.Error() + ", " + msg.Data)
 					break
 				}
 
-				//从表中找出所有跟此IMEI关联的APP客户端，并将数据发送至每一个APP客户端
-				//如果APP客户端已经登陆过，但服务器上没有该客户端关注的手表的数据，
-				//那么收到该APP客户端的第一个请求，应该首先读取该客户端关注的手表数据
+				conn := getAppConnByConnID(params.Params.UserName, params.ConnID)
+				if conn != nil  {
+					result := proto.HttpAPIResult{ErrCode: 1, Data: proto.DeviceLocateNowSms}
+					appMsg := proto.AppMsgData{Cmd: proto.DeviceLocateNowAckCmdName,
+						Imei: msg.Imei, Data: proto.MakeStructToJson(&result)}
+					conn.responseChan <- &appMsg
+				}
 
-				AppClientTableLock.RLock()
-				subTable := getAppClientsByImei(msg)
-				if subTable != nil {
-					logging.Log(fmt.Sprint(msg.Imei, "app clients: ", subTable))
-					for _, connList := range subTable{
-						logging.Log(fmt.Sprint(msg.Imei, "app connlist: ", connList))
-						if connList != nil && len(connList) > 0 {
-							logging.Log(fmt.Sprint(msg.Imei, "app connlist len: ", len(connList)))
-							for _, c := range connList {
-								logging.Log(fmt.Sprint(msg.Imei, "app conn: ", c))
-								if c != nil {
-									data, err := json.Marshal(&msg)
-									err = (*c.conn).EmitMessage(data)
-									if err != nil {
-										logging.Log("send msg to app failed, " + err.Error())
-									} else {
-										logging.Log("send msg: " + fmt.Sprint(msg, c))
-									}
-								}
+				break
+			}
+
+			//如果connid不为0，则直接发送到这个单独的连接
+			if msg.ConnID != 0 {
+				conn := getAppConnByConnID(msg.UserName, msg.ConnID)
+				if conn != nil  && conn.responseChan != nil {
+					conn.responseChan <- msg
+				}
+
+				break
+			}
+
+			//connid为0，表示群发给所有关注此IMEI的APP客户端
+			//从表中找出所有跟此IMEI关联的APP客户端，并将数据发送至每一个APP客户端
+			imeiAppUsers, _ := AppDeviceTable[msg.Imei]
+			if imeiAppUsers == nil {
+				AppDeviceTable[msg.Imei] = getDeviceUserTable(msg.Imei)
+				if AppDeviceTable[msg.Imei] == nil {
+					AppDeviceTable[msg.Imei] = map[string]bool{}
+				}
+
+				imeiAppUsers, _ = AppDeviceTable[msg.Imei]
+			}
+
+			if len(imeiAppUsers) >  0 {
+				for username, _ := range imeiAppUsers {
+					userConnTable := getAppConnsByUserName(username)
+					if userConnTable != nil {
+						for _, c := range userConnTable {
+							if c != nil  && c.responseChan != nil {
+								c.responseChan <- msg
 							}
 						}
 					}
 				}
-				AppClientTableLock.RUnlock()
 			}
 		}
+	}
+}
+
+func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
+	result := proto.HttpAPIResult{
+		ErrCode: 0,
+		ErrMsg: "",
+		Imei: "0",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	imei := r.FormValue("imei")
+	username := r.FormValue("username")
+	fieldname := r.FormValue("fieldname")
+	uploadType := r.FormValue("type")
+	fmt.Println(uploadType)
+
+	result.Imei = imei
+
+	//_,fileInfo, err1 := ctx.FormFile(uploadType)
+	//if err1 != nil {
+	//	result.ErrCode = 500
+	//	ctx.JSON(500, result)
+	//	return
+	//}
+	//
+	//file,err2 :=fileInfo.Open()
+	//if err2 != nil {
+	//	result.ErrCode = 500
+	//	result.ErrMsg = "server failed to open the uploaded  file"
+	//	ctx.JSON(500, result)
+	//	return
+	//}
+	//
+	//defer file.Close()
+	//fileData, err3 :=ioutil.ReadAll(file)
+	//if err3 != nil {
+	//	result.ErrCode = 500
+	//	result.ErrMsg = "server failed to read the data of  the uploaded  file"
+	//	ctx.JSON(500, result)
+	//	return
+	//}
+
+	if uploadType != "minichat" {
+		fileData, err := base64Decode([]byte(r.FormValue(uploadType)))
+		if err != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "upload bad data"
+			JSON(w, 500, &result)
+			return
+		}
+
+		os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir + imei, 0755)
+		fileName, timestampString := "", proto.MakeTimestampIdString()
+
+		if uploadType == "contactAvatar" {
+			contactIndex := r.FormValue("index")
+			fileName += "contact_" + contactIndex + "_"
+		}
+
+		fileName += timestampString + ".jpg"
+
+		uploadTypeDir := svrctx.Get().HttpStaticAvatarDir
+
+		err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + uploadTypeDir + imei + "/" + fileName, fileData, 0666)
+		if err4 != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to save the uploaded  file"
+			JSON(w, 500, &result)
+			return
+		}
+
+		settings := make([]proto.SettingParam, 1)
+		if uploadType == "contactAvatar" {
+			settings[0].Index = int(proto.Str2Num(r.FormValue("index"), 10))
+		}
+		settings[0].FieldName = fieldname
+		settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir + imei + "/" + fileName
+
+		ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
+		if ret {
+			if uploadType == "contactAvatar" {
+				photoInfo := proto.PhotoSettingInfo{}
+				photoInfo.CreateTime = proto.NewMsgID()
+				photoInfo.Member.Phone = r.FormValue("phone")
+				photoInfo.ContentType = proto.ChatContentPhoto
+				photoInfo.Content = fileName//proto.MakeTimestampIdString()
+				photoInfo.MsgId = proto.Str2Num(r.FormValue("msgId"), 10)
+				svrctx.AddPendingPhotoData(proto.Str2Num(imei, 10), photoInfo)
+			}
+
+			result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort, svrctx.Get().HttpStaticURL +
+				svrctx.Get().HttpStaticAvatarDir + imei + "/" + fileName)
+			fmt.Println(fileName)
+			JSON(w, 200, &result)
+		} else {
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to update the device setting in db"
+			JSON(w, 500, &result)
+			return
+		}
+	} else if uploadType == "minichat" {
+		imeiUint64 := proto.Str2Num(imei, 10)
+		phone := r.FormValue("phone")
+
+		if svrctx.IsPhoneNumberInFamilyList(imeiUint64, phone) == false {
+			result.ErrCode = 500
+			result.ErrMsg = fmt.Sprintf("phone number %s is not in the family phone list of %d", phone, imeiUint64)
+			JSON(w, 500, &result)
+			return
+		}
+
+		_, fileInfo, err5 := r.FormFile(uploadType)
+		if err5 != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "the uploaded type is not a file"
+			JSON(w, 500, &result)
+			return
+		}
+
+		file, err6 := fileInfo.Open()
+		if err6 != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to open the uploaded  file"
+			JSON(w, 500, &result)
+			return
+		}
+
+		defer file.Close()
+		fileData, err7 := ioutil.ReadAll(file)
+		if err7 != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to read the data of  the uploaded  file"
+			JSON(w, 500, &result)
+			return
+		}
+
+		if len(fileData) == 0 {
+			result.ErrCode = 500
+			result.ErrMsg = "no content in the uploaded  file (size is 0)"
+			JSON(w, 500, &result)
+			return
+		}
+
+		os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticMinichatDir + imei, 0755)
+		fileName, timestampString := "", proto.MakeTimestampIdString()
+		fileName += timestampString + ".aac"
+
+		uploadTypeDir := svrctx.Get().HttpStaticMinichatDir
+		filePath := svrctx.Get().HttpStaticDir + uploadTypeDir + imei + "/" + fileName
+		fileAmrPath := svrctx.Get().HttpStaticDir + uploadTypeDir + imei + "/" + timestampString + ".amr"
+
+		err8 := ioutil.WriteFile(filePath, fileData, 0666)
+		if err8 != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to save the uploaded  file"
+			JSON(w, 500, &result)
+			return
+		}
+
+		chat := proto.ChatInfo{}
+		chat.CreateTime = proto.NewMsgID()
+		chat.Imei = imeiUint64
+		chat.Sender = phone
+		chat.SenderType = 1
+		chat.SenderUser = username
+		chat.VoiceMilisecs = int(proto.Str2Num(r.FormValue("duration"), 10))
+		chat.ContentType = proto.ChatContentVoice
+		chat.Content = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort, svrctx.Get().HttpStaticURL +
+			svrctx.Get().HttpStaticMinichatDir + imei + "/" + fileName)//timestampString
+		chat.FileID = proto.Str2Num(timestampString, 10)
+		if len(r.FormValue("timestamp")) == 14 {
+			chat.DateTime = proto.Str2Num(r.FormValue("timestamp")[2:14], 10)
+		} else {
+			chat.DateTime = proto.Str2Num(timestampString[0:12], 10)
+		}
+
+		args := fmt.Sprintf("-i %s -acodec amr_nb -ab 3.2k -ar 8000 %s", filePath, fileAmrPath)
+		err9, _ := proto.ExecCmd("ffmpeg", strings.Split(args, " ")...)
+		if err9 != nil {
+			logging.Log(fmt.Sprintf("[%d] ffmpeg %s failed, %s", imeiUint64, args, err9.Error()))
+		}
+
+		logging.Log(fmt.Sprintf("[%d] app upload chat: %s", imeiUint64, proto.MakeStructToJson(chat)))
+		svrctx.AddChatData(imeiUint64, chat)
+		proto.AddChatForApp(chat)
+
+		//这里应该通知APP，微聊列表有新的项
+		proto.NotifyAppWithNewMinichat("", imeiUint64, appServerChan, chat)
+		//result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
+		//svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)
+
+		fmt.Println(fileName)
+		JSON(w, 200, &result)
+		return
+	} else {
+	}
+}
+
+func OnClientConnected(conn *websocket.Conn) {
+	connection := newAppConn(conn)
+	logging.Log(fmt.Sprintf("websocket connected,  IP: %s, ID: %d ", conn.RemoteAddr(), connection.ID))
+
+	//for writing, 写协程等待一个channel的数据，将channel收到的数据发送至客户端
+	go AppConnWriteLoop(connection)
+
+	//for business handler，业务处理的协程
+	go AppBusinessHandleLoop(connection)
+
+	//for reading
+	 AppConnReadLoop(connection)
+}
+
+//for reading
+func AppConnReadLoop(c *AppConnection) {
+	//for reading, 负责处理APP请求的业务逻辑
+	defer logging.PanicLogAndExit("AppConnReadLoop")
+
+	defer func() {
+		logging.Log(fmt.Sprintf("client %s, %d closed", c.user.Name, c.ID))
+		delConnChan <- c
 	}()
 
-	app.Listen(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort))
+	for  {
+		n := 0
+		var err error
+		buf := make([]byte,  16  * 1024)
+		if svrctx.Get().IsDebug == false {
+			c.conn.SetReadDeadline(time.Now().Add(time.Second * svrctx.Get().RecvTimeout))
+		}
+
+		if n, err = c.conn.Read(buf); err != nil {
+			logging.Log(fmt.Sprintf("websocket recv  failed, recv size = %d, err = %s", n, err.Error()))
+			return
+		}
+
+		logging.Log("recv: " + string(buf[0: n]))
+
+		var itf interface{}
+
+		err =json.Unmarshal(buf[0: n], &itf)
+		if err != nil {
+			logging.Log("parse recved json data failed, " + err.Error())
+			return
+		}
+
+		msg:= itf.(map[string]interface{})
+		data := msg["data"]
+		if data == nil || proto.MakeStructToJson(&data) == "" {
+			logging.Log("parse recved json data is empty ")
+			return
+		}
+
+		params := msg["data"].(map[string]interface{})
+
+		if ( params["username"] == nil ||  params["username"].(string) == "") {
+			//没有username
+			logging.Log("parse recved json username is empty ")
+			return
+		}
+
+		if c.saved == false {
+			//c.imeis = getUserDevicesImei(params["username"].(string))
+			c.user.Name = params["username"].(string)
+			c.saved = true
+			addConnChan <- c
+		}
+
+		c.requestChan <- buf[0: n]
+	}
 }
 
-func OnClientConnected(conn websocket.Connection)  {
-	logging.Log("websocket connected: " + conn.Context().RemoteAddr() + "Client ID: " + conn.ID())
-	connection := newAppConn(&conn)
-	conn.SetValue("ctx", connection)
+//for business handler，业务处理的协程
+func AppBusinessHandleLoop(c *AppConnection) {
+	defer logging.PanicLogAndExit("AppBusinessHandleLoop")
 
-	//for reading, 负责处理APP请求的业务逻辑
-	go func(c *AppConnection) {
-		defer logging.PanicLogAndExit("appserver.go: app connection read loop")
-
-		logging.Log("websocket goroutine start: " + "user: " + c.user.Name + ", IP: " + conn.Context().RemoteAddr() + ", Client ID: " + conn.ID())
-		for  {
-			select {
-			case <- c.closeChan:
-				RemoveAppClient(c)
-				c.SetClosed()
-				close(c.requestChan)
-				close(c.responseChan)
-				(*c.conn).Disconnect()
-				logging.Log("websocket goroutine end: " + "user: " + c.user.Name + ", IP: " + conn.Context().RemoteAddr() + ", Client ID: " + conn.ID())
+	for {
+		select {
+		case <-c.closeChan:
+			logging.Log("app business goroutine exit")
+			return
+		case data := <-c.requestChan:
+			if data == nil {
+				logging.Log("connection closed, business goroutine exit")
 				return
-			case msg := <- c.responseChan:
-				if msg != nil {
-					SendMsgToApp(msg)
-				}
+			}
 
-			case data := <- c.requestChan:
-				HandleAppRequest(c, appServerChan, data)
+			HandleAppRequest(c.ID, appServerChan, data)
+		}
+	}
+}
+
+//for writing, 写协程等待一个channel的数据，将channel收到的数据发送至客户端
+func AppConnWriteLoop(c *AppConnection) {
+	defer logging.PanicLogAndExit("AppConnWriteLoop")
+
+	for   {
+		select {
+		case <-c.closeChan:
+			logging.Log("write goroutine exit")
+			return
+		case data := <-c.responseChan:
+			if data == nil ||  c.IsClosed() {
+				logging.Log("connection closed, write goroutine exit")
+				return
+			}
+
+			sendData := proto.MakeStructToJson(data)
+			if n, err := c.conn.Write([]byte(sendData)); err != nil {
+				logging.Log(fmt.Sprintf("send data to client failed: %s,  %d bytes sent",  err.Error(), n))
+			}else{
+				logging.Log(fmt.Sprintf("send data to client: %s,  %d bytes sent", sendData, n))
 			}
 		}
-	}(connection)
-
-
-	conn.OnMessage(func(data []byte) {
-		logging.Log("recv from client: " + string(data))
-		c := conn.GetValue("ctx").(*AppConnection)
-		c.requestChan <- data
-
-		//c.EmitMessage([]byte("Message from: " + c.ID() + "-> " + message)) // broadcast to all clients except this
-		//c.EmitMessage([]byte("Me: " + message))                                                    // writes to itself
-	})
-
-	conn.OnDisconnect(func() {
-		logging.Log("websocket disconnected: " + conn.Context().RemoteAddr() + "Client ID: " + conn.ID())
-		c := conn.GetValue("ctx").(*AppConnection)
-		close(c.closeChan)
-
-		//FenceIndex++
-	})
-}
-
-func getAppClientsByImei(msg *proto.AppMsgData)  map[string]map[string]*AppConnection {
-	subTable, ok := AppClientTable[msg.Imei]
-	if ok {
-		return subTable
-	}else {
-		//if msg.Conn == nil || len(msg.AccessToken) == 0 {
-		//	return nil
-		//}
-		//
-		//url := "http://127.0.0.1/web/index.php?r=app/service/devices&access-token=" + msg.AccessToken
-		//if svrctx.Get().IsDebugLocal {
-		//	url = "http://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + msg.AccessToken
-		//}
-		//
-		//logging.Log("url: " + url)
-		//resp, err := http.Get(url)
-		//if err != nil {
-		//	logging.Log("get user devices failed, " + err.Error())
-		//	return nil
-		//}
-		//
-		//defer resp.Body.Close()
-		//
-		//body, err := ioutil.ReadAll(resp.Body)
-		//if err != nil {
-		//	logging.Log("response has err, " + err.Error())
-		//	return nil
-		//}
-		//
-		//var itf interface{}
-		//err = json.Unmarshal(body, &itf)
-		//if err != nil {
-		//	logging.Log("parse login response as json failed, " + err.Error())
-		//	return nil
-		//}
-		//
-		//userDevicesData := itf.(map[string]interface{})
-		//if userDevicesData == nil {
-		//	return nil
-		//}
-		//
-		////logging.Log("userDevicesData: " + fmt.Sprint(userDevicesData))
-		//status := userDevicesData["status"].(float64)
-		//devices := userDevicesData["devices"]
-		//
-		////logging.Log("status: " + fmt.Sprint(status))
-		////logging.Log("accessToken: " + fmt.Sprint(accessToken))
-		////logging.Log("devices: " + fmt.Sprint(devices))
-		//if status == 0 && devices != nil {
-		//	c := msg.Conn.(*AppConnection)
-		//	c.user.AccessToken = msg.AccessToken
-		//	c.user.Logined = true
-		//	c.user.Name = msg.UserName
-		//
-		//	c.imeis = []uint64{}
-		//
-		//	for _, d := range devices.([]interface{}) {
-		//		device := d.(map[string]interface{})
-		//		imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
-		//		logging.Log("device: " + fmt.Sprint(imei))
-		//		c.imeis = append(c.imeis, imei)
-		//	}
-		//
-		//	if msg.Cmd == proto.AddDeviceOKAckCmdName {
-		//		c.imeis = append(c.imeis, msg.Imei)
-		//	}
-		//
-		//	for _, imei := range c.imeis {
-		//		_, ok := AppClientTable[imei]
-		//		if !ok {   //不存在，则首先创建新表，然后加入
-		//			AppClientTable[imei] = map[string]map[string]*AppConnection{}
-		//			AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
-		//		}else{
-		//			_, ok2 := AppClientTable[imei][c.user.GetAccessToken()]
-		//			if !ok2 {
-		//				AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
-		//			}
-		//		}
-		//
-		//		AppClientTable[imei][c.user.GetAccessToken()][(*c.conn).ID()] = c
-		//	}
-		//
-		//	logging.Log("after add conn:" + fmt.Sprint(AppClientTable))
-		//
-		//	subTable, ok := AppClientTable[msg.Imei]
-		//	if ok {
-		//		return subTable
-		//	}else {
-		//		return nil
-		//	}
-		//}
-
-		return nil
 	}
 }
 
-func getAppClientsByAccessToken(imei uint64, accessToken string)  map[string]*AppConnection {
-	if imei == 0 || len(accessToken) == 0 {
-		logging.Log(fmt.Sprintf("bad input params for getAppClientsByAccessToken: %d, %s", imei, accessToken))
+func getAppConnByConnID(username string, connid uint64)  *AppConnection {
+	if username == "" || connid == 0 {
+		logging.Log(fmt.Sprintf("bad input params for getAppConnByConnID: %d, %s", connid, username))
 		return nil
 	}
 
-	subTable, ok := AppClientTable[imei]
-	if ok && subTable != nil {
-		accessTokenConn, ok2 := subTable[accessToken]
-		if ok2 && accessTokenConn != nil {
-			return accessTokenConn
+	userConnTable, ok := AppConnTable[username]
+	if ok && userConnTable != nil && len(userConnTable) > 0 {
+		conn, ok2 := userConnTable[connid]
+		if ok2 && conn != nil && connid == conn.ID {
+			return conn
 		}
 	}
 
-	logging.Log(fmt.Sprintf("getAppClientsByAccessToken not found app connection: %d, %s", imei, accessToken))
+	logging.Log(fmt.Sprintf("getAppConnByConnID not found app connection: %d, %s", connid, username))
 	return nil
 }
 
-func GetLocationsByURL(ctx *iris.Context) {
-	systemno := proto.Str2Num(ctx.FormValue("systemno"), 10)
+func getAppConnsByUserName(username string) map[uint64]*AppConnection {
+	if username == ""{
+		logging.Log(fmt.Sprintf("bad input params for getAppConnByConnID:  %s",  username))
+		return nil
+	}
+
+	userConnTable, ok := AppConnTable[username]
+	if ok && userConnTable != nil && len(userConnTable) > 0 {
+		return userConnTable
+	}
+
+	logging.Log(fmt.Sprintf("getAppConnByConnID not found app connection:  %s",  username))
+	return nil
+}
+
+
+func JSON(w http.ResponseWriter, ret int,  data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(ret)
+	buf := proto.MakeStructToJson(proto.MakeStructToJson(&data))
+	//
+	////andHex := []byte("\\u0026")
+	////and    := []byte("&")
+	//
+	////result = bytes.Replace(buf, ltHex, lt, -1)
+	////result = bytes.Replace(result, gtHex, gt, -1)
+	////unescapedString := bytes.Replace([]byte(buf), andHex, and, -1)
+	//
+	encodedString := strings.Replace(buf, "\\", "\\\\", -1)
+	fmt.Println(encodedString)
+	w.Write([]byte(encodedString))
+}
+
+func GetLocationsByURL(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	systemno := proto.Str2Num(r.FormValue("systemno"), 10)
 	proto.SystemNo2ImeiMapLock.Lock()
 	imei, ok := proto.SystemNo2ImeiMap[systemno]
 	proto.SystemNo2ImeiMapLock.Unlock()
 	if ok == false || imei == 0 {
 		logging.Log(fmt.Sprintf("bad imei for systemno %d ", systemno))
 		dataResult := proto.PhpQueryLocationsResult{Result: -1, ResultStr: "",  Systemno: systemno}
-		ctx.JSON(200, dataResult)
+		JSON(w, 200, &dataResult)
 		return
 	}
 
-	datatype := ctx.FormValue("datatype")
+	datatype := r.FormValue("datatype")
 	var locations *[]proto.LocationData
 	if datatype == "1"{
 		dataResult := proto.PhpQueryLocationsResult{Result: 0, ResultStr: "",  Systemno: systemno}
@@ -565,11 +605,11 @@ func GetLocationsByURL(ctx *iris.Context) {
 		dataResult.Data = append(dataResult.Data, data.LocateType)
 		dataResult.Data = append(dataResult.Data, data.ZoneName)
 		dataResult.Data = append(dataResult.Data, data.Accracy)
-		ctx.JSON(200, dataResult)
+		JSON(w, 200, &dataResult)
 	}else if(datatype == "2"){
 		dataResult := proto.PhpQueryLocationsResult{Result: 0, ResultStr: "",  Systemno: systemno}
-		beginTime := proto.Str2Num("20" + ctx.FormValue("start"), 10)
-		endTime := proto.Str2Num("20" + ctx.FormValue("end"), 10)
+		beginTime := proto.Str2Num("20" + r.FormValue("start"), 10)
+		endTime := proto.Str2Num("20" + r.FormValue("end"), 10)
 
 		locations = svrctx.QueryLocations(imei, svrctx.Get().PGPool, beginTime, endTime, true, false)
 		if locations != nil && len(*locations) > 0 {
@@ -592,109 +632,17 @@ func GetLocationsByURL(ctx *iris.Context) {
 			dataResult.Data = []interface{}{}
 		}
 
-		ctx.JSON(200, dataResult)
+		JSON(w, 200, &dataResult)
 	}
 }
-//
-//func GetAppVersionOnline(ctx *iris.Context)  {
-//	result := proto.HttpQueryAppVersionResult{}
-//	result.Status = -1
-//
-//	platform := ctx.FormValue("platform")
-//	reqUrl := ""
-//	if platform=="android" {
-//		reqUrl = svrctx.Get().AndroidAppURL
-//	}else if platform=="ios" {
-//		reqUrl = "http://itunes.apple.com/search?term=gator-group-co.-ltd&entity=software"
-//	}else{
-//		logging.Log("get app verion from online store failed, " + "bad params")
-//		ctx.JSON(500, proto.MakeStructToJson(&result))
-//		return
-//	}
-//
-//	resp, err := http.Get(reqUrl)
-//	if err != nil {
-//		logging.Log("get app verion from online store failed, " + err.Error() + " , " + reqUrl)
-//		ctx.JSON(500, proto.MakeStructToJson(&result))
-//		return
-//	}
-//
-//	defer resp.Body.Close()
-//
-//	body, err := ioutil.ReadAll(resp.Body)
-//	if err != nil {
-//		logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-//		ctx.JSON(500, proto.MakeStructToJson(&result))
-//		return
-//	}
-//
-//	if platform=="android" {
-//		pos := strings.Index(string(body), "softwareVersion")
-//		if pos < 0 {
-//			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-//			ctx.JSON(500, proto.MakeStructToJson(&result))
-//			return
-//		}
-//
-//		if len(body[pos:]) < 30 {
-//			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-//			ctx.JSON(500, proto.MakeStructToJson(&result))
-//			return
-//		}
-//
-//		strVer := string(body[pos: pos + 30])
-//		arr := strings.Split(strVer, " ")
-//		if len(arr) < 2 {
-//			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-//			ctx.JSON(500, proto.MakeStructToJson(&result))
-//			return
-//		}
-//
-//		result.Version = strings.Split(arr[1], ".")
-//		result.AppUrl = svrctx.Get().AndroidAppURL
-//	}else{
-//		info := proto.IOSAppInfo{}
-//		err = json.Unmarshal(body, &info)
-//		if err != nil {
-//			logging.Log("parse  response as json failed, " + err.Error() +
-//				", response: " + string(body))
-//			ctx.JSON(500, proto.MakeStructToJson(&result))
-//			return
-//		}
-//
-//		foundIndex := -1
-//		if len(info.Results) > 0 {
-//			for idx, item := range info.Results {
-//				if item.TrackName == "Gator 3" {
-//					foundIndex = idx
-//					break
-//				}
-//			}
-//		}
-//
-//		if foundIndex < 0 {
-//			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-//			ctx.JSON(500, proto.MakeStructToJson(&result))
-//			return
-//		}
-//
-//
-//		fmt.Println(info.Results[foundIndex].TrackName, info.Results[foundIndex].Version)
-//
-//		result.Version = strings.Split(info.Results[foundIndex].Version, ".")
-//		result.AppUrl = svrctx.Get().IOSAppURL
-//	}
-//
-//	result.Status = 0
-//	ctx.JSON(200, proto.MakeStructToJson(&result))
-//}
 
-
-func GetAppVersionOnline(ctx *iris.Context)  {
+func GetAppVersionOnline(w http.ResponseWriter, r *http.Request) {
 	result := proto.HttpQueryAppVersionResult{}
 	result.Status = -1
 
-	platform := ctx.FormValue("platform")
+	w.Header().Set("Content-Type", "application/json")
+
+	platform := r.FormValue("platform")
 	reqUrl := ""
 	if platform=="android" {
 		reqUrl = svrctx.Get().AndroidAppURL
@@ -702,14 +650,14 @@ func GetAppVersionOnline(ctx *iris.Context)  {
 		reqUrl = svrctx.Get().IOSAppURL
 	}else{
 		logging.Log("get app verion from online store failed, " + "bad params")
-		ctx.JSON(500, proto.MakeStructToJson(&result))
+		JSON(w, 500, (&result))
 		return
 	}
 
 	resp, err := http.Get(reqUrl)
 	if err != nil {
 		logging.Log("get app verion from online store failed, " + err.Error() + " , " + reqUrl)
-		ctx.JSON(500, proto.MakeStructToJson(&result))
+		JSON(w, 500, (&result))
 		return
 	}
 
@@ -718,7 +666,7 @@ func GetAppVersionOnline(ctx *iris.Context)  {
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-		ctx.JSON(500, proto.MakeStructToJson(&result))
+		JSON(w, 500, (&result))
 		return
 	}
 
@@ -726,13 +674,13 @@ func GetAppVersionOnline(ctx *iris.Context)  {
 		pos := strings.Index(string(body), "softwareVersion")
 		if pos < 0 {
 			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-			ctx.JSON(500, proto.MakeStructToJson(&result))
+			JSON(w, 500, (&result))
 			return
 		}
 
 		if len(body[pos:]) < 30 {
 			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-			ctx.JSON(500, proto.MakeStructToJson(&result))
+			JSON(w, 500, (&result))
 			return
 		}
 
@@ -740,7 +688,7 @@ func GetAppVersionOnline(ctx *iris.Context)  {
 		arr := strings.Split(strVer, " ")
 		if len(arr) < 2 {
 			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-			ctx.JSON(500, proto.MakeStructToJson(&result))
+			JSON(w, 500, (&result))
 			return
 		}
 
@@ -750,13 +698,13 @@ func GetAppVersionOnline(ctx *iris.Context)  {
 		pos := strings.Index(string(body), "softwareVersion")
 		if pos < 0 {
 			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-			ctx.JSON(500, proto.MakeStructToJson(&result))
+			JSON(w, 500, (&result))
 			return
 		}
 
 		if len(body[pos:]) < 25 {
 			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-			ctx.JSON(500, proto.MakeStructToJson(&result))
+			JSON(w, 500, (&result))
 			return
 		}
 
@@ -765,7 +713,7 @@ func GetAppVersionOnline(ctx *iris.Context)  {
 		rightPos := strings.Index(strVer, "<")
 		if leftPos < 0 || rightPos < 0 || len(strVer) < (leftPos + 2) || len(strVer) < (rightPos + 1){
 			logging.Log("get app verion from online store response has err, leftPos < 0 || rightPos < 0")
-			ctx.JSON(500, proto.MakeStructToJson(&result))
+			JSON(w, 500, (&result))
 			return
 		}
 
@@ -776,104 +724,147 @@ func GetAppVersionOnline(ctx *iris.Context)  {
 	}
 
 	result.Status = 0
-	ctx.JSON(200, proto.MakeStructToJson(&result))
+	JSON(w, 200, (&result))
 }
+//
+//func HandleApiCmd(w http.ResponseWriter, r *http.Request) {
+//	var jsonData interface{}
+//	err := ctx.ReadJSON(&jsonData)
+//	if err != nil {
+//		logging.Log("api cmd data is bad,  err: " + err.Error())
+//		result := proto.HttpAPIResult{}
+//		result.ErrCode = 500
+//		result.ErrMsg = err.Error()
+//		ctx.JSON(500, proto.MakeStructToJson(&result))
+//		return
+//	}
+//
+//	HandleAppURLRequest(ctx,  jsonData)
+//}
 
-func HandleApiCmd(ctx *iris.Context)  {
-	var jsonData interface{}
-	err := ctx.ReadJSON(&jsonData)
-	if err != nil {
-		logging.Log("api cmd data is bad,  err: " + err.Error())
-		result := proto.HttpAPIResult{}
-		result.ErrCode = 500
-		result.ErrMsg = err.Error()
-		ctx.JSON(500, proto.MakeStructToJson(&result))
+
+func AddAppConnAccessToken(info ConnAccessTokenInfo) {
+	if info.connID== 0 || info.username == "" ||   info.accessToken == "" {
+		logging.Log("add a nil app access token")
 		return
 	}
 
-	HandleAppURLRequest(ctx,  jsonData)
+	connTable, ok := AppConnTable[info.username]
+	if !ok {
+		//不存在，则首先创建新表，然后加入
+		return
+	}else{
+		_, ok2 := connTable[info.connID]
+		if ok2 {
+			AppConnTable[info.username][info.connID].user.AccessToken = info.accessToken
+		}
+	}
+
+	logging.Log(fmt.Sprintf("add conn access token: %d, %s, %s", info.connID, info.username, info.accessToken))
 }
 
-func AddNewAppClient(c *AppConnection) {
-	if c == nil {
+func AddNewAppConn(c *AppConnection) {
+	if c == nil  || c.ID == 0 ||  c.user.Name == "" {
 		logging.Log("add a nil app connection")
 		return
 	}
 
-	AppClientTableLock.Lock()
-	for _, imei := range c.imeis {
-		_, ok := AppClientTable[imei]
-		if !ok {   //不存在，则首先创建新表，然后加入
-			AppClientTable[imei] = map[string]map[string]*AppConnection{}
-			AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
-		}else{
-			_, ok2 := AppClientTable[imei][c.user.GetAccessToken()]
-			if !ok2 {
-				AppClientTable[imei][c.user.GetAccessToken()] = map[string]*AppConnection{}
-			}
-		}
-
-		AppClientTable[imei][c.user.GetAccessToken()][(*c.conn).ID()] = c
+	_, ok := AppConnTable[c.user.Name]
+	if !ok {
+		//不存在，则首先创建新表，然后加入
+		AppConnTable[c.user.Name] = map[uint64]*AppConnection{}
 	}
 
-	AppClientTableLock.Unlock()
+	AppConnTable[c.user.Name][c.ID] = c
 
-	//记录accesstoken
-	AccessTokenTableLock.Lock()
-	AccessTokenTable[c.user.GetAccessToken()] = true
-	AccessTokenTableLock.Unlock()
-
-	logging.Log("add conn:" + c.user.GetAccessToken())
+	logging.Log(fmt.Sprintf("add conn: %d, %s", c.ID, c.user.Name))
 }
 
-func RemoveAppClient(c *AppConnection) {
-	if c == nil {
+func RemoveAppConn(c *AppConnection) {
+	if c == nil  || c.ID == 0 ||  c.user.Name == "" {
 		logging.Log("remove a nil app connection")
 		return
 	}
 
-	AppClientTableLock.Lock()
-	for _, imei := range c.imeis {
-		subTable, ok := AppClientTable[imei]
-		if ok {
-			connList, ok := subTable[c.user.GetAccessToken()]
-			if ok {
-				if connList != nil && len(connList) > 0 {
-					for connID, connItem := range connList {
-						if c == connItem {
-							delete(connList, connID)
-							logging.Log("connection deleted from AppClientTable," + connID + ", " + (*c.conn).ID())
-						}
+	userConnTable, ok := AppConnTable[c.user.Name]
+	if ok && userConnTable != nil && len(userConnTable) > 0 {
+		conn, ok2 := userConnTable[c.ID]
+		if ok2 && conn != nil && c == conn {
+			c.SetClosed()
+			close(c.requestChan)
+			close(c.responseChan)
+			close(c.closeChan)
+			c.conn.Close()
+
+			delete(userConnTable, c.ID)
+			logging.Log(fmt.Sprintf("connection deleted from AppConnTable, %d, %s", c.ID, c.user.Name))
+
+			if len(AppConnTable[c.user.Name]) == 0 {
+				delete(AppConnTable, c.user.Name)
+
+				//当此用户下的所有连接都断开时，删除用户的accesstoken
+				if c.user.GetAccessToken() != "" {
+					AccessTokenTableLock.Lock()
+					_, ok3 := AccessTokenTable[c.user.GetAccessToken()]
+					if ok3 {
+						delete(AccessTokenTable, c.user.GetAccessToken())
 					}
+					AccessTokenTableLock.Unlock()
 				}
-
-				if len(connList) == 0 {
-					delete(subTable, c.user.GetAccessToken())
-				}
-			} else {
-				logging.Log("will delete connection from appClientTable, but connection not found")
 			}
+		} else {
+			logging.Log("will delete connection from appClientTable, but connection not found")
+		}
+	}
 
-			if len(subTable) == 0 {
-				delete(AppClientTable, imei)
+	logging.Log(fmt.Sprintf("delete AccessToken: %s, %s", c.user.GetAccessToken(), c.user.Name))
+}
+
+func AddAppDevice(info DeviceConnInfo) {
+	if info.imei == 0  ||  info.username == ""{
+		logging.Log("remove a nil app device connection")
+		return
+	}
+
+	//添加imei下的该用户
+	_, ok := AppDeviceTable[info.imei]
+	if !ok {
+		AppDeviceTable[info.imei] = map[string]bool{}
+	}
+
+	AppDeviceTable[info.imei][info.username] = true
+
+	logging.Log(fmt.Sprintf("add device %d user %s conn",info.imei,  info.username))
+}
+
+func RemoveAppDevice(info DeviceConnInfo) {
+	if info.imei == 0  ||  info.username == ""{
+		logging.Log("remove a nil app device connection")
+		return
+	}
+
+	//摘除imei下的该用户
+	imeiAppUsers, ok := AppDeviceTable[info.imei]
+	if ok && len(imeiAppUsers) > 0 {
+		_, ok2 := imeiAppUsers[info.username]
+		if ok2 {
+			delete(AppDeviceTable[info.imei], info.username)
+			if len(AppDeviceTable[info.imei]) == 0 {
+				delete(AppDeviceTable, info.imei)
 			}
 		}
 	}
 
-	AppClientTableLock.Unlock()
-
-	//删除accesstoken
-	AccessTokenTableLock.Lock()
-	_, ok := AccessTokenTable[c.user.GetAccessToken()]
-	if ok {
-		delete(AccessTokenTable, c.user.GetAccessToken())
-	}
-	AccessTokenTableLock.Unlock()
-
-	logging.Log("delete conn:" + c.user.GetAccessToken())
+	logging.Log(fmt.Sprintf("delete device %d user %s conn",info.imei,  info.username))
 }
 
-func ValidAccessToken(AccessToken string)  bool {
+func AddAccessToken(accessToken string)  {
+	AccessTokenTableLock.Lock()
+	AccessTokenTable[accessToken] = true
+	AccessTokenTableLock.Unlock()
+}
+
+func ValidAccessTokenFromService(AccessToken string)  bool {
 	url := "http://127.0.0.1/web/index.php?r=app/service/devices&access-token=" + AccessToken
 	if svrctx.Get().IsDebugLocal {
 		url = "http://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
@@ -906,12 +897,7 @@ func ValidAccessToken(AccessToken string)  bool {
 		return false
 	}
 
-	//logging.Log("userDevicesData: " + fmt.Sprint(userDevicesData))
 	status := userDevicesData["status"].(float64)
-
-	//logging.Log("status: " + fmt.Sprint(status))
-	//logging.Log("accessToken: " + fmt.Sprint(accessToken))
-	//logging.Log("devices: " + fmt.Sprint(devices))
 	if status == 0  {
 		return true
 	}else{
@@ -919,4 +905,92 @@ func ValidAccessToken(AccessToken string)  bool {
 	}
 
 	return true
+}
+
+func getUserDevicesImei(username string) []uint64  {
+	if username == "" {
+		return nil
+	}
+
+	strSQL := fmt.Sprintf("SELECT  w.imei  from users u JOIN vehiclesinuser viu on u.recid = viu.UserID " +
+		"JOIN  watchinfo w on w.recid = viu.VehId where u.loginname='%s' ", username)
+	logging.Log("SQL: " + strSQL)
+	rows, err := svrctx.Get().MySQLPool.Query(strSQL)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%s] query user devices imei  in db failed, %s", username, err.Error()))
+		return nil
+	}
+
+	defer rows.Close()
+
+	imeis := []uint64{}
+	for rows.Next() {
+		imei := ""
+		rows.Scan(&imei)
+		fmt.Println(imei)
+		imeis = append(imeis, proto.Str2Num(imei, 10))
+	}
+
+	return imeis
+}
+
+func getDeviceUserTable(imei uint64) map[string]bool  {
+	if imei == 0 {
+		return nil
+	}
+
+	strSQL := fmt.Sprintf("SELECT  u.loginname  from users u JOIN vehiclesinuser viu on u.recid = viu.UserID " +
+		"JOIN  watchinfo w on w.recid = viu.VehId where w.imei='%d' ", imei)
+
+	logging.Log("SQL: " + strSQL)
+	rows, err := svrctx.Get().MySQLPool.Query(strSQL)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%d] query user devices imei  in db failed, %s", imei, err.Error()))
+		return nil
+	}
+
+	defer rows.Close()
+
+	users := map[string]bool{}
+	for rows.Next() {
+		username := ""
+		rows.Scan(&username)
+		fmt.Println(username)
+		users[username] = true
+	}
+
+	return users
+}
+
+func FormValue(r *http.Request, key string) string{
+	if r == nil || key == "" {
+		return ""
+	}
+
+	ct := r.Header.Get("Content-Type")
+	if ct == "" {
+		return ""
+	}
+
+	if ct == "multipart/form-data" {
+		r.ParseMultipartForm(32 << 20)
+		if r.MultipartForm != nil {
+			values := r.MultipartForm.Value[key]
+			if len(values) > 0 {
+				return values[0]
+			}
+		}
+	}else{
+		values := r.Form[key]
+		if len(values) > 0 {
+			return values[0]
+		}else{
+			values := r.PostForm[key]
+			if len(values) > 0 {
+				return values[0]
+			}
+		}
+	}
+
+	return ""
 }

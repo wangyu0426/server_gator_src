@@ -218,11 +218,12 @@ type AppMsgData struct {
 	ProtoVer string	`json:"protover"`
 	UserName string `json:"username,omitempty"`
 	AccessToken string `json:"accessToken,omitempty"`
-	Conn interface{}  `json:"-"`
+	//Conn interface{}  `json:"-"`
+	ConnID uint64  `json:"connid"`
 }
 
 type AppRequestTcpConnParams struct {
-	ID uint64		 	`json:"id,omitempty"`
+	ConnID  uint64		 	`json:"connid"`
 	ReqCmd string 		`json:"reqCmd"`
 	Params DeviceActiveParams `json:"params"`
 }
@@ -974,27 +975,29 @@ func LoadEPOFromFile() error {
 
 
 func ReloadEPO() error {
-	urlRequest := "http://service.gatorcn.com/tracker/web/download36h.php?action=down36h"
-	resp, err := http.PostForm(urlRequest, url.Values{"username": {"getepo"}, "password": {"n8vZB9belqO4ydnx"}})
-	if err != nil {
-		logging.Log("request epo from service.gatorcn.com failed, " + err.Error())
-		return err
+	if true {
+		urlRequest := "http://service.gatorcn.com/tracker/web/download36h.php?action=down36h"
+		resp, err := http.PostForm(urlRequest, url.Values{"username": {"getepo"}, "password": {"n8vZB9belqO4ydnx"}})
+		if err != nil {
+			logging.Log("request epo from service.gatorcn.com failed, " + err.Error())
+			return err
+		}
+
+		defer resp.Body.Close()
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			logging.Log("epo response has err, " + err.Error())
+			return err
+		}
+
+		if len(body) != 27648 {
+			logging.Log(fmt.Sprintf("epo response size %d != 27648 ", len(body)))
+			return io.EOF
+		}
+
+		ioutil.WriteFile("./EPO/36H.EPO", body, 0666)
 	}
-
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		logging.Log("epo response has err, " + err.Error())
-		return err
-	}
-
-	if len(body) != 27648 {
-		logging.Log(fmt.Sprintf("epo response size %d != 27648 ", len(body)))
-		return io.EOF
-	}
-
-	ioutil.WriteFile("./EPO/36H.EPO", body, 0666)
 
 	epo36h,err := os.Open("./EPO/36H.EPO")
 	if err != nil {
@@ -1048,7 +1051,10 @@ func makeDBTimeZoneString(tz int) string  {
 }
 
 func MakeStructToJson(v interface{}) string {
-	data, _ := json.Marshal(v)
+	data, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
 	return string(data)
 }
 
