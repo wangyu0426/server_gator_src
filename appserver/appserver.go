@@ -127,7 +127,7 @@ func AppConnManagerLoop() {
 
 			if info.conn == nil || info.connID == 0 || info.usernameOld == "" || info.usernameNew == ""{
 				logging.Log("update a nil app connection")
-				os.Exit(-1)
+				break//os.Exit(-1)
 			}
 
 			UpdateAppConn(info)
