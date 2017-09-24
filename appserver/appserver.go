@@ -500,6 +500,7 @@ func AppConnReadLoop(c *AppConnection) {
 				info.connID = c.ID
 				info.usernameOld = c.user.Name
 				info.usernameNew = params["username"].(string)
+				info.conn = c
 				logging.Log("update an app connection: " + proto.MakeStructToJson(&info))
 				updateConnChan <- info
 			}
