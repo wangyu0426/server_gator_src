@@ -572,7 +572,7 @@ func JSON(w http.ResponseWriter, ret int,  data interface{}) {
 	////result = bytes.Replace(result, gtHex, gt, -1)
 	////unescapedString := bytes.Replace([]byte(buf), andHex, and, -1)
 	//
-	encodedString := strings.Replace(buf, "\\", "\\\\", -1)
+	encodedString := buf //strings.Replace(buf, "\\", "\\\\", -1)
 	fmt.Println(encodedString)
 	w.Write([]byte(encodedString))
 }
