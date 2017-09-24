@@ -338,10 +338,9 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	//logging.Log("accessToken: " + fmt.Sprint(accessToken))
 	//logging.Log("devices: " + fmt.Sprint(devices))
 	if status != nil && accessToken != nil {
+		AddAccessToken(accessToken.(string))
 		if isRegister == false {
 			if devices != nil {
-				AddAccessToken(accessToken.(string))
-
 				locations := []proto.LocationData{}
 				for i, d := range devices.([]interface{}) {
 					device := d.(map[string]interface{})

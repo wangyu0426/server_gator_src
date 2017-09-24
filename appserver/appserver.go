@@ -31,6 +31,12 @@ type ConnAccessTokenInfo struct {
 	accessToken string
 }
 
+type UpdateAppConnInfo struct {
+	connID uint64
+	usernameOld string
+	usernameNew string
+	conn *AppConnection
+}
 
 var addDeviceConnChan chan DeviceConnInfo
 var delDeviceConnChan chan DeviceConnInfo
@@ -38,6 +44,7 @@ var delDeviceConnChan chan DeviceConnInfo
 var addConnAccessTokenChan chan ConnAccessTokenInfo
 
 var addConnChan chan *AppConnection
+var updateConnChan chan *UpdateAppConnInfo
 var delConnChan chan *AppConnection
 
 var AppDeviceTable = map[uint64]map[string]bool{}
@@ -60,6 +67,7 @@ func init() {
 	models.PrintSelf()
 
 	addConnChan = make(chan *AppConnection, 10240)
+	updateConnChan = make(chan *AppConnection, 10240)
 	delConnChan = make(chan *AppConnection, 10240)
 
 	addDeviceConnChan = make(chan DeviceConnInfo, 10240)
@@ -113,6 +121,14 @@ func AppConnManagerLoop() {
 			}
 
 			AddNewAppConn(c)
+
+		case info := <- updateConnChan:
+			if info.conn == nil || info.connID == 0 || info.usernameOld == "" || info.usernameNew == ""{
+				logging.Log("update a nil app connection")
+				os.Exit(-1)
+			}
+
+			UpdateAppConn(info)
 
 		case c := <- delConnChan:
 			if c == nil {
@@ -475,6 +491,14 @@ func AppConnReadLoop(c *AppConnection) {
 			c.user.Name = params["username"].(string)
 			c.saved = true
 			addConnChan <- c
+		}else{
+			if params["username"].(string) != c.user.Name {
+				info := UpdateAppConnInfo{}
+				info.connID = c.ID
+				info.usernameOld = c.user.Name
+				info.usernameNew = params["username"].(string)
+				updateConnChan <- info
+			}
 		}
 
 		c.requestChan <- buf[0: n]
@@ -796,6 +820,34 @@ func AddNewAppConn(c *AppConnection) {
 	AppConnTable[c.user.Name][c.ID] = c
 
 	logging.Log(fmt.Sprintf("add conn: %d, %s", c.ID, c.user.Name))
+}
+
+
+func UpdateAppConn(info UpdateAppConnInfo) {
+	if info.conn == nil || info.connID == 0 || info.usernameOld == "" || info.usernameNew == ""{
+		logging.Log("update a nil app connection")
+		return
+	}
+
+	userConnTable, ok := AppConnTable[info.usernameOld]
+	if ok && userConnTable != nil && len(userConnTable) > 0 {
+		conn, ok2 := userConnTable[info.connID]
+		if ok2 && conn != nil && conn == info.conn {
+			delete(AppConnTable[info.usernameOld], info.connID)
+			if len(AppConnTable[info.usernameOld]) == 0 {
+				delete(AppConnTable, info.usernameOld)
+			}
+		}
+	}
+
+	_, ok3 := AppConnTable[info.usernameNew]
+	if !ok3 {
+		//不存在，则首先创建新表，然后加入
+		AppConnTable[info.usernameNew] = map[uint64]*AppConnection{}
+	}
+
+	AppConnTable[info.usernameNew][info.connID] = info.conn
+	logging.Log(fmt.Sprintf("update conn:  %d, from %s to  %s", info.connID, info.usernameOld, info.usernameNew))
 }
 
 func RemoveAppConn(c *AppConnection) {
