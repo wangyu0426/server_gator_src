@@ -560,10 +560,28 @@ func getAppConnsByUserName(username string) map[uint64]*AppConnection {
 }
 
 
-func JSON(w http.ResponseWriter, ret int,  data interface{}) {
+func JSON2(w http.ResponseWriter, ret int,  data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(ret)
 	buf := proto.MakeStructToJson(proto.MakeStructToJson(&data))
+	//
+	////andHex := []byte("\\u0026")
+	////and    := []byte("&")
+	//
+	////result = bytes.Replace(buf, ltHex, lt, -1)
+	////result = bytes.Replace(result, gtHex, gt, -1)
+	////unescapedString := bytes.Replace([]byte(buf), andHex, and, -1)
+	//
+	encodedString := buf //strings.Replace(buf, "\\", "\\\\", -1)
+	fmt.Println(encodedString)
+	w.Write([]byte(encodedString))
+}
+
+
+func JSON(w http.ResponseWriter, ret int,  data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(ret)
+	buf := (proto.MakeStructToJson(&data))
 	//
 	////andHex := []byte("\\u0026")
 	////and    := []byte("&")
@@ -650,14 +668,14 @@ func GetAppVersionOnline(w http.ResponseWriter, r *http.Request) {
 		reqUrl = svrctx.Get().IOSAppURL
 	}else{
 		logging.Log("get app verion from online store failed, " + "bad params")
-		JSON(w, 500, (&result))
+		JSON2(w, 500, (&result))
 		return
 	}
 
 	resp, err := http.Get(reqUrl)
 	if err != nil {
 		logging.Log("get app verion from online store failed, " + err.Error() + " , " + reqUrl)
-		JSON(w, 500, (&result))
+		JSON2(w, 500, (&result))
 		return
 	}
 
@@ -666,7 +684,7 @@ func GetAppVersionOnline(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-		JSON(w, 500, (&result))
+		JSON2(w, 500, (&result))
 		return
 	}
 
@@ -674,13 +692,13 @@ func GetAppVersionOnline(w http.ResponseWriter, r *http.Request) {
 		pos := strings.Index(string(body), "softwareVersion")
 		if pos < 0 {
 			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-			JSON(w, 500, (&result))
+			JSON2(w, 500, (&result))
 			return
 		}
 
 		if len(body[pos:]) < 30 {
 			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-			JSON(w, 500, (&result))
+			JSON2(w, 500, (&result))
 			return
 		}
 
@@ -688,7 +706,7 @@ func GetAppVersionOnline(w http.ResponseWriter, r *http.Request) {
 		arr := strings.Split(strVer, " ")
 		if len(arr) < 2 {
 			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-			JSON(w, 500, (&result))
+			JSON2(w, 500, (&result))
 			return
 		}
 
@@ -698,13 +716,13 @@ func GetAppVersionOnline(w http.ResponseWriter, r *http.Request) {
 		pos := strings.Index(string(body), "softwareVersion")
 		if pos < 0 {
 			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-			JSON(w, 500, (&result))
+			JSON2(w, 500, (&result))
 			return
 		}
 
 		if len(body[pos:]) < 25 {
 			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
-			JSON(w, 500, (&result))
+			JSON2(w, 500, (&result))
 			return
 		}
 
@@ -713,7 +731,7 @@ func GetAppVersionOnline(w http.ResponseWriter, r *http.Request) {
 		rightPos := strings.Index(strVer, "<")
 		if leftPos < 0 || rightPos < 0 || len(strVer) < (leftPos + 2) || len(strVer) < (rightPos + 1){
 			logging.Log("get app verion from online store response has err, leftPos < 0 || rightPos < 0")
-			JSON(w, 500, (&result))
+			JSON2(w, 500, (&result))
 			return
 		}
 
@@ -724,7 +742,7 @@ func GetAppVersionOnline(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result.Status = 0
-	JSON(w, 200, (&result))
+	JSON2(w, 200, (&result))
 }
 //
 //func HandleApiCmd(w http.ResponseWriter, r *http.Request) {
