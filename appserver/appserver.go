@@ -492,7 +492,7 @@ func AppConnReadLoop(c *AppConnection) {
 			c.saved = true
 			addConnChan <- c
 		}else{
-			if params["username"].(string) != c.user.Name {
+			if c.user.Name != "" && c.ID != 0 && params["username"].(string) != "" && params["username"].(string) != c.user.Name {
 				info := UpdateAppConnInfo{}
 				info.connID = c.ID
 				info.usernameOld = c.user.Name
