@@ -123,7 +123,7 @@ func AppConnManagerLoop() {
 			AddNewAppConn(c)
 
 		case info := <- updateConnChan:
-			logging.Log("update an app connection: " + proto.MakeStructToJson(info))
+			logging.Log(fmt.Sprintf("126: update an app connection:%v", (*info)))
 
 			if info.conn == nil || info.connID == 0 || info.usernameOld == "" || info.usernameNew == ""{
 				logging.Log("update a nil app connection")
@@ -501,7 +501,7 @@ func AppConnReadLoop(c *AppConnection) {
 				info.usernameOld = c.user.Name
 				info.usernameNew = params["username"].(string)
 				info.conn = c
-				logging.Log(fmt.Sprintf("update an app connection:%v", (*info)))
+				logging.Log(fmt.Sprintf("504: update an app connection:%v", (*info)))
 				updateConnChan <- info
 			}
 		}
