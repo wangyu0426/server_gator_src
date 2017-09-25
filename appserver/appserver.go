@@ -487,6 +487,8 @@ func AppConnReadLoop(c *AppConnection) {
 			if msg["cmd"] == nil || msg["cmd"].(string) != proto.HearbeatCmdName {
 				logging.Log("parse recved json username is empty ")
 				return
+			}else{
+				continue
 			}
 		}
 
