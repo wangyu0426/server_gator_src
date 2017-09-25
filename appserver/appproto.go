@@ -55,7 +55,7 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 	if ( params["accessToken"] == nil ||  params["accessToken"].(string) == "") { //没有accesstoken
 		//同时又不是注册和登录，那么认为是非法请求
 		if cmd.(string) != proto.LoginCmdName && cmd.(string) != proto.RegisterCmdName  &&
-			cmd.(string) != proto.ResetPasswordAckCmdName {
+			cmd.(string) != proto.ResetPasswordCmdName {
 			logging.Log("access token is bad, not login and register")
 			return false
 		}
