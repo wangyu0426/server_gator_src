@@ -598,6 +598,7 @@ type DeviceInfo struct {
 	CompanyPort int
 	RedirectServer bool
 	HideVoiceMonitor bool
+	ApnSms string
 	CountryCode string
 	Avatar string
 	SimID string
@@ -658,6 +659,7 @@ type DeviceInfoResult struct {
 	Volume uint8
 	ContactAvatar [MAX_FAMILY_MEMBER_NUM]string
 	HideVoiceMonitor bool
+	ApnSms string
 }
 
 type WIFIInfo  struct  {
@@ -1127,6 +1129,7 @@ func MakeDeviceInfoResult(deviceInfo *DeviceInfo) DeviceInfoResult {
 	result.HideTimer2 = MakeStructToJson(&deviceInfo.HideTimerList[2])
 	result.HideTimer3 = MakeStructToJson(&deviceInfo.HideTimerList[3])
 	result.HideVoiceMonitor = deviceInfo.HideVoiceMonitor
+	result.ApnSms = deviceInfo.ApnSms
 
 	return result
 }
@@ -1136,7 +1139,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		" w.ChildPowerOff, w.UseDST, w.SocketModeOff, w.Volume, w.Lang, w.VerifyCode, w.Fence1,w.Fence2, w.Fence3," +
 		" w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, " +
 		" w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2," +
-		" w.HideTimer3, pm.model, c.name, c.host, c.port, c.Redirect from watchinfo w join device d on w.recid=d.recid join productmodel pm  " +
+		" w.HideTimer3, pm.model, c.name, c.host, c.port, c.Redirect, c.APN  from watchinfo w join device d on w.recid=d.recid join productmodel pm  " +
 		" on d.modelid=pm.recid join companies c on d.companyid=c.recid where pm.model='GT06' ")
 	if err != nil {
 		fmt.Println("LoadDeviceInfoFromDB failed,", err.Error())
@@ -1172,6 +1175,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		CompanyHost 		 interface{}
 		CompanyPort 		 interface{}
 		RedirectServer interface{}
+		ApnSms interface{}
 	)
 
 	tmpDeviceInfoList := &map[uint64]*DeviceInfo{}
@@ -1183,7 +1187,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 			&ChildPowerOff, &UseDST, &SocketModeOff, &Volume, &Lang, &VerifyCode, &Fences[0], &Fences[1], &Fences[2],
 			&Fences[3], &Fences[4], &Fences[5], &Fences[6], &Fences[7], &Fences[8], &Fences[9], &WatchAlarms[0], &WatchAlarms[1],
 			&WatchAlarms[2], &WatchAlarms[3], &WatchAlarms[4], &HideSelf, &HideTimers[0], &HideTimers[1], &HideTimers[2],
-			&HideTimers[3], &Model, &Company, &CompanyHost, &CompanyPort, &RedirectServer)
+			&HideTimers[3], &Model, &Company, &CompanyHost, &CompanyPort, &RedirectServer, &ApnSms)
 		if err != nil {
 			fmt.Println("row scan err: ", err.Error())
 		}
@@ -1211,6 +1215,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		deviceInfo.CompanyPort = int(Str2Num(parseUint8Array(CompanyPort), 10))
 		deviceInfo.RedirectServer = parseUint8Array(RedirectServer) == "1"
 		deviceInfo.HideVoiceMonitor = IsHideVoiceMonitor(deviceInfo.Company)
+		deviceInfo.ApnSms = parseUint8Array(ApnSms)
 
 		(*tmpDeviceInfoList)[deviceInfo.Imei] = deviceInfo
 
