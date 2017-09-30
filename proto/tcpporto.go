@@ -1234,11 +1234,18 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 		}
 	}
 
-	isDisableLBS :=  IsCompanyDisableLBS(service.imei)
+	isDisableLBS :=  true //IsCompanyDisableLBS(service.imei)
 
 	if cLocateTag == 'G' || cLocateTag == 'g'  {
 		ret = service.ProcessGPSInfo(pszMsg)
 	} else if cLocateTag == 'W' || cLocateTag == 'w' {
+		isDisableWiFi := IsDisableWiFi(service.imei)
+		if isDisableWiFi {
+			service.needSendLocation = false
+			logging.Log(fmt.Sprintf("device %d, wifi location  need disabled", service.imei))
+			return false
+		}
+
 		ret = service.ProcessWifiInfo(pszMsg)
 		if service.wiFiNum <= 1 {
 			service.needSendLocation = false
@@ -1254,6 +1261,13 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 			return false
 		}
 	} else if cLocateTag == 'M' || cLocateTag == 'm'  {
+		isDisableWiFi := IsDisableWiFi(service.imei)
+		if isDisableWiFi {
+			service.needSendLocation = false
+			logging.Log(fmt.Sprintf("device %d, wifi location  need disabled", service.imei))
+			return false
+		}
+
 	 	ret = service.ProcessMutilLocateInfo(pszMsg)
 		if service.cur.LocateType == LBS_JIZHAN && isDisableLBS {
 			service.needSendLocation = false
