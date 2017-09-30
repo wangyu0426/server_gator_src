@@ -1035,6 +1035,10 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 				}
 			case proto.HideSelfFieldName:
 				deviceInfo.HideTimerOn = (proto.Str2Num(setting.NewValue, 10)) == 1
+			case proto.DisableWiFiFieldName:
+				deviceInfo.DisableWiFi = (proto.Str2Num(setting.NewValue, 10)) == 1
+			case proto.DisableLBSFieldName:
+				deviceInfo.DisableLBS =  (proto.Str2Num(setting.NewValue, 10)) == 1
 			case proto.HideTimer0FieldName:
 				fallthrough
 			case proto.HideTimer1FieldName:
@@ -1133,6 +1137,8 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 		case proto.CountryCodeFieldName:
 		case proto.SimIDFieldName:
 		case proto.AvatarFieldName:
+		case proto.DisableWiFiFieldName:
+		case proto.DisableLBSFieldName:
 			isNeedNotifyDevice[i] = false
 		default:
 			return false
