@@ -1246,7 +1246,7 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 			return false
 		}
 	} else if cLocateTag == 'L' || cLocateTag == 'l'  {
-		if isDisableLBS == false {
+		if false && isDisableLBS == false {
 			ret = service.ProcessLBSInfo(pszMsg)
 		}else{
 			service.needSendLocation = false
@@ -1268,7 +1268,8 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 	logging.Log(fmt.Sprintf("%d - middle: m_iAlarmStatu=%d, parsed location:  m_DateTime=%d, m_lng=%f, m_lat=%f",
 		service.imei, service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
 
-	if ret == false || service.cur.Lng == 0 && service.cur.Lat== 0 {
+	if ret == false || if service.cur.LocateType == LBS_INVALID_LOCATION  || service.cur.Lng == 0 && service.cur.Lat== 0 {
+		service.needSendLocation = false
 		logging.Log(fmt.Sprintf("Error Locate(%d, %06f, %06f)", service.imei, service.cur.Lng, service.cur.Lat))
 		return ret
 	}
@@ -2574,7 +2575,7 @@ func (service *GT06Service) ProcessMutilLocateInfo(pszMsgBuf []byte) bool {
 	} else if service.wiFiNum >= 3 && service.accracy <= 400 {
 		service.cur.LocateType = LBS_WIFI
 	} else {
-		service.cur.LocateType = LBS_JIZHAN // uint8(service.accracy / 10)  //LBS_JIZHAN
+		service.cur.LocateType = LBS_INVALID_LOCATION //LBS_JIZHAN // uint8(service.accracy / 10)  //LBS_JIZHAN
 	}
 
 	service.UpdateLocationIntoDBCache()
