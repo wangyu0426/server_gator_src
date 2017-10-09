@@ -7,6 +7,9 @@ import (
 	"./tcpserver"
 	"./appserver"
 	"./admin"
+	_ "net/http/pprof"
+	"log"
+	"net/http"
 )
 
 func main() {
@@ -28,6 +31,9 @@ func main() {
 	//return
 
 	//fmt.Println("server config: ", *svrctx.Get())
+	go func() {
+		log.Println(http.ListenAndServe(":6060", nil))
+	}()
 
 	go appserver.LocalAPIServerRunLoop(svrctx.Get())
 	go tcpserver.TcpServerRunLoop(svrctx.Get())
