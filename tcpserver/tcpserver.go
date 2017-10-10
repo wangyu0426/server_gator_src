@@ -45,7 +45,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 	for   {
 		select {
 		case connAdd:=<-addConnChan:
-			logging.Log("new connection added")
+			//logging.Log("new connection added")
 			TcpClientTable[connAdd.imei] = connAdd
 		case connDel := <-delConnChan:
 			if connDel == nil {
@@ -194,7 +194,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 
 				//}else{
 				//	cache = append(cache, msg)
-				logging.Log(fmt.Sprintf("[%d] cache --  count: %d", msg.Header.Header.Imei, len(*DevicePushCache[msg.Header.Header.Imei])))
+				//logging.Log(fmt.Sprintf("[%d] cache --  count: %d", msg.Header.Header.Imei, len(*DevicePushCache[msg.Header.Header.Imei])))
 			}
 
 			c, ok2 := TcpClientTable[msg.Header.Header.Imei]
@@ -206,7 +206,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 					if (ok3 == false) {
 						logging.Log(fmt.Sprintf("[%d] no data cached to send", msg.Header.Header.Imei ))
 					}else{
-						logging.Log(fmt.Sprintf("[%d] cache --////--  count: %d", msg.Header.Header.Imei, len(*cache)))
+						//logging.Log(fmt.Sprintf("[%d] cache --////--  count: %d", msg.Header.Header.Imei, len(*cache)))
 						tempCache := []*proto.MsgData{}
 						for _, cachedMsg := range *cache {
 							if len(cachedMsg.Data) == 0 {
@@ -279,7 +279,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 								tempCache = append(tempCache, cachedMsg)
 							}
 
-							logging.Log("send app data to write routine")
+							//logging.Log("send app data to write routine")
 						}
 
 						if len(tempCache) > 0 {
@@ -287,7 +287,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 						}else{
 							delete(DevicePushCache, msg.Header.Header.Imei)
 						}
-						logging.Log(fmt.Sprintf("[%d] cache --/ ack parse /--  count: %d", msg.Header.Header.Imei, len(*cache)))
+						//logging.Log(fmt.Sprintf("[%d] cache --/ ack parse /--  count: %d", msg.Header.Header.Imei, len(*cache)))
 					}
 				}else{
 					logging.Log(fmt.Sprintf("[%d] device idle no data over %d seconds",
@@ -339,7 +339,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 
 		c.lastActiveTime = time.Now().Unix()
 
-		logging.Log("recv: " + string(headerBuf))
+		//logging.Log("recv: " + string(headerBuf))
 
 		if headerBuf[0] != '(' {
 			logging.Log("bad format of data packet, it must begin with (")
@@ -357,7 +357,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		imei, _ := strconv.ParseUint(string(headerBuf[5 + DeviceMsgVersionSize: 20 + DeviceMsgVersionSize]), 0, 0)
 		cmd := string(headerBuf[20 + DeviceMsgVersionSize: 24 + DeviceMsgVersionSize])
 
-		logging.Log("data size: " + fmt.Sprintf("%d", dataSize))
+		//logging.Log("data size: " + fmt.Sprintf("%d", dataSize))
 		if len(c.buf) < int(dataSize) {
 			buf := c.buf
 			c.buf = make([]byte, dataSize)

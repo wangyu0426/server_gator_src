@@ -170,7 +170,7 @@ func AppConnManagerLoop() {
 				os.Exit(-1)
 			}
 
-			logging.Log("send data to app:" + fmt.Sprint(string(msg.Cmd)))
+			//logging.Log("send data to app:" + fmt.Sprint(string(msg.Cmd)))
 
 			if msg.Cmd == proto.DeviceLocateNowAckCmdName {
 				params := proto.AppRequestTcpConnParams{}
