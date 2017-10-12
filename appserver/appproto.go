@@ -691,7 +691,7 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 	proto.DeviceInfoListLock.Unlock()
 
 	if found == false {
-		logging.Log(params.Imei + "  imei not found")
+		logging.Log(params.Imei + "  imei not found.")
 		deviceInfoResult.IMEI = ""
 		return false
 	}
