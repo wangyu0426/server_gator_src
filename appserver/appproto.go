@@ -670,7 +670,7 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 	if ok && deviceInfo != nil {
 		found = true
-		deviceInfoResult := proto.MakeDeviceInfoResult(deviceInfo)
+		deviceInfoResult = proto.MakeDeviceInfoResult(deviceInfo)
 		if len(deviceInfo.Avatar) == 0 || (strings.Contains(deviceInfo.Avatar, ".jpg") == false &&
 			strings.Contains(deviceInfo.Avatar, ".JPG") == false) {
 			deviceInfoResult.Avatar = ""
@@ -693,6 +693,7 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 	if found == false {
 		logging.Log(params.Imei + "  imei not found")
 		deviceInfoResult.IMEI = ""
+		return false
 	}
 
 	resultData, _ := json.Marshal(&deviceInfoResult)
