@@ -72,7 +72,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				return
 			}
 
-			logging.Log("recv chan data: " + proto.MakeStructToJson(msg))
+			//logging.Log("recv chan data: " + proto.MakeStructToJson(msg))
 
 			if  msg.Header.Header.Version == proto.MSG_HEADER_VER_EX &&
 				msg.Header.Header.From == proto.MsgFromAppServerToTcpServer {

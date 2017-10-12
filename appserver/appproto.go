@@ -656,6 +656,52 @@ func getDeviceInfoByImei(connid uint64, params *proto.DeviceAddParams) bool {
 	return true
 }
 
+func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
+	found := false
+	deviceInfoResult := proto.DeviceInfoResult{}
+	imei := proto.Str2Num(params.Imei, 10)
+	proto.DeviceInfoListLock.Lock()
+	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+	if ok && deviceInfo != nil {
+		found = true
+		deviceInfoResult := proto.MakeDeviceInfoResult(deviceInfo)
+		if len(deviceInfo.Avatar) == 0 || (strings.Contains(deviceInfo.Avatar, ".jpg") == false &&
+			strings.Contains(deviceInfo.Avatar, ".JPG") == false) {
+			deviceInfoResult.Avatar = ""
+		}else{
+			if deviceInfo.Avatar[0] == '/'{
+				deviceInfoResult.Avatar = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort, svrctx.Get().HttpStaticURL +
+					deviceInfoResult.Avatar)
+			}
+		}
+
+		for i, ava := range deviceInfoResult.ContactAvatar{
+			if len(ava) > 0 {
+				deviceInfoResult.ContactAvatar[i] = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName,
+					svrctx.Get().WSPort, svrctx.Get().HttpStaticURL + ava)
+			}
+		}
+	}
+	proto.DeviceInfoListLock.Unlock()
+
+	if found == false {
+		logging.Log(params.Imei + "  imei not found")
+	}
+
+
+	if found == false {
+		deviceInfoResult.IMEI = ""
+	}
+
+	resultData, _ := json.Marshal(&deviceInfoResult)
+
+	appServerChan <- (&proto.AppMsgData{Cmd: proto.RefreshDeviceAckCmdName, Imei: imei,
+		UserName: params.UserName, AccessToken:params.AccessToken,
+		Data: string(resultData), ConnID: connid})
+
+	return true
+}
+
 func checkVerifyCode(imei, code string) bool {
 	matched := false
 	proto.DeviceInfoListLock.Lock()
