@@ -121,6 +121,12 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 			UserName: datas["username"].(string),
 			AccessToken: datas["accessToken"].(string)}
 		return getDeviceVerifyCode(connid, &params)
+	case proto.RefreshDeviceCmdName:
+		datas := msg["data"].(map[string]interface{})
+		params := proto.DeviceBaseParams{Imei: datas["imei"].(string),
+			UserName: datas["username"].(string),
+			AccessToken: datas["accessToken"].(string)}
+		return refreshDevice(connid, &params)
 	case proto.SetDeviceCmdName:
 		jsonString, _ := json.Marshal(msg["data"])
 		params := proto.DeviceSettingParams{}
@@ -686,10 +692,6 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 
 	if found == false {
 		logging.Log(params.Imei + "  imei not found")
-	}
-
-
-	if found == false {
 		deviceInfoResult.IMEI = ""
 	}
 
