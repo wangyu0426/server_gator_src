@@ -534,13 +534,13 @@ var SetDeviceVoiceMonitorAckCmdName  		= SetDeviceVoiceMonitorCmdName + CmdAckTa
 var GetLocationsCmdName  			= "get-locations"
 var GetLocationsAckCmdName  		= GetLocationsCmdName + CmdAckTail
 
-var GetAlarmsCmdName  				= "get-alarms"
+var GetAlarmsCmdName  			= "get-alarms"
 var GetAlarmsAckCmdName  			= GetAlarmsCmdName + CmdAckTail
 
 var DeleteAlarmsCmdName  			= "delete-alarms"
 var DeleteAlarmsAckCmdName  		= DeleteAlarmsCmdName + CmdAckTail
 
-var RefreshDeviceCmdName  			= "refresh-device"
+var RefreshDeviceCmdName  		= "refresh-device"
 var RefreshDeviceAckCmdName  		= RefreshDeviceCmdName + CmdAckTail
 
 var ActiveDeviceSms 				= "#CONNECTSERVER#0#GATOR#"

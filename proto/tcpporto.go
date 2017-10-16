@@ -2224,7 +2224,8 @@ func (service *GT06Service) ProcessUpdateWatchStatus(pszMsgBuf []byte) bool {
 	//	service.cur.Steps = nStep
 	//}
 
-	iLocateType := service.old.LocateType  //LBS_SMARTLOCATION
+	iLocateType := LBS_SMARTLOCATION
+	service.cur.LocateType = iLocateType
 
 	bufOffset := 0
 	bufOffset++
@@ -2269,12 +2270,15 @@ func (service *GT06Service) ProcessUpdateWatchStatus(pszMsgBuf []byte) bool {
 		newData.DataTime = i64Time
 		newData.Steps = service.cur.Steps
 		newData.Battery = service.cur.Battery
+		newData.LocateType = service.cur.LocateType
 		service.cur = newData
 		ret = service.WatchDataUpdateDB()
 		if ret == false {
 			logging.Log(fmt.Sprintf("[%d] Update WatchData into Database failed", service.imei))
 			return false
 		}
+
+		service.NotifyAlarmMsg()
 	}
 
 	return true
