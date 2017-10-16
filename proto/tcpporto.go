@@ -2225,7 +2225,7 @@ func (service *GT06Service) ProcessUpdateWatchStatus(pszMsgBuf []byte) bool {
 	//}
 
 	iLocateType := LBS_SMARTLOCATION
-	service.cur.LocateType = iLocateType
+	service.cur.LocateType = uint8(iLocateType)
 
 	bufOffset := 0
 	bufOffset++
