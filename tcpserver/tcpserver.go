@@ -313,10 +313,10 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 	defer logging.PanicLogAndExit("ConnReadLoop")
 
-	defer c.closeOnce.Do(func() {
+	defer func() {
 		logging.Log("client connection closed")
 		delConnChan <- c
-	})
+	}()
 
 	logging.Log("new connection from: " +  c.conn.RemoteAddr().String())
 

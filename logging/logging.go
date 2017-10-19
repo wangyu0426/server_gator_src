@@ -101,13 +101,18 @@ func writeLog(msg string)  {
 }
 
 func Close()  {
-	closeLogOnce.Do(func() {
-		close(logInputChan)
+	close(logInputChan)
 
-		if logFile != nil {
-			logFile.Close()
-		}
-	})
+	if logFile != nil {
+		logFile.Close()
+	}
+	//closeLogOnce.Do(func() {
+	//	close(logInputChan)
+	//
+	//	if logFile != nil {
+	//		logFile.Close()
+	//	}
+	//})
 }
 
 func PanicLogAndExit(errmsg string){
