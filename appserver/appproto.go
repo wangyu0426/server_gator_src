@@ -352,6 +352,10 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 				locations := []proto.LocationData{}
 				for i, d := range devices.([]interface{}) {
 					device := d.(map[string]interface{})
+					if device == nil || device["IMEI"] == nil {
+						continue
+					}
+
 					imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
 					logging.Log("device: " + fmt.Sprint(imei))
 					locations = append(locations, svrctx.GetDeviceData(imei, svrctx.Get().PGPool))
