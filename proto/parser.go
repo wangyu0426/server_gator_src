@@ -118,6 +118,50 @@ const DRT_FETCH_APP_URL = DRT_FETCH_AGPS
  )
 
 
+const (
+	CMD_GT3_AP00_LOCATE_NOW  = iota  			//AP00 -- locate now
+	CMD_GT3_AP01_RESET_IP_PORT	       			//AP01 -- set server ip and port
+	CMD_GT3_AP02_SET_APN		 	       			//AP02 -- set apn
+	CMD_GT3_AP03_SET_TIMEZONE             			//AP03 -- push time zone
+	CMD_GT3_AP05_SET_VOICE_MONITOR               	//AP05 -- voice monitor
+	CMD_GT3_AP06_SET_PHONE_NUMBERS 		//AP06 -- modify phone numbers
+	CMD_GT3_AP13_SET_CLOCK_ALARM			//AP13 -- set clock alarm
+	CMD_GT3_AP15_PUSH_CHAT_COUNT    		//AP15 -- push chat count
+	CMD_GT3_AP16_PUSH_CHAT_DATA	  		//AP16 -- push chat body data
+	CMD_GT3_AP17_PUSH_EPO_DATA		  		//AP17 -- push epo
+	CMD_GT3_AP18_SET_TIME_AND_LOCATION	//AP18 -- push time and location
+	CMD_GT3_AP19_SET_CHILD_POWER_OFF		//AP19 -- set if child can power off
+	CMD_GT3_AP20_ACTIVE_SOS			  		//AP20 -- active sos
+	CMD_GT3_AP22_SET_OWNERNAME	  		//AP22 -- set owner name
+	CMD_GT3_AP23_SAVE_POWER_MODE			//AP23 -- save power mode
+	CMD_GT3_AP24_SET_DST						//AP24 -- set use dst
+	CMD_GT3_AP25_SET_LANG						//AP25 -- set lang
+	CMD_GT3_AP26_SET_VOLUME					//AP26 -- set volume
+	CMD_GT3_AP28_SET_AIRPLANE_MODE			//AP28 -- set airplane mode
+)
+
+
+var gt3reply_commands = []string{
+	"AP00",
+	"AP01",
+	"AP02",
+	"AP03",
+	"AP05",
+	"AP06",
+	"AP13",
+	"AP15",
+	"AP16",
+	"AP17",
+	"AP18",
+	"AP19",
+	"AP20",
+	"AP22",
+	"AP23",
+	"AP24",
+	"AP25",
+	"AP26",
+	"AP28",
+}
 
 var commands = []string{
 	"",
@@ -152,6 +196,57 @@ var commands = []string{
 	"BP24",
 	"BP25",
 	"BP26",
+}
+
+const (
+	DRT_GT3_BP00_SYNC_TIME = iota
+	DRT_GT3_BP01_LOCATION
+	DRT_GT3_BPw1_LOCATION
+	DRT_GT3_BPM1_LOCATION
+	DRT_GT3_BP02_LOCATION_ALARM
+	DRT_GT3_BPW2_LOCATION_ALARM
+	DRT_GT3_BPM2_LOCATION_ALARM
+	DRT_GT3_BP03_TEL_SMS_INFO
+	DRT_GT3_BP04_LAST_CMD_ACK
+	DRT_GT3_BP06_SEND_CHAT
+	DRT_GT3_BP07_REQUEST_CHAT
+	DRT_GT3_BP08_REQUEST_EPO
+	DRT_GT3_BP09_HEART_BEAT
+
+)
+
+var gt3commands = []string{
+	"BP00",  // sync time
+	//(AP18)
+	"BP01",  //-- location: gps, lbs, wifi, lbs+wifi
+	"BPW1", // -- wifi with ssid length
+	"BPM1", //-- lbs+wifi with ssid length
+
+	"BP02", //-- location with alert: gps, lbs, wifi, lbs+wifi
+	"BPW2", //-- wifi with ssid length
+	"BPM2", //-- lbs+wifi with ssid length
+
+	"BP03", //-- report telephone, sms info
+	"BP04", //-- ack for last cmd
+	"BP06", //-- upload chat
+	"BP07", // (AP16) -- download chat
+	"BP08", //(AP17) -- epo, agps
+	"BP09", //-- heart beat status
+
+	/*
+		server -> watch:
+	AP03 -- push time zone
+	AP18 -- push time and location
+	AP15 -- push chat count
+	AP17 -- push epo
+	AP16 -- push chat body data
+	AP22 -- modify owner name
+	AP06 -- modify phone numbers
+	AP19 -- set if child can power off
+	AP20 -- active sos
+	AP05 -- voice monitor
+	AP00 -- locate now
+	*/
 }
 
 /*普通的消息头部*/
@@ -459,6 +554,7 @@ var RedirectServerFieldName 	= "Redirect"
 
 var	AvatarFieldName 			= "Avatar"
 var	OwnerNameFieldName 	= "OwnerName"
+var	SocketModeOffFieldName = "SocketModeOff"
 var	TimeZoneFieldName 		= "TimeZone"
 var	SimIDFieldName 			= "SimID"
 var	VolumeFieldName 			= "Volume"
@@ -1151,7 +1247,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		" w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, " +
 		" w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2," +
 		" w.HideTimer3, w.DisableWiFi,w.DisableLBS, pm.model, c.name, c.host, c.port, c.Redirect, c.APN  from watchinfo w join device d on w.recid=d.recid join productmodel pm  " +
-		" on d.modelid=pm.recid join companies c on d.companyid=c.recid where pm.model='GT06' ")
+		" on d.modelid=pm.recid join companies c on d.companyid=c.recid where pm.model != 'WH01' ")
 	if err != nil {
 		fmt.Println("LoadDeviceInfoFromDB failed,", err.Error())
 		os.Exit(1)
@@ -1473,6 +1569,19 @@ func StringCmd(cmd uint16) string {
 	return commands[cmd]
 }
 
+func Gt3StringCmd(cmd uint16) string {
+	return gt3commands[cmd]
+}
+
+func Gt3IntCmd(cmd string) uint16 {
+	for i, c := range gt3commands {
+		if c == cmd {
+			return uint16(i)
+		}
+	}
+
+	return 0
+}
 
 func NewMsgID() uint64 {
 	//return uint64(time.Now().UnixNano() / int64(time.Millisecond )* 10)
@@ -1636,3 +1745,14 @@ func GetSafeZoneSettings(imei uint64)  *[MAX_SAFE_ZONE_NUM]SafeZone{
 	return nil
 }
 
+func GetDeviceModel(imei uint64) int{
+	model := DM_MIN
+	DeviceInfoListLock.Lock()
+	deviceInfo, ok := (*DeviceInfoList)[imei]
+	if ok && deviceInfo != nil {
+		model = deviceInfo.Model
+	}
+	DeviceInfoListLock.Unlock()
+
+	return model
+}

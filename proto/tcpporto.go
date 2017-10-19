@@ -300,26 +300,45 @@ func HandleTcpRequest(reqCtx RequestContext)  bool{
 	return true
 }
 
-func MakeLocateNowReplyMsg(imei uint64) []byte {
+func MakeLocateNowReplyMsg(imei uint64, isGT6 bool) []byte {
 	//(0019357593060153353AP00)
-	return []byte(fmt.Sprintf("(0019%dAP00)", imei))
-
+	//(357593060153353AP00)
+	if isGT6{
+		return []byte(fmt.Sprintf("(0019%dAP00)", imei))
+	}else{
+		return []byte(fmt.Sprintf("(%015dAP00)", imei))
+	}
 }
 
 func MakeSosReplyMsg(imei, id uint64) []byte {
-	//(002C357593060153353AP16,1,0000000000000012)
-	body := fmt.Sprintf("%015dAP16,1,%016X)", imei, id)
-	size := fmt.Sprintf("(%04X", 5 + len(body))
+	isGT06 := GetDeviceModel(imei) == DM_GT06
+	if isGT06 {
+		//(002C357593060153353AP16,1,0000000000000012)
+		body := fmt.Sprintf("%015dAP16,1,%016X)", imei, id)
+		size := fmt.Sprintf("(%04X", 5 + len(body))
 
-	return []byte(size + body)
+		return []byte(size + body)
+	}else {
+		//(357593060153353AP20,1)
+		body := fmt.Sprintf("(%015dAP16,1)", imei)
+
+		return []byte(body)
+	}
 }
 
-func MakeVoiceMonitorReplyMsg(imei, id uint64, phone string) []byte {
-	//(0035357593060153353AP0513632782450,0000000000000004)
-	body := fmt.Sprintf("%015dAP05%s,%016X)", imei, phone, id)
-	size := fmt.Sprintf("(%04X", 5 + len(body))
+func MakeVoiceMonitorReplyMsg(imei, id uint64, phone string, isGT6 bool)  []byte {
+	if isGT6 {
+		//(0035357593060153353AP0513632782450,0000000000000004)
+		body := fmt.Sprintf("%015dAP05%s,%016X)", imei, phone, id)
+		size := fmt.Sprintf("(%04X", 5 + len(body))
 
-	return []byte(size + body)
+		return []byte(size + body)
+	}else {
+		//(357593060153353AP0513632782450)
+		body := fmt.Sprintf("(%015dAP05%s)", imei, phone)
+
+		return []byte(body)
+	}
 }
 
 func MakeReplyMsg(imei uint64, requireAck bool, data []byte, id uint64) *MsgData{
@@ -330,6 +349,15 @@ func MakeReplyMsg(imei uint64, requireAck bool, data []byte, id uint64) *MsgData
 	if requireAck {
 		msg.Header.Header.Status = 1
 	}
+	return &msg
+}
+
+func MakeGt3ReplyMsg(imei uint64, data []byte) *MsgData{
+	msg := MsgData{}
+	msg.Data = data
+	msg.Header.Header.Imei = imei
+	msg.Header.Header.ID = NewMsgID()
+
 	return &msg
 }
 
@@ -790,14 +818,21 @@ func (service *GT06Service)UpdateDeviceTimeZone(imei uint64, timezone int) bool 
 }
 
 
-func MakeTimeZoneReplyMsg(imei , id uint64, deviceTimeZone string) []byte {
-	//(002D357593060153353AP03,150728,152900,e0800)
-	curTime := time.Now().UTC().Format("060102,150405")
+func MakeTimeZoneReplyMsg(imei , id uint64, deviceTimeZone string, isGT06 bool) []byte {
+	if isGT06 {
+		//(002D357593060153353AP03,150728,152900,e0800)
+		curTime := time.Now().UTC().Format("060102,150405")
 
-	body := fmt.Sprintf("%015dAP03,%s,%s,%016X)", imei, curTime, deviceTimeZone, id)
-	size := fmt.Sprintf("(%04X", 5 + len(body))
+		body := fmt.Sprintf("%015dAP03,%s,%s,%016X)", imei, curTime, deviceTimeZone, id)
+		size := fmt.Sprintf("(%04X", 5 + len(body))
 
-	return []byte(size + body)
+		return []byte(size + body)
+	}else{
+		curTime := time.Now().UTC().Format("060102,150405")
+		body := fmt.Sprintf("(%015dAP03,%s,%s)", imei, curTime, deviceTimeZone)
+
+		return []byte(body)
+	}
 }
 
 func deviceTimeZoneString(tz string) string {
@@ -828,19 +863,32 @@ func DeviceTimeZoneInt(tz string) int {
 }
 
 
-func makeDeviceFamilyPhoneNumbers(family *[MAX_FAMILY_MEMBER_NUM]FamilyMember) string {
+func makeDeviceFamilyPhoneNumbers(family *[MAX_FAMILY_MEMBER_NUM]FamilyMember, isGT06 bool) string {
 	phoneNumbers := ""
 	for i := 0; i < len(family); i++ {
-		phoneNumbers += fmt.Sprintf("#%s#%s#%d",  family[i].Phone, family[i].Name, family[i].Type)
+		if isGT06 {
+			phoneNumbers += fmt.Sprintf("#%s#%s#%d", family[i].Phone, family[i].Name, family[i].Type)
+		}else{
+			if family[i].Name == "" {
+				phoneNumbers += fmt.Sprintf("#%s#%s#%d", family[i].Phone, "Test", 1)
+			}else{
+				phoneNumbers += fmt.Sprintf("#%s#%s#%d", family[i].Phone, family[i].Name, family[i].Type)
+			}
+		}
 	}
 
 	return phoneNumbers
 }
 
-func makeHideTimerReplyMsgString(imei, id uint64) string {
+func makeHideTimerReplyMsgString(imei, id uint64, isGT06 bool) string {
 	//(006A357593060153353AP22,1,1,0900,1000,127,1,1032,1100,127,1,1400,1500,62,1,1530,1600,62,0000000000000017)
-	body := fmt.Sprintf("%015dAP22,1,", imei)
-	tail := fmt.Sprintf("%016X)", id)
+	body, tail := "", ""
+	if isGT06 {
+		body = fmt.Sprintf("%015dAP22,1,", imei)
+		tail = fmt.Sprintf("%016X)", id)
+	}else{
+		body = fmt.Sprintf("(%015dAP28,1,", imei)
+	}
 
 	DeviceInfoListLock.Lock()
 	device, ok := (*DeviceInfoList)[imei]
@@ -855,11 +903,17 @@ func makeHideTimerReplyMsgString(imei, id uint64) string {
 	}
 	DeviceInfoListLock.Unlock()
 
-	return (fmt.Sprintf("(%04X", 5 + len(body) + len(tail)) + body + tail)
+	if isGT06 {
+		return (fmt.Sprintf("(%04X", 5 + len(body) + len(tail)) + body + tail)
+	}else{
+		body = body[0: len(body) - 1] + ")"
+		return (body)
+	}
 }
 
 func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*MsgData  {
 	if len(params.Settings) > 0 {
+		isGT06 := GetDeviceModel(imei) == DM_GT06
 		msgList := []*MsgData{}
 		for _, setting := range params.Settings {
 			fmt.Println("MakeSetDeviceConfigReplyMsg:", setting)
@@ -870,42 +924,96 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 
 			switch setting.FieldName {
 			case OwnerNameFieldName:
-				body := fmt.Sprintf("%015dAP18,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
-				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				if isGT06 {
+					body := fmt.Sprintf("%015dAP18,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
+					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				}else{
+					//(357593060153353AP22,0,BAOBAO)
+					body := fmt.Sprintf("(%015dAP22,0,%s)", imei, setting.NewValue)
+					msg.Data = []byte(body)
+				}
+			case SocketModeOffFieldName:
+				if isGT06 {
+					//不支持此设置
+				}else{
+					//(357593060153353AP23,0)
+					value := 0
+					if setting.NewValue == "0" {
+						value = 1
+					}
+
+					body := fmt.Sprintf("(%015dAP23,%d)", imei, value)
+					msg.Data = []byte(body)
+				}
 			case TimeZoneFieldName:
 				msg.Data = MakeTimeZoneReplyMsg(imei, msg.Header.Header.ID,
-					deviceTimeZoneString(setting.NewValue))
+					deviceTimeZoneString(setting.NewValue), isGT06)
 			case VolumeFieldName:
-				body := fmt.Sprintf("%015dAP21,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
-				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-			case LangFieldName:
-				body := fmt.Sprintf("%015dAP20,%04d,%016X)", imei, Str2Num(setting.NewValue, 10), msg.Header.Header.ID)
-				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-			case UseDSTFieldName:
-				body := fmt.Sprintf("%015dAP19,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
-				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-			case ChildPowerOffFieldName:
-				body := fmt.Sprintf("%015dAP15,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
-				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-			case PhoneNumbersFieldName:
-				msgId := params.MsgId
-				if params.MsgId == 0 {
-					msgId = msg.Header.Header.ID
-				}else{
-					msg.Header.Header.ID = params.MsgId
-				}
-
-				DeviceInfoListLock.Lock()
-				deviceInfo, ok := (*DeviceInfoList)[imei]
-				if ok && deviceInfo != nil {
-					body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
-						makeDeviceFamilyPhoneNumbers(&deviceInfo.Family),   msgId)
+				if isGT06 {
+					body := fmt.Sprintf("%015dAP21,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
 					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				}else{
+					body := fmt.Sprintf("(%015dAP26,%s)", imei, setting.NewValue)
+					msg.Data = []byte(body)
 				}
-				DeviceInfoListLock.Unlock()
+			case LangFieldName:
+				if isGT06 {
+					body := fmt.Sprintf("%015dAP20,%04d,%016X)", imei, Str2Num(setting.NewValue, 10), msg.Header.Header.ID)
+					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				}else{
+					//(357593060153353AP25,0044)
+					body := fmt.Sprintf("(%015dAP25,%04d)", imei, Str2Num(setting.NewValue, 10))
+					msg.Data = []byte(body)
+				}
+			case UseDSTFieldName:
+				if isGT06 {
+					body := fmt.Sprintf("%015dAP19,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
+					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				}else{
+					//(357593060153353AP24,0)
+					body := fmt.Sprintf("(%015dAP24,%s)", imei, setting.NewValue)
+					msg.Data = []byte(body)
+				}
+			case ChildPowerOffFieldName:
+				if isGT06 {
+					body := fmt.Sprintf("%015dAP15,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
+					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				}else{
+					//(357593060153353AP19,1)
+					body := fmt.Sprintf("(%015dAP19,%s)", imei, setting.NewValue)
+					msg.Data = []byte(body)
+				}
+			case PhoneNumbersFieldName:
+				if isGT06{
+					msgId := params.MsgId
+					if params.MsgId == 0 {
+						msgId = msg.Header.Header.ID
+					}else{
+						msg.Header.Header.ID = params.MsgId
+					}
 
-				if ok == false {
-					return nil
+					DeviceInfoListLock.Lock()
+					deviceInfo, ok := (*DeviceInfoList)[imei]
+					if ok && deviceInfo != nil {
+						body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
+							makeDeviceFamilyPhoneNumbers(&deviceInfo.Family,  true),   msgId)
+						msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+					}
+					DeviceInfoListLock.Unlock()
+
+					if ok == false {
+						return nil
+					}
+				}else{
+					DeviceInfoListLock.Lock()
+					deviceInfo, ok := (*DeviceInfoList)[imei]
+					if ok && deviceInfo != nil {
+						//(357593060153353AP06#0#number1#name1#type1#numbe....)
+						body := fmt.Sprintf("(%015dAP06#0%s)", imei,
+							makeDeviceFamilyPhoneNumbers(&deviceInfo.Family, false))
+						msg.Data = []byte(body)
+					}
+					DeviceInfoListLock.Unlock()
 				}
 			case WatchAlarmFieldName + "0":
 				fallthrough
@@ -917,6 +1025,7 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 				fallthrough
 			case WatchAlarmFieldName + "4":
 				// (0040357593060153353AP09,1,0,127,150728,152900,0000000000000008)
+				//           (357593060153353AP13,1,0,127,150728,152900)
 				body := ""
 				if setting.NewValue == "delete" || setting.NewValue == "null" {
 					curWatchAlarm := WatchAlarm{}
@@ -925,8 +1034,13 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 						logging.Log(fmt.Sprintf("[%d] bad data of current watch alarm to delete, %s", imei, setting.CurValue))
 						return  nil
 					}else{
-						body = fmt.Sprintf("%015dAP09,%d,%d,%d,%s,%s,%016X)", imei, 0, setting.Index, curWatchAlarm.Days,
-							curWatchAlarm.Date, curWatchAlarm.Time, msg.Header.Header.ID)
+						if isGT06 {
+							body = fmt.Sprintf("%015dAP09,%d,%d,%d,%s,%s,%016X)", imei, 0, setting.Index, curWatchAlarm.Days,
+								curWatchAlarm.Date, curWatchAlarm.Time, msg.Header.Header.ID)
+						}else{
+							body = fmt.Sprintf("(%015dAP13,%d,%d,%d,%s,%s)", imei, 0, setting.Index, curWatchAlarm.Days,
+								curWatchAlarm.Date, curWatchAlarm.Time)
+						}
 					}
 				}else{
 					newWatchAlarm := WatchAlarm{}
@@ -935,20 +1049,35 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 						logging.Log(fmt.Sprintf("[%d] bad data of new watch alarm to save, %s", imei, setting.NewValue))
 						return  nil
 					}else{
-						body = fmt.Sprintf("%015dAP09,%d,%d,%d,%s,%s,%016X)", imei, 1, setting.Index, newWatchAlarm.Days,
-							newWatchAlarm.Date, newWatchAlarm.Time, msg.Header.Header.ID)
+						if isGT06 {
+							body = fmt.Sprintf("%015dAP09,%d,%d,%d,%s,%s,%016X)", imei, 1, setting.Index, newWatchAlarm.Days,
+								newWatchAlarm.Date, newWatchAlarm.Time, msg.Header.Header.ID)
+						}else{
+							body = fmt.Sprintf("(%015dAP13,%d,%d,%d,%s,%s)", imei, 1, setting.Index, newWatchAlarm.Days,
+								newWatchAlarm.Date, newWatchAlarm.Time)
+						}
 					}
 				}
 
-				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				if isGT06 {
+					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				}else{
+					msg.Data = []byte(body)
+				}
+
 				logging.Log(fmt.Sprintf("send watch alarm to [%d]:  %s", imei, string(msg.Data)))
 
 			case HideSelfFieldName:
 				if setting.NewValue == "0" {
-					body := fmt.Sprintf("%015dAP22,0,%016X)",  imei, msg.Header.Header.ID)
-					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+					if isGT06 {
+						body := fmt.Sprintf("%015dAP22,0,%016X)", imei, msg.Header.Header.ID)
+						msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+					}else{
+						body := fmt.Sprintf("(%015dAP28,0)", imei)
+						msg.Data = []byte(body)
+					}
 				}else {
-					msg.Data = []byte(makeHideTimerReplyMsgString(imei, msg.Header.Header.ID))
+					msg.Data = []byte(makeHideTimerReplyMsgString(imei, msg.Header.Header.ID, false))
 				}
 
 				logging.Log(fmt.Sprintf("send hide self settings to [%d]:  %s", imei, string(msg.Data)))
@@ -959,7 +1088,7 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 			case HideTimer2FieldName:
 				fallthrough
 			case HideTimer3FieldName:
-				msg.Data = []byte(makeHideTimerReplyMsgString(imei, msg.Header.Header.ID))
+				msg.Data = []byte(makeHideTimerReplyMsgString(imei, msg.Header.Header.ID, isGT06))
 				logging.Log(fmt.Sprintf("send hide timer to [%d]:  %s", imei, string(msg.Data)))
 
 			default:
@@ -1186,25 +1315,30 @@ func (service *GT06Service)makeDataBlockReplyMsg(block *DataBlock) []byte {
 }
 
 func (service *GT06Service)makeFileNumReplyMsg(fileType, chatNum int) []byte {
-	return MakeFileNumReplyMsg(service.imei, fileType, chatNum)
+	return MakeFileNumReplyMsg(service.imei, fileType, chatNum, true)
 }
 
 
-func MakeFileNumReplyMsg(imei uint64, fileType, chatNum int) []byte {
-	//(001B357593060153353AP1102)
-	cmd := ""
-	switch fileType {
-	case ChatContentVoice:
-		cmd = "AP12"
-	case ChatContentPhoto:
-		cmd = "AP23"
+func MakeFileNumReplyMsg(imei uint64, fileType, chatNum int, isGT06 bool) []byte {
+	if isGT06 {
+		//(001B357593060153353AP1102)
+		cmd := ""
+		switch fileType {
+		case ChatContentVoice:
+			cmd = "AP12"
+		case ChatContentPhoto:
+			cmd = "AP23"
+		}
 
+		body := fmt.Sprintf("%015dAP11,%s,%02d)", imei, cmd, chatNum)
+		size := fmt.Sprintf("(%04X", 5 + len(body))
+
+		return []byte(size + body)
+	}else{
+		//(357593060153353AP1502)
+		body := fmt.Sprintf("(%015dAP15%02d)", imei, chatNum)
+		return []byte(body)
 	}
-
-	body := fmt.Sprintf("%015dAP11,%s,%02d)", imei, cmd, chatNum)
-	size := fmt.Sprintf("(%04X", 5 + len(body))
-
-	return []byte(size + body)
 }
 
 func makeId()  (uint64) {

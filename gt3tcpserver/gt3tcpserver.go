@@ -1,4 +1,4 @@
-package tcpserver
+package gt3tcpserver
 
 import (
 	"../logging"
@@ -6,8 +6,6 @@ import (
 	"../proto"
 	"net"
 	"fmt"
-	"io"
-	"strconv"
 	"strings"
 	"os"
 	"time"
@@ -18,6 +16,7 @@ const (
 	MsgHeaderSize = 28
 	MsgMinSize = 29
 	DeviceMsgVersionSize = 4
+	MAX_TCP_REQUEST_LENGTH = 1024 * 64
 )
 
 var addConnChan chan *Connection
@@ -26,10 +25,7 @@ var TcpClientTable = map[uint64]*Connection{}
 var DevicePushCache = map[uint64]*[]*proto.MsgData{}
 
 func init()  {
-	//fmt.Println(string(MakeLatestTimeLocationReplyMsg(proto.CMD_AP03, 357593060571398, 0x14CE9D5CF576B1DF, []byte("(003E357593060571398AP03,170706,023907,e0630,14CE9D5C99BF7158)"))))
-	//fmt.Println(string(MakeLatestTimeLocationReplyMsg(proto.CMD_AP14, 357593060571398, 0x00000DA2DB7AFA20, []byte("(0054357593060571398AP1422.587725,113.913641,0,2017,07,06,03,30,13,00000DA2DB7AFA18)"))))
-
-	logging.Log("tcpserver init")
+	logging.Log("gt3tcpserver init")
 	addConnChan = make(chan *Connection, 10240)
 	delConnChan = make(chan *Connection, 10240)
 }
@@ -45,7 +41,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 	for   {
 		select {
 		case connAdd:=<-addConnChan:
-			//logging.Log("new connection added")
+			logging.Log("new connection added")
 			TcpClientTable[connAdd.imei] = connAdd
 		case connDel := <-delConnChan:
 			if connDel == nil {
@@ -66,7 +62,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 			}else {
 				logging.Log("will delete connection from TcpClientTable, but connection not found")
 			}
-		case msg := <- serverCtx.GT6TcpServerChan:
+		case msg := <- serverCtx.GT3TcpServerChan:
 			if msg == nil {
 				logging.Log("main lopp exit, connection manager goroutine exit")
 				return
@@ -92,8 +88,8 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 						)
 
 						switch msg.Header.Header.Cmd {
-						case proto.CMD_AP00:
-							data = proto.MakeLocateNowReplyMsg(msg.Header.Header.Imei, true)
+						case proto.CMD_GT3_AP00_LOCATE_NOW:
+							data = proto.MakeLocateNowReplyMsg(msg.Header.Header.Imei, false)
 							requireAck = false
 							cmdAckName = proto.DeviceLocateNowAckCmdName
 						//case proto.CMD_AP16:
@@ -126,7 +122,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 
 				reqParams := proto.AppRequestTcpConnParams{}
 				switch msg.Header.Header.Cmd {
-				case proto.CMD_AP00:
+				case proto.CMD_GT3_AP00_LOCATE_NOW:
 					cmdAckName = proto.DeviceLocateNowAckCmdName
 					_ = json.Unmarshal(msg.Data, &reqParams)
 
@@ -143,7 +139,6 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				break
 			}
 
-			isPushCache := msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE
 			//if msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE {
 			if len(msg.Data) == 0 { //没有数据，表示这是一个通知的消息
 				logging.Log(fmt.Sprintf("msg to notify to push cached data to device %d ",  msg.Header.Header.Imei))
@@ -157,43 +152,9 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				_, ok1 := DevicePushCache[msg.Header.Header.Imei]
 				if ok1 == false {
 					DevicePushCache[msg.Header.Header.Imei] = &[]*proto.MsgData{}
-					syncTimeMsg := &proto.MsgData{}
-					syncTimeMsg.Header.Header.Cmd = proto.CMD_AP03
-					*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], syncTimeMsg)
-
-					sendLocationMsg := &proto.MsgData{}
-					sendLocationMsg.Header.Header.Cmd = proto.CMD_AP14
-					*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], sendLocationMsg)
 				}
 
-				if len(*DevicePushCache[msg.Header.Header.Imei]) == 1 {
-					sendLocationMsg := &proto.MsgData{}
-					sendLocationMsg.Header.Header.Cmd = proto.CMD_AP14
-					*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], sendLocationMsg)
-				}
-
-				if msg.Header.Header.Cmd == proto.CMD_AP03 {
-					if (*DevicePushCache[msg.Header.Header.Imei])[0].Header.Header.ID != 0 {
-						tempID := (*DevicePushCache[msg.Header.Header.Imei])[0].Header.Header.ID
-						(*DevicePushCache[msg.Header.Header.Imei])[0] = msg
-						(*DevicePushCache[msg.Header.Header.Imei])[0].Header.Header.ID = tempID
-					}else{
-						(*DevicePushCache[msg.Header.Header.Imei])[0] = msg
-					}
-				}else if msg.Header.Header.Cmd == proto.CMD_AP14 {
-					if (*DevicePushCache[msg.Header.Header.Imei])[1].Header.Header.ID != 0 {
-						tempID := (*DevicePushCache[msg.Header.Header.Imei])[1].Header.Header.ID
-						(*DevicePushCache[msg.Header.Header.Imei])[1] = msg
-						(*DevicePushCache[msg.Header.Header.Imei])[1].Header.Header.ID = tempID
-					}else{
-						(*DevicePushCache[msg.Header.Header.Imei])[1] = msg
-					}
-				}else{
-					*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], msg)
-				}
-
-				//}else{
-				//	cache = append(cache, msg)
+				*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], msg)
 				//logging.Log(fmt.Sprintf("[%d] cache --  count: %d", msg.Header.Header.Imei, len(*DevicePushCache[msg.Header.Header.Imei])))
 			}
 
@@ -214,72 +175,18 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 								continue
 							}
 
-							if cachedMsg.Header.Header.Status == 0 {
-								//0， 不需要手表回复确认，直接发送完并删除
-								//对于AP11,需要加30s延迟，不能连续发送太快
-								if cachedMsg.Header.Header.Cmd == proto.CMD_AP11 {
-									if (int64(cachedMsg.Header.Header.ID) - int64(c.lastPushFileNumTime)) / int64(time.Second) >= 30 {
-										c.responseChan <- cachedMsg
-										c.lastPushFileNumTime = int64(cachedMsg.Header.Header.ID)
-									}
-								}else{
+							//不需要手表回复确认，直接发送完并删除
+							//对于AP15,需要加30s延迟，不能连续发送太快
+							if cachedMsg.Header.Header.Cmd == proto.CMD_GT3_AP15_PUSH_CHAT_COUNT {
+								if (int64(cachedMsg.Header.Header.ID) - int64(c.lastPushFileNumTime)) / int64(time.Second) >= 30 {
 									c.responseChan <- cachedMsg
-								}
-							}else if cachedMsg.Header.Header.Status == 1 {
-								//1, 消息尚未发送，且需要确认，则首先发出消息，并将status置2,
-								//如果是AP03和AP14，则需要实时推送务器当前时间和手表最新定位
-								if cachedMsg.Header.Header.Cmd == proto.CMD_AP03 ||  cachedMsg.Header.Header.Cmd == proto.CMD_AP14 {
-									cachedMsg.Data = MakeLatestTimeLocationReplyMsg(cachedMsg.Header.Header.Cmd,
-										cachedMsg.Header.Header.Imei, cachedMsg.Header.Header.ID, cachedMsg.Data)
-								}
-
-								c.responseChan <- cachedMsg
-								cachedMsg.Header.Header.Status = 2
-								cachedMsg.Header.Header.LastPushTime = proto.NewMsgID()
-								tempCache = append(tempCache, cachedMsg)
-							}else if cachedMsg.Header.Header.Status == 2 {
-								//2, 消息已经发送，并处于等待手表确认的状态
-								if msg.Header.Header.Version == proto.MSG_HEADER_ACK_PARSED &&
-									msg.Header.Header.Imei == cachedMsg.Header.Header.Imei &&
-									msg.Header.Header.ID == cachedMsg.Header.Header.ID {
-									if msg.Header.Header.Cmd == proto.CMD_AP03 {
-										syncTimeMsg := &proto.MsgData{}
-										syncTimeMsg.Header.Header.Cmd = proto.CMD_AP03
-										cachedMsg = syncTimeMsg
-										tempCache = append(tempCache, cachedMsg)
-									}else if msg.Header.Header.Cmd == proto.CMD_AP14 {
-										sendLocationMsg := &proto.MsgData{}
-										sendLocationMsg.Header.Header.Cmd = proto.CMD_AP14
-										cachedMsg = sendLocationMsg
-										tempCache = append(tempCache, cachedMsg)
-									}else{
-									}
-								}else{ //未收到确认，如果当前消息是通知继续推送数据并且时间已经超过30s，才会发送
-									if isPushCache {
-										timeout := (proto.NewMsgID() - cachedMsg.Header.Header.LastPushTime) / uint64(time.Second)
-										if timeout >=  uint64(serverCtx.MaxPushDataTimeSecs) {
-											logging.Log(fmt.Sprintf("[%d] push data timeout more than one day, need to remove/delete", msg.Header.Header.Imei))
-										}else if  timeout > uint64(serverCtx.MinPushDataDelayTimeSecs) {
-											//如果是AP03和AP14，则需要实时推送务器当前时间和手表最新定位
-											if cachedMsg.Header.Header.Cmd == proto.CMD_AP03 ||  cachedMsg.Header.Header.Cmd == proto.CMD_AP14 {
-												cachedMsg.Data = MakeLatestTimeLocationReplyMsg(cachedMsg.Header.Header.Cmd,
-													cachedMsg.Header.Header.Imei, cachedMsg.Header.Header.ID, cachedMsg.Data)
-											}
-
-											c.responseChan <- cachedMsg
-											cachedMsg.Header.Header.LastPushTime = proto.NewMsgID()
-										}else{
-											logging.Log(fmt.Sprintf("[%d] push data timeout less than 30s, no need to push", msg.Header.Header.Imei))
-										}
-									}
-
-									tempCache = append(tempCache, cachedMsg)
+									c.lastPushFileNumTime = int64(cachedMsg.Header.Header.ID)
 								}
 							}else{
-								tempCache = append(tempCache, cachedMsg)
+								c.responseChan <- cachedMsg
 							}
 
-							//logging.Log("send app data to write routine")
+							logging.Log("send app data to write routine")
 						}
 
 						if len(tempCache) > 0 {
@@ -287,7 +194,8 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 						}else{
 							delete(DevicePushCache, msg.Header.Header.Imei)
 						}
-						//logging.Log(fmt.Sprintf("[%d] cache --/ ack parse /--  count: %d", msg.Header.Header.Imei, len(*cache)))
+						//logging.Log(fmt.Sprintf("[%d] cache --/ ack parse /--  count: %d, %s", msg.Header.Header.Imei, len(*cache),
+							//proto.MakeStructToJson((*cache)[0])))
 					}
 				}else{
 					logging.Log(fmt.Sprintf("[%d] device idle no data over %d seconds",
@@ -320,63 +228,27 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 
 	logging.Log("new connection from: " +  c.conn.RemoteAddr().String())
 
+	if len(c.buf) == 0 {
+		c.buf = make([]byte, MAX_TCP_REQUEST_LENGTH )
+	}
+
 	for  {
-		if len(c.buf) == 0 {
-			c.buf = make([]byte, 256)
+		if c.recvEndPosition >= MAX_TCP_REQUEST_LENGTH{
+			logging.Log(fmt.Sprintf("recvEndPosition >= MAX_TCP_REQUEST_LENGTH(%d)", MAX_TCP_REQUEST_LENGTH))
+			break
 		}
-
-		dataSize := uint16(0)
-		headerBuf := c.buf[0: MsgHeaderSize]
 
 		if serverCtx.IsDebug == false {
 			c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
 		}
 
-		if _, err := io.ReadFull(c.conn, headerBuf); err != nil {
-			logging.Log("recv MsgHeaderSize bytes header failed, " + err.Error())
-			break
-		}
-
-		c.lastActiveTime = time.Now().Unix()
-
-		//logging.Log("recv: " + string(headerBuf))
-
-		if headerBuf[0] != '(' {
-			logging.Log("bad format of data packet, it must begin with (")
-			break
-		}
-
-		num, _ := strconv.ParseUint("0x" + string(headerBuf[1:5]), 0, 0)
-		dataSize = uint16(num)
-		if dataSize < MsgMinSize {
-			logging.Log(fmt.Sprintf("data size in header is bad of  %d, less than %d", dataSize, MsgMinSize))
-			break
-		}
-
-		//将IMEI和cmd解析出来
-		imei, _ := strconv.ParseUint(string(headerBuf[5 + DeviceMsgVersionSize: 20 + DeviceMsgVersionSize]), 0, 0)
-		cmd := string(headerBuf[20 + DeviceMsgVersionSize: 24 + DeviceMsgVersionSize])
-
-		//logging.Log("data size: " + fmt.Sprintf("%d", dataSize))
-		if len(c.buf) < int(dataSize) {
-			buf := c.buf
-			c.buf = make([]byte, dataSize)
-			copy(c.buf[0: MsgHeaderSize], buf)
-		}
-
-		bufSize := dataSize - MsgHeaderSize
-		dataBuf := c.buf[MsgHeaderSize: MsgHeaderSize + bufSize]
-		//recvOffset := uint16(0)
-		full := false
-
-		if serverCtx.IsDebug == false {
-			c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
-		}
-		n, err := io.ReadFull(c.conn, dataBuf)
-		if err == nil && n == len(dataBuf) {
-			full = true
+		breakLoop := false
+		n, err := c.conn.Read(c.buf[c.recvEndPosition: ])
+		if n > 0 {
+			c.recvEndPosition += n
 		}else {
 			logging.Log(fmt.Sprintf("recv data failed, %s, recv %d bytes", err.Error(), n))
+			breakLoop = true
 		}
 
 		if n > 0 {
@@ -384,67 +256,54 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		}
 
 		//记录收到的是些什么数据
-		if cmd == proto.StringCmd(proto.DRT_SEND_MINICHAT) {
-			logging.Log(string(c.buf[0: 80]))
-		}else{
-			logging.Log(string(c.buf[0: dataSize]))
-		}
+		logging.Log(string(c.buf[0: c.recvEndPosition]))
 
-		if !full {
-			if serverCtx.IsDebug == true {
-				logging.Log("data packet was not fully received ")
+		//切割消息
+		for {
+			if c.recvEndPosition == 0 {
 				break
+			}
+
+			msgLen, ret := ParaseClientMsg(c.buf[0: c.recvEndPosition], uint16(c.recvEndPosition))
+			if ret < 0 {
+				breakLoop = true
+				break
+			}else if ret == 1 {
+				break
+			}else{
+				//分发完整消息
+				if c.buf[msgLen - 1] != ')' || msgLen < 21 {
+					logging.Log("bad format of data packet, it must end with )")
+					breakLoop = true
+					break
+				}
+
+				imei := proto.Str2Num(string(c.buf[1: 16]), 10)
+				cmd := string(c.buf[16:20])
+
+				c.imei = imei
+				if c.saved == false {
+					c.saved = true
+					addConnChan <- c
+				}
+
+				msg := &proto.MsgData{}
+				msg.Header.Header.Version = proto.MSG_HEADER_VER_EX
+				msg.Header.Header.Size = msgLen
+				msg.Header.Header.From = proto.MsgFromDeviceToTcpServer
+				msg.Header.Header.ID = proto.NewMsgID()
+				msg.Header.Header.Imei = imei
+				msg.Header.Header.Cmd = proto.Gt3IntCmd(cmd)
+				msg.Data = make([]byte, msgLen)
+				copy(msg.Data, c.buf[0: msgLen]) //不包含头部20字节
+
+				c.requestChan <- msg
+
+				c.FlushRecvBuf(int(msgLen))
 			}
 		}
 
-		if full && dataBuf[bufSize - 1] != ')' {
-			logging.Log("bad format of data packet, it must end with )")
-			break
-		}
-
-		// 消息接收不完整，如果是微聊（BP34）等需要支持续传的请求，
-		// 则将当前不完整的数据加入续传队列，等待下一次连接以后进行续传
-		// 否则，为普通命令请求如BP01，BP09等，直接丢弃并关闭连接
-		if !full && cmd != proto.StringCmd(proto.DRT_SEND_MINICHAT) {
-			break  //退出循环和go routine，连接关闭
-		}
-
-		c.imei = imei
-		if c.saved == false && full {
-			c.saved = true
-			addConnChan <- c
-		}
-
-		msg := &proto.MsgData{}
-		msg.Header.Header.Version = proto.MSG_HEADER_VER_EX
-		msg.Header.Header.Size = dataSize
-		msg.Header.Header.From = proto.MsgFromDeviceToTcpServer
-		msg.Header.Header.ID = proto.NewMsgID()
-		msg.Header.Header.Imei = imei
-		msg.Header.Header.Cmd = proto.IntCmd(cmd)
-		msg.Data = make([]byte, n)
-		copy(msg.Data, dataBuf[0: n]) //不包含头部28字节
-		if  msg.Header.Header.Cmd ==  proto.DRT_SEND_MINICHAT {
-			msg.Header.Header.Status = 1
-		}else{
-			msg.Header.Header.Status = 0
-		}
-
-		////首先通知ManagerLoop, 将上次缓存的未发送的数据发送给手表
-		//msgNotify := &proto.MsgData{}
-		//msgNotify.Header.Header.Version = proto.MSG_HEADER_PUSH_CACHE
-		////logging.Log("MSG_HEADER_PUSH_CACHE, imei: " + proto.Num2Str(imei, 10))
-		//msgNotify.Header.Header.Imei = imei
-		//serverCtx.TcpServerChan <- msgNotify
-
-		// 包可能接收未完整，但此时可以开始进行业务逻辑处理
-		// 目前所有头部信息都已准备好，业务处理模块只需处理与断点续传相关逻辑
-		// 以及命令的实际逻辑
-		c.requestChan <- msg
-
-		//业务逻辑只处理完整的请求和不完整的微聊请求，处理完请求以后，
-		// 对于不完整的微聊请求，由于连接已经出错，需要将当前连接关闭
-		if !full && cmd == proto.StringCmd(proto.DRT_SEND_MINICHAT) {
+		if breakLoop {
 			break  //退出循环和go routine，连接关闭
 		}
 	}
@@ -471,14 +330,12 @@ func ConnWriteLoop(c *Connection) {
 				logging.Log(fmt.Sprintf("send data to client failed: %s,  %d bytes sent",  err.Error(), n))
 			}else{
 				sentData := string(data.Data)
-				cmd := sentData[20: 24]
+				cmd := proto.Gt3IntCmd(sentData[16: 20])
 				count := 0
-				if cmd == "AP12"  { //微聊，只打印80个字节
-					count = 80
-				}else if cmd == "AP13"  { //EPO，只打印40个字节
-					count = 40
-				}else if cmd == "AP23" { //亲情号头像，只打印60个字节
-					count = 60
+				if cmd == proto.CMD_GT3_AP16_PUSH_CHAT_DATA { //微聊，只打印80个字节
+					count = 30
+				}else if cmd == proto.CMD_GT3_AP17_PUSH_EPO_DATA  { //EPO，只打印40个字节
+					count = 30
 				}else{
 					count = len(sentData)
 				}
@@ -509,7 +366,7 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				return
 			}
 
-			proto.HandleTcpRequest(proto.RequestContext{IsDebug: serverCtx.IsDebug, IP: c.IP, Port: c.Port,
+			proto.HandleGt3TcpRequest(proto.RequestContext{IsDebug: serverCtx.IsDebug, IP: c.IP, Port: c.Port,
 				AvatarUploadDir: serverCtx.HttpStaticDir + serverCtx.HttpStaticAvatarDir,
 				MinichatUploadDir: serverCtx.HttpStaticDir + serverCtx.HttpStaticMinichatDir,
 				DeviceMinichatBaseUrl: fmt.Sprintf("%s:%d%s", serverCtx.HttpServerName,
@@ -534,7 +391,7 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	defer logging.PanicLogAndExit("TcpServerRunLoop")
 
-	tcpaddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.Port ))
+	tcpaddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.Gt3Port ))
 	if err != nil {
 		logging.Log("resolve tcp address failed, " + err.Error())
 		os.Exit(1)
@@ -586,46 +443,6 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		//for writing, 写协程等待一个channel的数据，将channel收到的数据发送至客户端
 		go ConnWriteLoop(c)
 	}
-}
-
-func MakeLatestTimeLocationReplyMsg(cmd uint16, imei, id uint64, data []byte) []byte{
-	if len(data) == 0 {
-		return data
-	}
-
-	offset := 0
-	if cmd == proto.CMD_AP03 {
-		//(003E357593060571398AP03,170706,024012,e0630,14CE9D6BDC6263B7)
-		replyData := make([]byte, len(data))
-		curTime := time.Now().UTC().Format("060102,150405")
-		copy(replyData[offset: offset + 25], data[offset: offset + 25])
-		offset += 25
-
-		copy(replyData[offset: offset + 13], curTime[0: ])
-		offset += 13
-
-		copy(replyData[offset: offset + 6], data[offset: offset + 6])
-		offset += 6
-
-		copy(replyData[offset: offset + 18],  []byte(fmt.Sprintf(",%016X)", id)))
-		offset += 18
-
-		return replyData
-	}else if cmd == proto.CMD_AP14{
-		//(0054357593060081018AP1422.587725,113.913641,0,2017,07,06,03,30,13,00000DA2DB7AFA18)
-
-		replyData, body  := "", ""
-		curTime := time.Now().UTC().Format("2006,01,02,15,04,05")
-
-		location := svrctx.GetDeviceData(imei, svrctx.Get().PGPool)
-		body = string(data[5: 24]) + fmt.Sprintf("%06f,%06f,%d,", location.Lat, location.Lng, 200) + curTime +
-			fmt.Sprintf(",%016X)", id)
-
-		replyData = fmt.Sprintf("(%04X", 5 + len(body)) + body
-		return []byte(replyData)
-	}
-
-	return data
 }
 
 func BackgroundCleanerLoop(serverCtx *svrctx.ServerContext) {
@@ -769,4 +586,113 @@ func BackgroundCleanerLoop(serverCtx *svrctx.ServerContext) {
 	//
 	//	time.Sleep(time.Duration(serverCtx.BackgroundCleanerDelayTimeSecs) * time.Second)
 	//}
+}
+
+func ParaseClientMsg(pszCodeBuf []byte, shRecvBufLen uint16) (uint16, int) {
+	shCodeLen, ret :=  uint16(0), 0
+
+	if pszCodeBuf == nil || len(pszCodeBuf) == 0 || pszCodeBuf[0] != '('  {
+		logging.Log("pszCodeBuf is null or invalid")
+		return 0, -1
+	}
+
+	find_bp06 := string(pszCodeBuf[16: 20]) == "BP06"
+	find_bp11 := string(pszCodeBuf[16: 20]) == "BP11"
+
+	if find_bp06 || find_bp11 {
+		prefix_len, phone_len := (0), (0)
+
+		if find_bp06{
+			prefix_len = (len("(357593060153353BP0627D6,2710,15101016010000"))
+		}else{
+			//"(357593060153353BP11,xxxxx,27D6,2710,15101016010000"
+			prefix_len = (len("(357593060153353BP11,"))
+
+			for i := 0; i < 32; i++ {
+				if pszCodeBuf[i + prefix_len] == ',' {
+					phone_len = i
+					break
+				}
+			}
+
+			if(phone_len == 0) {
+				ret = 1
+				logging.Log("the BP11 data from client is not completed by recv, maybe need recv any more")
+				return shCodeLen, ret
+			}
+
+			prefix_len += phone_len + len(",27D6,2710,15101016010000")
+		}
+
+		sz_amr_msg_size := make([]byte, 4)
+		if find_bp06 {
+			copy(sz_amr_msg_size[0: ], pszCodeBuf[16 + 4: 24])
+		}else{
+			copy(sz_amr_msg_size[0: ], pszCodeBuf[16 + 4 + phone_len + 2: 16 + 4 + phone_len + 2 + 4])
+		}
+
+		amr_msg_size, t := uint16(0), byte(0)
+		for i :=0; i < 4; i++ {
+			if sz_amr_msg_size[i] <= '9'	{
+				t = sz_amr_msg_size[i]-'0'
+			}else{
+				t=sz_amr_msg_size[i]-'A'+10
+			}
+
+			amr_msg_size = amr_msg_size*16 + uint16(t)
+		}
+
+		if shRecvBufLen < amr_msg_size {
+			ret = 1
+			logging.Log("the data from client is not completed by recv, maybe need recv any more")
+			return shCodeLen, ret
+		}
+
+		if shRecvBufLen >= amr_msg_size &&  pszCodeBuf[amr_msg_size - 1] != ')' {
+			logging.Log("the data from client is completed but invalid")
+			return 0, -1
+		}
+
+		shCodeLen = amr_msg_size
+		return shCodeLen , ret
+	}
+
+	brackets_open := 1
+	shCodeLen = 1
+
+	for shCodeLen < shRecvBufLen && pszCodeBuf[shCodeLen] != 0 && brackets_open != 0 {
+		if pszCodeBuf[shCodeLen] == '(' {
+			brackets_open++
+		}else if pszCodeBuf[shCodeLen] == ')' {
+			brackets_open--
+		}
+
+		shCodeLen++
+	}
+
+	//	const char *end = strchr((char *)pszCodeBuf, ')');
+	//	if(end)
+	//	{
+	//		shCodeLen = (unsigned short)((unsigned char *)end + 1 - pszCodeBuf);
+	//	}
+	if brackets_open != 0 {
+		ret = 1
+		logging.Log("the data from client is not completed by recv, maybe need recv any more")
+	}
+
+	return shCodeLen, ret
+}
+
+func (this *Connection)FlushRecvBuf(iFlushLength int ) {
+	if iFlushLength > this.recvEndPosition {
+		iFlushLength = this.recvEndPosition
+	}
+
+	if iFlushLength > 0{
+		for i := 0; i < (this.recvEndPosition - iFlushLength); i++ {
+			this.buf[i] = this.buf[i + iFlushLength]
+		}
+
+		this.recvEndPosition -= iFlushLength
+	}
 }

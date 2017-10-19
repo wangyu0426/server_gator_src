@@ -30,6 +30,7 @@ type ServerContext struct {
 	ProcessName   string
 	MasterListenAddrPort string
 	BindAddr      string
+	Gt3Port          uint16
 	Port          uint16
 	HttpServerName string
 	WSPort        uint16
@@ -72,6 +73,8 @@ type ServerContext struct {
 
 	AppServerChan chan *proto.AppMsgData  `json:"-"`
 	TcpServerChan chan *proto.MsgData `json:"-"`
+	GT6TcpServerChan chan *proto.MsgData `json:"-"`
+	GT3TcpServerChan chan *proto.MsgData `json:"-"`
 	ServerExit chan struct{} `json:"-"`
 }
 
@@ -214,6 +217,8 @@ func init()  {
 
 	serverCtx.AppServerChan = make(chan *proto.AppMsgData, 10240)
 	serverCtx.TcpServerChan = make(chan *proto.MsgData, 10240)
+	serverCtx.GT6TcpServerChan = make(chan *proto.MsgData, 10240)
+	serverCtx.GT3TcpServerChan = make(chan *proto.MsgData, 10240)
 
 	serverCtx.ServerExit = make(chan struct{})
 
@@ -295,7 +300,7 @@ func PushPhotoNum(imei uint64) bool {
 	if len(photoData) > 0 {
 		//通知终端有新的图片设置信息
 		serverCtx.TcpServerChan <- proto.MakeReplyMsg(imei, false,
-			proto.MakeFileNumReplyMsg(imei, proto.ChatContentPhoto, len(photoData)),
+			proto.MakeFileNumReplyMsg(imei, proto.ChatContentPhoto, len(photoData),  true),
 			proto.NewMsgID())
 	}
 
@@ -306,11 +311,20 @@ func PushChatNum(imei uint64) bool {
 	chatData := GetChatData(imei, -1)
 	if len(chatData) > 0 {
 		//通知终端有聊天信息
-		msg :=  proto.MakeReplyMsg(imei, false,
-			proto.MakeFileNumReplyMsg(imei, proto.ChatContentVoice, len(chatData)),
-			proto.NewMsgID())
-		msg.Header.Header.Cmd = proto.CMD_AP11
-		serverCtx.TcpServerChan <- msg
+		model := proto.GetDeviceModel(imei)
+		if model == proto.DM_GT06 {
+			msg := proto.MakeReplyMsg(imei, false,
+				proto.MakeFileNumReplyMsg(imei, proto.ChatContentVoice, len(chatData), true),
+				proto.NewMsgID())
+			msg.Header.Header.Cmd = proto.CMD_AP11
+			serverCtx.TcpServerChan <- msg
+		}else if model == proto.DM_GTI3  || model == proto.DM_GT03 {
+			msg := proto.MakeReplyMsg(imei, false,
+				proto.MakeFileNumReplyMsg(imei, proto.ChatContentVoice, len(chatData), false),
+				proto.NewMsgID())
+			msg.Header.Header.Cmd = proto.CMD_GT3_AP15_PUSH_CHAT_COUNT
+			serverCtx.TcpServerChan <- msg
+		}
 	}
 
 	return true

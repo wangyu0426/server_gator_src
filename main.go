@@ -4,6 +4,7 @@ import (
 	"./monitor"
 	"./svrctx"
 	"./logging"
+	"./gt3tcpserver"
 	"./tcpserver"
 	"./appserver"
 	"./admin"
@@ -14,6 +15,7 @@ import (
 
 func main() {
 	monitor.PrintName()
+	//gt3service.Gt3Test()
 
 	defer logging.PanicLogAndExit("main: ")
 
@@ -28,6 +30,9 @@ func main() {
 	//data2 := data1
 	//data1[0] = '0'
 	//fmt.Println(string(data1), string(data2))
+	//a, b := 24.772816,121.022636
+	//fmt.Println(fmt.Sprintf("%06f,%06f", a,b))
+	//fmt.Println(fmt.Sprintf("%.06f,%.06f", a,b))
 	//return
 
 	//fmt.Println("server config: ", *svrctx.Get())
@@ -35,7 +40,9 @@ func main() {
 		log.Println(http.ListenAndServe(":6060", nil))
 	}()
 
+	go appserver.TcpServerBridgeRunLoop(svrctx.Get())
 	go appserver.LocalAPIServerRunLoop(svrctx.Get())
+	go gt3tcpserver.TcpServerRunLoop(svrctx.Get())
 	go tcpserver.TcpServerRunLoop(svrctx.Get())
 	go appserver.AppServerRunLoop(svrctx.Get())
 

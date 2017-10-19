@@ -1074,3 +1074,31 @@ func FormValue(r *http.Request, key string) string{
 
 	return ""
 }
+
+
+func TcpServerBridgeRunLoop(serverCtx *svrctx.ServerContext) {
+	defer logging.PanicLogAndExit("TcpServerBridgeRunLoop")
+
+	for {
+		select {
+		case msg := <-serverCtx.TcpServerChan:
+			if msg == nil {
+				logging.Log("main lopp exit or got error, TcpServerBridgeRunLoop goroutine exit")
+				return
+			}
+
+			model := proto.GetDeviceModel(msg.Header.Header.Imei)
+			switch model {
+				case proto.DM_GT06:
+				serverCtx.GT6TcpServerChan <- msg
+			case proto.DM_GTI3:
+				fallthrough
+			case proto.DM_GT03:
+				serverCtx.GT3TcpServerChan <- msg
+			case proto.DM_WH01:
+			default:
+
+			}
+		}
+	}
+}
