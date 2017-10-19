@@ -653,6 +653,10 @@ func getDeviceInfoByImei(connid uint64, params *proto.DeviceAddParams) bool {
 		deviceInfoResult.Imei = 0
 	}
 
+	if deviceInfoResult.IsAdmin == 0 {
+		deviceInfoResult.SimID = ""
+	}
+
 	resultData, _ := json.Marshal(&deviceInfoResult)
 
 	appServerChan <- (&proto.AppMsgData{Cmd: proto.GetDeviceByImeiAckCmdName, Imei: imei,
