@@ -949,7 +949,7 @@ func AddAccessToken(accessToken string)  {
 }
 
 func ValidAccessTokenFromService(AccessToken string)  bool {
-	url := "http://127.0.0.1/web/index.php?r=app/service/devices&access-token=" + AccessToken
+	url := "https://127.0.0.1/web/index.php?r=app/service/devices&access-token=" + AccessToken
 	if svrctx.Get().IsDebugLocal {
 		url = "http://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
 	}

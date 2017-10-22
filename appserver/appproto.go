@@ -301,7 +301,7 @@ func handleHeartBeat(connid uint64, params *proto.HeartbeatParams) bool {
 }
 
 func login(connid uint64, username, password string, isRegister bool) bool {
-	urlRequest := "http://127.0.0.1/web/index.php?r=app/auth/"
+	urlRequest := "https://127.0.0.1/web/index.php?r=app/auth/"
 	if svrctx.Get().IsDebugLocal {
 		urlRequest = "http://watch.gatorcn.com/web/index.php?r=app/auth/"
 	}
@@ -436,7 +436,7 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 
 //忘记密码，通过服务器重设秘密
 func resetPassword(connid uint64, username string) bool {
-	urlRequest := "http://127.0.0.1/web/index.php?r=app/auth/"
+	urlRequest := "https://127.0.0.1/web/index.php?r=app/auth/"
 	if svrctx.Get().IsDebugLocal {
 		urlRequest = "http://watch.gatorcn.com/web/index.php?r=app/auth/"
 	}
@@ -469,7 +469,7 @@ func resetPassword(connid uint64, username string) bool {
 
 //有旧密码，重设新密码
 func modifyPassword(connid uint64, username, accessToken, oldPasswd, newPasswd  string) bool {
-	requesetURL := "http://127.0.0.1/web/index.php?r=app/service/modpwd&access-token=" + accessToken
+	requesetURL := "https://127.0.0.1/web/index.php?r=app/service/modpwd&access-token=" + accessToken
 	if svrctx.Get().IsDebugLocal {
 		requesetURL = "http://watch.gatorcn.com/web/index.php?r=app/service/modpwd&access-token=" + accessToken
 	}
@@ -498,7 +498,7 @@ func modifyPassword(connid uint64, username, accessToken, oldPasswd, newPasswd  
 
 
 func handleFeedback(connid uint64, username, accessToken, feedback string) bool {
-	requesetURL := "http://127.0.0.1/web/index.php?r=app/service/feedback&access-token=" + accessToken
+	requesetURL := "https://127.0.0.1/web/index.php?r=app/service/feedback&access-token=" + accessToken
 	if svrctx.Get().IsDebugLocal {
 		requesetURL = "http://watch.gatorcn.com/web/index.php?r=app/service/feedback&access-token=" + accessToken
 	}
