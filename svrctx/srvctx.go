@@ -34,6 +34,7 @@ type ServerContext struct {
 	Port          uint16
 	HttpServerName string
 	WSPort        uint16
+	WSSPort        uint16
 	HttpUploadURL string
 	HttpStaticURL string
 	HttpStaticDir string
