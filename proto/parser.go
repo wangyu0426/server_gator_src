@@ -1448,7 +1448,7 @@ func ParseContactAvatars(contactAvatars string, familyMemberList *[MAX_FAMILY_ME
 	avatars := ContactAvatars{}
 	err := json.Unmarshal([]byte(contactAvatars), &avatars)
 	if err != nil {
-		fmt.Println("parse contact avatars failed, ", err.Error())
+		//fmt.Println("parse contact avatars failed, ", err.Error())
 		return
 	}
 
