@@ -99,14 +99,22 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	http.Handle("/wsapi", websocket.Handler(OnClientConnected))
 
 	//http.Handle(svrctx.Get().HttpStaticURL, http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
-	mux := http.NewServeMux()
-	mux.Handle("/",  http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
 
-	//http.HandleFunc("/api/cmd", HandleApiCmd)
+	//mux := http.NewServeMux()
+	//mux.Handle("/",  http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
+	//
+	////http.HandleFunc("/api/cmd", HandleApiCmd)
+	//http.HandleFunc("/api/gator3-version", GetAppVersionOnline)
+	//http.HandleFunc(svrctx.Get().HttpUploadURL, HandleUploadFile)
+	//
+	//go http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), mux)
+
+	http.Handle("/",  http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
 	http.HandleFunc("/api/gator3-version", GetAppVersionOnline)
 	http.HandleFunc(svrctx.Get().HttpUploadURL, HandleUploadFile)
 
-	go http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), mux)
+	go http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), nil)
+
 	fmt.Println(http.ListenAndServeTLS(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSSPort),
 		"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.cer",
 		"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.key",nil))
@@ -338,7 +346,8 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 
 		if svrctx.IsPhoneNumberInFamilyList(imeiUint64, phone) == false {
 			result.ErrCode = 500
-			result.ErrMsg = fmt.Sprintf("phone number %s is not in the family phone list of %d", phone, imeiUint64)
+			result.ErrMsg = fmt.Sprintf("phone number %s is not in the family phone list", phone)
+			result.Data = ""
 			JSON(w, 500, &result)
 			return
 		}
