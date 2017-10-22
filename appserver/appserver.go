@@ -106,6 +106,9 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	http.HandleFunc(svrctx.Get().HttpUploadURL, HandleUploadFile)
 
 	http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), nil)
+	http.ListenAndServeTLS(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort),
+		"home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.cer",
+		"home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.key",nil)
 }
 
 //for managing connection, 对内负责管理APP连接对象，对外为TCP server提供通信接口
