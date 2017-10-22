@@ -131,16 +131,16 @@ func (service *GT03Service)DoRequest(msg *MsgData) bool  {
 		logging.Log(fmt.Sprintf("invalid deivce, imei: %d cmd: %s", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd)))
 		return false
 	}else{
-		if deviceInfo != nil {
-			resp := &ResponseItem{CMD_GT3_AP01_RESET_IP_PORT, service.makeReplyMsg(
-				service.makeResetHostPortReplyMsg("72.55.174.166", 7014))}
-			service.rspList = append(service.rspList, resp)
-
-			DeviceInfoListLock.Unlock()
-			logging.Log(fmt.Sprintf("%d reset gator 2 server to host:port %s:%d", msg.Header.Header.Imei,
-				deviceInfo.CompanyHost, deviceInfo.CompanyPort))
-			return true
-		}
+		//if deviceInfo != nil {
+		//	resp := &ResponseItem{CMD_GT3_AP01_RESET_IP_PORT, service.makeReplyMsg(
+		//		service.makeResetHostPortReplyMsg("72.55.174.166", 7014))}
+		//	service.rspList = append(service.rspList, resp)
+		//
+		//	DeviceInfoListLock.Unlock()
+		//	logging.Log(fmt.Sprintf("%d reset gator 2 server to host:port %s:%d", msg.Header.Header.Imei,
+		//		deviceInfo.CompanyHost, deviceInfo.CompanyPort))
+		//	return true
+		//}
 		if deviceInfo != nil  && deviceInfo.RedirectServer && deviceInfo.CompanyHost != "" && deviceInfo.CompanyPort != 0{
 			resp := &ResponseItem{CMD_GT3_AP01_RESET_IP_PORT, service.makeReplyMsg(
 				service.makeResetHostPortReplyMsg(deviceInfo.CompanyHost, deviceInfo.CompanyPort))}
