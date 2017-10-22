@@ -99,13 +99,14 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	http.Handle("/wsapi", websocket.Handler(OnClientConnected))
 
 	//http.Handle(svrctx.Get().HttpStaticURL, http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
-	http.Handle("/",  http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
+	mux := http.NewServeMux()
+	mux.Handle("/",  http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
 
 	//http.HandleFunc("/api/cmd", HandleApiCmd)
 	http.HandleFunc("/api/gator3-version", GetAppVersionOnline)
 	http.HandleFunc(svrctx.Get().HttpUploadURL, HandleUploadFile)
 
-	//go http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), nil)
+	go http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), mux)
 	fmt.Println(http.ListenAndServeTLS(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSSPort),
 		"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.cer",
 		"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.key",nil))
