@@ -2952,7 +2952,7 @@ func (service *GT06Service) makeJson(data *LocationData) string  {
 
 func (service *GT06Service) WatchDataUpdateDB() bool {
 	strTime := fmt.Sprintf("20%d", service.cur.DataTime) //20170520114920
-	strTableaName := fmt.Sprintf("device_location_%s_%s", string(strTime[0:4]), string(strTime[4: 6]))
+	strTableaName := "gator3_device_location" //fmt.Sprintf("device_location_%s_%s", string(strTime[0:4]), string(strTime[4: 6]))
 	strSQL := fmt.Sprintf("INSERT INTO %s VALUES(%d, %d, %06f, %06f, '%s'::jsonb)",
 		strTableaName, service.imei, 20000000000000 + service.cur.DataTime, service.cur.Lat, service.cur.Lng, service.makeJson(&service.cur))
 

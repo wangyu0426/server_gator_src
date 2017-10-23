@@ -1,6 +1,21 @@
 select w.IMEI, w.OwnerName, w.PhoneNumbers, w.TimeZone, w.CountryCode, w.ChildPowerOff, w.UseDST, w.SocketModeOff, w.Volume, w.Lang, w.Fence1,w.Fence2, w.Fence3,w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2,w.HideTimer3, pm.model, c.name from watchinfo w join device d on w.recid=d.recid join productmodel pm  on d.modelid=pm.recid join companies c on d.companyid=c.recid where w.imei like '%571398%';
 
-alter table vehiclesinuser add COLUMN IsAdmin char(1) NOT NULL default 0
+alter table vehiclesinus
+
+CREATE TABLE gator3_device_location
+(
+    imei bigint NOT NULL,
+    location_time  bigint NOT NULL,
+    lat real not null,  
+    lng real not null, 
+    data jsonb
+);
+
+CREATE INDEX idx_gator3_location_imei ON gator3_device_location(imei);
+CREATE INDEX idx_gator3_location_time ON gator3_device_location(location_time);
+CREATE INDEX idx_jsonb_gator3_location_data  ON gator3_device_location USING gin (data jsonb_path_ops);
+
+CREATE INDEX idx_lat_lng  ON device_location USING gist(ll_to_earth(lat, lng)); 
 
 
 CREATE TABLE device_location

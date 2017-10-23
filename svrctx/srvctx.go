@@ -377,7 +377,7 @@ func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 		return deviceData
 	}else {
 		//缓存中没有数据，将从数据库中查询
-		strSQL := fmt.Sprintf("select * from  device_location where imei=%d order by location_time desc limit 1", imei)
+		strSQL := fmt.Sprintf("select * from  gator3_device_location where imei=%d order by location_time desc limit 1", imei)
 		logging.Log("sql: " + strSQL)
 		rows, err := pgpool.Query(strSQL)
 		if err != nil {
@@ -431,15 +431,15 @@ func QueryLocations(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64
 	locations := []proto.LocationData{}
 	strSQL := ""
 	if alarmOnly{
-		strSQL = fmt.Sprintf("select * from  device_location where imei=%d and location_time >= %d and location_time <= %d  " +
+		strSQL = fmt.Sprintf("select * from  gator3_device_location where imei=%d and location_time >= %d and location_time <= %d  " +
 			" and data->'alarm' != '0'  " +
 			" order by location_time ", imei, beginTime, endTime)
 	}else{
 		if lbs{
-			strSQL = fmt.Sprintf("select * from  device_location where imei=%d and location_time >= %d and location_time <= %d " +
+			strSQL = fmt.Sprintf("select * from  gator3_device_location where imei=%d and location_time >= %d and location_time <= %d " +
 				" order by location_time ", imei, beginTime, endTime)
 		}else{
-			strSQL = fmt.Sprintf("select * from  device_location where imei=%d and location_time >= %d and location_time <= %d  " +
+			strSQL = fmt.Sprintf("select * from  gator3_device_location where imei=%d and location_time >= %d and location_time <= %d  " +
 				" and (data @> '{\"locateType\": 1}' or data @> '{\"locateType\": 3}')  " +
 				" order by location_time ", imei, beginTime, endTime)
 		}
@@ -485,7 +485,7 @@ func DeleteAlarms(imei uint64, pgpool *pgx.ConnPool, beginTime, endTime uint64) 
 		return false
 	}
 
-	strSQL := fmt.Sprintf("delete from  device_location where imei=%d and location_time >= %d and location_time <= %d  " +
+	strSQL := fmt.Sprintf("delete from  gator3_device_location where imei=%d and location_time >= %d and location_time <= %d  " +
 			" and data->'alarm' != '0'  ", imei, beginTime, endTime)
 
 	logging.Log("sql: " + strSQL)
