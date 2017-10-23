@@ -768,7 +768,7 @@ func addDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 		if verifyCodeWrong {
 			// error code:  -1 表示验证码不正确
 			result.ErrCode = -1
-			result.ErrMsg = "the verify code is incorrect"
+			result.ErrMsg = "verification code invalid"
 		}else{
 			//从数据库查询是否已经关注了该手表
 			if isFound {

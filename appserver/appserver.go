@@ -102,6 +102,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 	//mux := http.NewServeMux()
 	//mux.Handle("/",  http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
+	//mux.HandleFunc("/api/gator3-version", GetAppVersionOnline)
 	//
 	////http.HandleFunc("/api/cmd", HandleApiCmd)
 	//http.HandleFunc("/api/gator3-version", GetAppVersionOnline)
