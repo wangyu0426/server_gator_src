@@ -344,13 +344,13 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		imeiUint64 := proto.Str2Num(imei, 10)
 		phone := r.FormValue("phone")
 
-		if svrctx.IsPhoneNumberInFamilyList(imeiUint64, phone) == false {
-			result.ErrCode = 500
-			result.ErrMsg = fmt.Sprintf("phone number %s is not in the family phone list", phone)
-			result.Data = ""
-			JSON(w, 500, &result)
-			return
-		}
+		//if svrctx.IsPhoneNumberInFamilyList(imeiUint64, phone) == false {
+		//	result.ErrCode = 500
+		//	result.ErrMsg = fmt.Sprintf("phone number %s is not in the family phone list", phone)
+		//	result.Data = ""
+		//	JSON(w, 500, &result)
+		//	return
+		//}
 
 		_, fileInfo, err5 := r.FormFile(uploadType)
 		if err5 != nil {
