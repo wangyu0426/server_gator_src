@@ -769,7 +769,7 @@ type DeviceInfoResult struct {
 
 type WIFIInfo  struct  {
 	WIFIName string
-	MacID [MAX_MACID_LEN]byte
+	MacID []byte
 	Ratio int16
 }
 

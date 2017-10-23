@@ -55,7 +55,8 @@ func parseMsgString(bufMsg []byte, out *GT03Service) {
 			for i := 0; i < int(gt3result.m_shWiFiNum); i++ {
 				out.wifiInfoList[i].WIFIName = C.GoString(&gt3result.m_astWifiInfo[i].m_szWIFIName[0])
 				macid := C.GoString(&gt3result.m_astWifiInfo[i].m_szMacID[0])
-				copy(out.wifiInfoList[i].MacID[0: ], macid[0: MAX_MACID_LEN])
+				out.wifiInfoList[i].MacID = []byte(macid)
+				//copy(out.wifiInfoList[i].MacID[0: ], macid[0: MAX_MACID_LEN])
 				out.wifiInfoList[i].Ratio = int16(gt3result.m_astWifiInfo[i].m_shRatio)
 			}
 		}
