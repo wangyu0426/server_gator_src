@@ -795,12 +795,18 @@ var offsets = []uint8{2, 2, 1, 1, 2, 8, 8, 4, 4, 4, 4}
 var IPInfoList []*IPInfo
 var ipinfoListLock = sync.Mutex{}
 var StartGPSHour uint32
+
 var EPOInfoList []*EPOInfo
 var EpoInfoListLock = sync.Mutex{}
+
 var DeviceInfoList = &map[uint64]*DeviceInfo{}
 var DeviceInfoListLock =  sync.Mutex{}
+
 var SystemNo2ImeiMap = map[uint64]uint64{}
 var SystemNo2ImeiMapLock =  sync.Mutex{}
+
+var AdminList = &map[string]*UserInfo{}
+var AdminListLock =  sync.RWMutex{}
 
 var company_blacklist = []string {
 	"UES",
@@ -1755,4 +1761,58 @@ func GetDeviceModel(imei uint64) int{
 	DeviceInfoListLock.Unlock()
 
 	return model
+}
+
+
+type UserInfo struct {
+	UserId string
+	Email string
+	CompanyId string
+	Company string
+}
+
+
+func GetCompanyAdminList(dbpool *sql.DB)  {
+	strsql := "select u.recid, u.loginname, u.companyid, c.name from users u join  companies c  on u.companyid=c.recid  " +
+		" where u.grade=1  "
+	fmt.Println("SQL: " + strsql)
+	rows, err := dbpool.Query(strsql)
+	if err != nil {
+		fmt.Println(fmt.Sprintf("query company admin list  in db failed, %s",  err.Error()))
+		os.Exit(1)
+	}
+
+	defer rows.Close()
+
+	var (
+		UserId,
+		Email,
+		Company,
+		CompanyId interface{}
+	)
+
+	count := 0
+	tmpAdminList := &map[string]*UserInfo{}
+	for rows.Next() {
+		user := &UserInfo{}
+		err := rows.Scan(&UserId, &Email, &CompanyId, &Company)
+		if err != nil {
+			fmt.Println(fmt.Sprintf("row %d scan err: %s", count, err.Error()))
+			continue
+		}
+
+		user.UserId = parseUint8Array(UserId)
+		user.Email = parseUint8Array(Email)
+		user.CompanyId = parseUint8Array(CompanyId)
+		user.Company = parseUint8Array(Company)
+
+		(*tmpAdminList)[user.Company] = user
+
+		count++
+		fmt.Println(count, len(*tmpAdminList), user.Company, user.CompanyId, user.UserId, user.Email)
+	}
+
+	AdminListLock.Lock()
+	AdminList = tmpAdminList
+	AdminListLock.Unlock()
 }

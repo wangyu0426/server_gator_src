@@ -877,6 +877,19 @@ func addDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 							result.ErrCode = 500
 							result.ErrMsg = "server failed to update db"
 						}
+
+						admin, success := GetAdminByDeviceId(imei, deviceRecId)
+						if success {
+							strSqlUpdateUserCompany := fmt.Sprintf("update users set companyid='%s', bossid='%s'  " +
+								"where loginname='%s' ", admin.CompanyId, admin.UserId, params.UserName)
+
+							logging.Log("strSqlUpdateUserCompany: " + strSqlUpdateUserCompany)
+							_, err := svrctx.Get().MySQLPool.Exec(strSqlUpdateUserCompany)
+							if err != nil {
+								logging.Log(fmt.Sprintf("[%s] update user %s company and boss id in db failed, %s",
+									imei, params.UserName, err.Error()))
+							}
+						}
 					}
 				}else{
 					// error code:  -3 表示手表的亲情号码满了
@@ -1431,4 +1444,44 @@ func AppActiveDevice(connid uint64, reqCmd string, msgCmd uint16, params *proto.
 	svrctx.Get().TcpServerChan <- &msg
 
 	return true
+}
+
+func GetAdminByDeviceId(imei uint64, recid string) (proto.UserInfo, bool) {
+	info := proto.UserInfo{}
+	strSQL := fmt.Sprintf("select c.name from device d join companies c on d.companyid=c.recid where d.recid='%s' ", recid)
+	logging.Log("SQL: " + strSQL)
+	rows, err := svrctx.Get().MySQLPool.Query(strSQL)
+	if err != nil {
+		logging.Log(fmt.Sprintf("[%s] query is admin in db failed, %s, %s", imei, recid, err.Error()))
+		return  info, false
+	}
+
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		var Company interface{}
+		err := rows.Scan(&Company)
+		if err != nil {
+			fmt.Println(fmt.Sprintf("row %d scan err: %s", count, err.Error()))
+			return info, false
+		}
+
+		proto.AdminListLock.RLock()
+		admin, ok := (*proto.AdminList)[parseUint8Array(Company)]
+		if ok && admin != nil {
+			info = *admin
+		}
+		proto.AdminListLock.RUnlock()
+	}
+
+	return info, true
+}
+
+func parseUint8Array(data interface{}) string {
+	if data == nil {
+		return ""
+	}
+
+	return string([]byte(data.([]uint8)))
 }
