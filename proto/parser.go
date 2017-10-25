@@ -548,6 +548,7 @@ const (
 
 var	ReloadEPOFileName 		= "epo"
 var	ReloadConfigFileName 	= "config"
+var	ReloadDevicesInfo 		= "devices"
 
 var	ModelFieldName 			= "Model"
 var RedirectServerFieldName 	= "Redirect"
@@ -1815,4 +1816,12 @@ func GetCompanyAdminList(dbpool *sql.DB)  {
 	AdminListLock.Lock()
 	AdminList = tmpAdminList
 	AdminListLock.Unlock()
+}
+
+func GetCachedDevicesCount()  int{
+	DeviceInfoListLock.Lock()
+	count := len(*DeviceInfoList)
+	DeviceInfoListLock.Unlock()
+
+	return count
 }

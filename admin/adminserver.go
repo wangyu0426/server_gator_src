@@ -185,6 +185,10 @@ func AdminServerLoop(exitServerFunc func())  {
 				logging.SendMailToDefaultReceiver(result)
 			}
 		case proto.ReloadConfigFileName:
+		case proto.ReloadDevicesInfo:
+			if proto.LoadDeviceInfoFromDB(svrctx.Get().MySQLPool){
+				result = "ok"
+			}
 
 		default:
 		}
@@ -199,9 +203,14 @@ func AdminServerLoop(exitServerFunc func())  {
 			return nil
 		}
 
-		if len(in.Args) == 1 && in.Args[0] == "go" {
-			out.WriteInlineString(proto.Num2Str(uint64(runtime.NumGoroutine()), 10))
-			return nil
+		if len(in.Args) == 1{
+			if in.Args[0] == "go" {
+				out.WriteInlineString(proto.Num2Str(uint64(runtime.NumGoroutine()), 10))
+				return nil
+			}else if in.Args[0] == "devices" {
+				out.WriteInlineString(proto.Num2Str(uint64(proto.GetCachedDevicesCount()), 10))
+				return nil
+			}
 		}
 
 		if len(in.Args) != 2 {
