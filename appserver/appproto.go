@@ -628,7 +628,8 @@ func getDeviceInfoByImei(connid uint64, params *proto.DeviceAddParams) bool {
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 	if ok && deviceInfo != nil {
-		deviceInfoResult = *deviceInfo
+		//deviceInfoResult = *deviceInfo
+		deviceInfoResult.Imei = imei
 		found = true
 	}else{
 		//logging.Log(params.Imei + "  imei not found")
