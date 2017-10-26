@@ -1062,7 +1062,8 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 								break
 							}
 						}else{ //之前有号码，那么这里是修改号码，需要匹配之前的号码
-							if deviceInfo.Family[i].Phone == curPhone.Phone || deviceInfo.Family[i].Index == curPhone.Index {
+							if //deviceInfo.Family[i].Phone == curPhone.Phone ||
+								deviceInfo.Family[i].Index == curPhone.Index {
 								bkAvatar := deviceInfo.Family[i].Avatar
 								deviceInfo.Family[i] = newPhone
 								deviceInfo.Family[i].Avatar = bkAvatar
