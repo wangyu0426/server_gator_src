@@ -1449,7 +1449,7 @@ func AppActiveDevice(connid uint64, reqCmd string, msgCmd uint16, params *proto.
 
 func GetAdminByDeviceId(imei uint64, recid string) (proto.UserInfo, bool) {
 	info := proto.UserInfo{}
-	strSQL := fmt.Sprintf("select c.name from device d join companies c on d.companyid=c.recid where d.recid='%s' ", recid)
+	strSQL := fmt.Sprintf("select c.name, c.recid from device d join companies c on d.companyid=c.recid where d.recid='%s' ", recid)
 	logging.Log("SQL: " + strSQL)
 	rows, err := svrctx.Get().MySQLPool.Query(strSQL)
 	if err != nil {
@@ -1462,21 +1462,55 @@ func GetAdminByDeviceId(imei uint64, recid string) (proto.UserInfo, bool) {
 	count := 0
 	for rows.Next() {
 		var Company interface{}
-		err := rows.Scan(&Company)
+		var CompanyId interface{}
+		err := rows.Scan(&Company, &CompanyId)
 		if err != nil {
 			fmt.Println(fmt.Sprintf("row %d scan err: %s", count, err.Error()))
 			return info, false
 		}
 
-		proto.AdminListLock.RLock()
-		admin, ok := (*proto.AdminList)[parseUint8Array(Company)]
-		if ok && admin != nil {
-			info = *admin
+		cname := parseUint8Array(Company)
+		logging.Log(fmt.Sprintf("[%d] company is %s", imei, cname))
+		admin, adminId, ok := GetAdminByCompany(cname)
+		if ok {
+			logging.Log(fmt.Sprintf("[%d] company admin is %s, %s, %s", imei, cname, admin, adminId))
+			info.CompanyId = parseUint8Array(CompanyId)
+			info.Company = cname
+			info.Email = admin
+			info.UserId = adminId
+		}else{
+			return info, false
 		}
-		proto.AdminListLock.RUnlock()
 	}
 
 	return info, true
+}
+
+func GetAdminByCompany(companyName string) (string, string, bool) {
+	strSQL := fmt.Sprintf("select u.loginname, u.recid from users u join companies c on u.companyid=c.recid where u.grade=1 and c.name='%s' ", companyName)
+	logging.Log("SQL: " + strSQL)
+	rows, err := svrctx.Get().MySQLPool.Query(strSQL)
+	if err != nil {
+		logging.Log(fmt.Sprintf("query admin by company %s in db failed, %s", companyName, err.Error()))
+		return  "", "", false
+	}
+
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		var admin interface{}
+		var adminId interface{}
+		err := rows.Scan(&admin, &adminId)
+		if err != nil {
+			fmt.Println(fmt.Sprintf("row %d scan err: %s", count, err.Error()))
+			return  "", "", false
+		}
+
+		return parseUint8Array(admin), parseUint8Array(adminId), true
+	}
+
+	return "", "", false
 }
 
 func parseUint8Array(data interface{}) string {
