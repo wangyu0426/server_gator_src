@@ -1524,6 +1524,10 @@ func ParseTimeZone(timezone string)  int {
 		return INVALID_TIMEZONE
 	}
 
+	if timezone == "00:00" {
+		return 0
+	}
+
 	bSignal := true
 	if (timezone[0] == '-'){
 		bSignal = false

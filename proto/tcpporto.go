@@ -1148,6 +1148,7 @@ func (service *GT06Service)makeSyncTimeReplyMsg() ([]byte, uint64) {
 
 	if timezone == INVALID_TIMEZONE {
 		timezone = int(GetTimeZone(service.reqCtx.IP))
+		logging.Log(fmt.Sprintf("imei %d, IP %d  GetTimeZone: %d", service.imei, service.reqCtx.IP, timezone))
 		service.UpdateDeviceTimeZone(service.imei, timezone)
 	}
 
