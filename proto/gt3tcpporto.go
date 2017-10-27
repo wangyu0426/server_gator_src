@@ -112,7 +112,7 @@ func (service *GT03Service)DoRequest(msg *MsgData) bool  {
 	//logging.Log(fmt.Sprintf("imei: %d cmd: %s; go routines: %d", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd), runtime.NumGoroutine()))
 
 	ret := true
-	bufOffset := uint32(20)
+	//bufOffset := uint32(20)
 	service.msgSize = uint64(msg.Header.Header.Size)
 	service.imei = msg.Header.Header.Imei
 	service.cmd = msg.Header.Header.Cmd
