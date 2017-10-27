@@ -175,18 +175,18 @@ func (service *GT03Service)DoRequest(msg *MsgData) bool  {
 		madeData := service.makeSyncTimeReplyMsg()
 		resp := &ResponseItem{CMD_GT3_AP03_SET_TIMEZONE,  service.makeReplyMsg(madeData)}
 		service.rspList = append(service.rspList, resp)
-		bufOffset++
-		szVersion := make([]byte, 64)
-		index := 0
-		for i := 0; i < len(msg.Data); i++ {
-			if msg.Data[bufOffset] != ',' && index < 64 {
-				szVersion[index] = msg.Data[bufOffset]
-				index++
-				bufOffset++
-			}else {break}
-		}
-
-		logging.Log(fmt.Sprintf("%d|%s", service.imei, szVersion)) // report version
+		//bufOffset++
+		//szVersion := make([]byte, 64)
+		//index := 0
+		//for i := 0; i < len(msg.Data); i++ {
+		//	if msg.Data[bufOffset] != ',' && index < 64 {
+		//		szVersion[index] = msg.Data[bufOffset]
+		//		index++
+		//		bufOffset++
+		//	}else {break}
+		//}
+		//
+		//logging.Log(fmt.Sprintf("%d|%s", service.imei, szVersion)) // report version
 	}else if service.cmd ==  DRT_GT3_BP04_LAST_CMD_ACK {     	//  bp04 ACK
 		if strings.Contains(string(msg.Data[0:]), Gt3StringCmd(CMD_GT3_AP15_PUSH_CHAT_COUNT)) {
 			service.needSendChatNum = false
