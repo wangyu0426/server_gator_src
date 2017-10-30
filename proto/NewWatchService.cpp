@@ -183,7 +183,7 @@ int NewWatchService::Do()
 	else if (!strncmp(szCmd, "BP09", sizeof(int)))
 	{
 		// heart break
-		if (*pszMsgBuf != ')' && shMsgLen > sizeof(int) * 3)
+		//if (*pszMsgBuf != ')' && shMsgLen > sizeof(int) * 3)
 		{
 			pszMsgBuf++;
 			ret = ProcessUpdateWatchStatus(pszMsgBuf);

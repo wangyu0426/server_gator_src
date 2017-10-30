@@ -14,14 +14,14 @@ import (
 
 func Gt3Test() {
 	service := C.createGt3Service()
-	cstr := C.CString("(357593060153353BP01,G,150728A2934.0133N10627.2544E000.0141830309.62,5)")//("(357593060153353BP00,WU01_GATOR_BRIAN_V15_150703,5,46000)")
+	cstr := C.CString("(357593060692350BP09,177,2,171030,113400,6)")//("(357593060153353BP09,6)") //("(357593060153353BP01,G,150728A2934.0133N10627.2544E000.0141830309.62,5)")//("(357593060153353BP00,WU01_GATOR_BRIAN_V15_150703,5,46000)")
 	C.gt3ServiceHandleRequest(service, cstr,  C.uint(C.strlen(cstr)))
 	gt3result := C.struct_Gt3ServiceResult{}
 	C.gt3ServiceDo(service, (&gt3result))
 	C.gt3ServiceHandleResponse(service)
 	C.destoryGt3Service(service)
 	C.free(unsafe.Pointer(cstr))
-	fmt.Println(gt3result)
+	fmt.Println(gt3result.m_cBattery_orig, gt3result.m_stDataInfo.m_iSpeed, gt3result.m_stDataInfo)
 	gt3service := GT03Service{}
 	gt3service.Test()
 }

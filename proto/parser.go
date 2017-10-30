@@ -819,6 +819,8 @@ var company_DisableLBS = []string {
 }
 
 func init()  {
+	//Gt3Test()
+	//os.Exit(0)
 	//fmt.Println(time.Now().Unix())
 	//fmt.Println(time.Now().UnixNano() / int64(time.Millisecond )* 10)
 	//a := []byte("123456")
