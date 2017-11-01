@@ -36,6 +36,25 @@ func base64Decode(src []byte) ([]byte, error) {
 func init()  {
 }
 
+func IsAccessTokenValid(accessToken string) bool {
+	valid := false
+	AccessTokenTableLock.Lock()
+	logined, ok := AccessTokenTable[accessToken]
+	if ok && logined {
+		//验证通过
+		valid = true
+	}else{
+		//需要进行更多验证
+		if ValidAccessTokenFromService(accessToken) {
+			AccessTokenTable[accessToken] = true
+			valid = true
+		}
+	}
+	AccessTokenTableLock.Unlock()
+
+	return valid
+}
+
 func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data []byte) bool {
 	var itf interface{}
 	err:=json.Unmarshal(data, &itf)
@@ -61,21 +80,7 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		}
 	}else{//有accesstoken，那么需要对token进行验证
 		accessToken := params["accessToken"].(string)
-		valid := false
-		AccessTokenTableLock.Lock()
-		logined, ok := AccessTokenTable[accessToken]
-		if ok && logined {
-			//验证通过
-			valid = true
-		}else{
-			//需要进行更多验证
-			if ValidAccessTokenFromService(accessToken) {
-				AccessTokenTable[accessToken] = true
-				valid = true
-			}
-		}
-		AccessTokenTableLock.Unlock()
-
+		valid := IsAccessTokenValid(accessToken)
 		if valid == false{
 			logging.Log("access token is not found")
 			return false

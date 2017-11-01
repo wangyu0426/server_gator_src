@@ -98,6 +98,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 	http.Handle("/",  http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
 	http.HandleFunc("/api/gator3-version", GetAppVersionOnline)
+	http.HandleFunc("/api/notifications", GetNotifications)
 	http.HandleFunc(svrctx.Get().HttpUploadURL, HandleUploadFile)
 	http.Handle("/wsapi", websocket.Handler(OnClientConnected))
 
@@ -1111,4 +1112,42 @@ func TcpServerBridgeRunLoop(serverCtx *svrctx.ServerContext) {
 			}
 		}
 	}
+}
+
+func GetNotifications(w http.ResponseWriter, r *http.Request) {
+	status := 200
+	result := proto.HttpAPIResult{}
+	result.ErrCode = 0
+
+	w.Header().Set("Content-Type", "application/json")
+
+	params := proto.HttpFetchNotificationParams{}
+	err := json.NewDecoder(r.Body).Decode(&params)
+	if err != nil{
+		logging.Log("parse HttpFetchNotificationParams failed: " + err.Error())
+		result.ErrCode = -1
+		status = 400
+		JSON(w, status, &result)
+		return
+	}
+
+	if params.AccessToken == "" || len(params.Devices) == 0 {
+		result.ErrCode = -1
+		status = 400
+		JSON(w, status, &result)
+		return
+	}
+
+	if IsAccessTokenValid(params.AccessToken) == false {
+		logging.Log("invalid access token: " + params.AccessToken)
+		result.ErrCode = -1
+		status = 400
+		JSON(w, status, &result)
+		return
+	}
+
+	//通过devices IMEI来获取通知数据(报警和微聊)
+	result.Data = proto.MakeStructToJson(&params)
+
+	JSON(w, status, &result)
 }

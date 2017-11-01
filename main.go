@@ -15,7 +15,6 @@ import (
 
 func main() {
 	monitor.PrintName()
-	//gt3service.Gt3Test()
 
 	defer logging.PanicLogAndExit("main: ")
 

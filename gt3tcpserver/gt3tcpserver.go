@@ -17,6 +17,9 @@ const (
 	MsgMinSize = 29
 	DeviceMsgVersionSize = 4
 	MAX_TCP_REQUEST_LENGTH = 1024 * 64
+	GT3_PROTO_INVALID = -1
+	GT3_PROTO_V1 = 1
+	GT3_PROTO_V2 = 2
 )
 
 var addConnChan chan *Connection
@@ -264,7 +267,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				break
 			}
 
-			msgLen, ret := ParaseClientMsg(c.buf[0: c.recvEndPosition], uint16(c.recvEndPosition))
+			parseLen, ret, gt3protoVer := ParaseClientMsg(c.buf[0: c.recvEndPosition], uint16(c.recvEndPosition))
 			if ret < 0 {
 				breakLoop = true
 				break
@@ -272,14 +275,39 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				break
 			}else{
 				//分发完整消息
-				if c.buf[msgLen - 1] != ')' || msgLen < 21 {
+				//首先判断协议版本
+				packet := c.buf
+				msgLen := parseLen
+
+				if gt3protoVer != GT3_PROTO_V1  && gt3protoVer != GT3_PROTO_V2 {
+					logging.Log("bad proto of data packet")
+					breakLoop = true
+					break
+				}else{
+					if gt3protoVer == GT3_PROTO_V2{ //加密协议,需要解密数据
+						pkt, err := proto.Gt3AesDecrypt(string(c.buf[8: parseLen]))
+						if err != nil {
+							logging.Log("Gt3AesDecrypt data packet failed, " + err.Error())
+							breakLoop = true
+							break
+						}
+
+						packet = pkt
+						msgLen = uint16(len(packet))
+					}
+				}
+
+				//记录解密后(如果需要解密)的是些什么数据
+				logging.Log(string(packet))
+
+				if packet[msgLen - 1] != ')' || msgLen < 21 {
 					logging.Log("bad format of data packet, it must end with )")
 					breakLoop = true
 					break
 				}
 
-				imei := proto.Str2Num(string(c.buf[1: 16]), 10)
-				cmd := string(c.buf[16:20])
+				imei := proto.Str2Num(string(packet[1: 16]), 10)
+				cmd := string(packet[16:20])
 
 				c.imei = imei
 				if c.saved == false {
@@ -295,11 +323,11 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				msg.Header.Header.Imei = imei
 				msg.Header.Header.Cmd = proto.Gt3IntCmd(cmd)
 				msg.Data = make([]byte, msgLen)
-				copy(msg.Data, c.buf[0: msgLen]) //不包含头部20字节
+				copy(msg.Data, packet[0: msgLen])
 
 				c.requestChan <- msg
 
-				c.FlushRecvBuf(int(msgLen))
+				c.FlushRecvBuf(int(parseLen))
 			}
 		}
 
@@ -588,12 +616,45 @@ func BackgroundCleanerLoop(serverCtx *svrctx.ServerContext) {
 	//}
 }
 
-func ParaseClientMsg(pszCodeBuf []byte, shRecvBufLen uint16) (uint16, int) {
+func ParaseClientMsg(pszCodeBuf []byte, shRecvBufLen uint16) (uint16, int, int) {
 	shCodeLen, ret :=  uint16(0), 0
+	gt3protoVer := GT3_PROTO_INVALID
 
-	if pszCodeBuf == nil || len(pszCodeBuf) == 0 || pszCodeBuf[0] != '('  {
+	if pszCodeBuf == nil || len(pszCodeBuf) == 0 || (pszCodeBuf[0] != '('  &&
+		pszCodeBuf[0] != 'G')  {
 		logging.Log("pszCodeBuf is null or invalid")
-		return 0, -1
+		return 0, -1, gt3protoVer
+	}
+
+	gt3protoVer = GT3_PROTO_V1
+	if pszCodeBuf[0] == 'G' {
+		gt3protoVer = GT3_PROTO_V2
+		//GT004802/iAwAUB3pGjkYw44lYotx/Ny+BskWacSFetg+NFGkUfW/zasg+susRsDKD5QZmw=
+		if shRecvBufLen < 8 {
+			ret = 1
+			logging.Log("the data from client is not completed by recv, maybe need recv any more")
+			return shCodeLen, ret, gt3protoVer
+		}
+
+		if pszCodeBuf[1] != 'T' {
+			logging.Log("pszCodeBuf is null or invalid")
+			return 0, -1, gt3protoVer
+		}
+
+		base64DataLen := proto.Str2Num(string(pszCodeBuf[2: 6]), 16)
+		if base64DataLen >= MAX_TCP_REQUEST_LENGTH {
+			logging.Log("data size is invalid in gt3 encrypted msg")
+			return 0, -1, gt3protoVer
+		}
+
+		if  shRecvBufLen < uint16(base64DataLen) {
+			ret = 1
+			fmt.Println("shRecvBufLen: ", shRecvBufLen, "base64DataLen: ", base64DataLen)
+			logging.Log("the data from client is not completed by recv, maybe need recv any more")
+			return shCodeLen, ret, gt3protoVer
+		}
+
+		return (uint16(base64DataLen)), 0, gt3protoVer
 	}
 
 	find_bp06 := string(pszCodeBuf[16: 20]) == "BP06"
@@ -618,7 +679,7 @@ func ParaseClientMsg(pszCodeBuf []byte, shRecvBufLen uint16) (uint16, int) {
 			if(phone_len == 0) {
 				ret = 1
 				logging.Log("the BP11 data from client is not completed by recv, maybe need recv any more")
-				return shCodeLen, ret
+				return shCodeLen, ret, gt3protoVer
 			}
 
 			prefix_len += phone_len + len(",27D6,2710,15101016010000")
@@ -645,16 +706,16 @@ func ParaseClientMsg(pszCodeBuf []byte, shRecvBufLen uint16) (uint16, int) {
 		if shRecvBufLen < amr_msg_size {
 			ret = 1
 			logging.Log("the data from client is not completed by recv, maybe need recv any more")
-			return shCodeLen, ret
+			return shCodeLen, ret, gt3protoVer
 		}
 
 		if shRecvBufLen >= amr_msg_size &&  pszCodeBuf[amr_msg_size - 1] != ')' {
 			logging.Log("the data from client is completed but invalid")
-			return 0, -1
+			return 0, -1, gt3protoVer
 		}
 
 		shCodeLen = amr_msg_size
-		return shCodeLen , ret
+		return shCodeLen , ret, gt3protoVer
 	}
 
 	brackets_open := 1
@@ -680,7 +741,7 @@ func ParaseClientMsg(pszCodeBuf []byte, shRecvBufLen uint16) (uint16, int) {
 		logging.Log("the data from client is not completed by recv, maybe need recv any more")
 	}
 
-	return shCodeLen, ret
+	return shCodeLen, ret, gt3protoVer
 }
 
 func (this *Connection)FlushRecvBuf(iFlushLength int ) {

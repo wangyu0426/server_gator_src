@@ -7,7 +7,6 @@ import (
 	"net"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"os"
 	"time"
@@ -18,6 +17,10 @@ const (
 	MsgHeaderSize = 28
 	MsgMinSize = 29
 	DeviceMsgVersionSize = 4
+	MAX_TCP_REQUEST_LENGTH = 1024 * 64
+	GT6_PROTO_INVALID = -1
+	GT6_PROTO_V1 = 1
+	GT6_PROTO_V2 = 2
 )
 
 var addConnChan chan *Connection
@@ -341,33 +344,33 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 
 		//logging.Log("recv: " + string(headerBuf))
 
-		if headerBuf[0] != '(' {
-			logging.Log("bad format of data packet, it must begin with (")
+		//首先判断是加密协议还是明文协议
+		protoVer := preparseMsgHeader(string(headerBuf))
+		if protoVer != GT6_PROTO_V1 && protoVer != GT6_PROTO_V2 { //headerBuf[0] != '(' {
+			logging.Log("bad format of data packet, it must begin with ( or G")
 			break
 		}
 
-		num, _ := strconv.ParseUint("0x" + string(headerBuf[1:5]), 0, 0)
-		dataSize = uint16(num)
-		if dataSize < MsgMinSize {
-			logging.Log(fmt.Sprintf("data size in header is bad of  %d, less than %d", dataSize, MsgMinSize))
+		if protoVer == GT6_PROTO_V1 { //明文版本协议
+			dataSize = uint16(proto.Str2Num(string(headerBuf[1:5]), 16))
+		}else if protoVer == GT6_PROTO_V2 { // 加密版本协议
+			dataSize = uint16(proto.Str2Num(string(headerBuf[2:6]), 16))
+		}
+
+		if dataSize < MsgMinSize || int(dataSize) >= MAX_TCP_REQUEST_LENGTH {
+			logging.Log(fmt.Sprintf("data size in header is bad of  %d", dataSize))
 			break
 		}
 
-		//将IMEI和cmd解析出来
-		imei, _ := strconv.ParseUint(string(headerBuf[5 + DeviceMsgVersionSize: 20 + DeviceMsgVersionSize]), 0, 0)
-		cmd := string(headerBuf[20 + DeviceMsgVersionSize: 24 + DeviceMsgVersionSize])
-
-		//logging.Log("data size: " + fmt.Sprintf("%d", dataSize))
 		if len(c.buf) < int(dataSize) {
 			buf := c.buf
 			c.buf = make([]byte, dataSize)
 			copy(c.buf[0: MsgHeaderSize], buf)
 		}
 
+		full := false
 		bufSize := dataSize - MsgHeaderSize
 		dataBuf := c.buf[MsgHeaderSize: MsgHeaderSize + bufSize]
-		//recvOffset := uint16(0)
-		full := false
 
 		if serverCtx.IsDebug == false {
 			c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
@@ -379,35 +382,51 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 			logging.Log(fmt.Sprintf("recv data failed, %s, recv %d bytes", err.Error(), n))
 		}
 
-		if n > 0 {
-			c.lastActiveTime = time.Now().Unix()
+		if !full  {
+			break  //退出循环和go routine，连接关闭
 		}
 
-		//记录收到的是些什么数据
-		if cmd == proto.StringCmd(proto.DRT_SEND_MINICHAT) {
-			logging.Log(string(c.buf[0: 80]))
-		}else{
-			logging.Log(string(c.buf[0: dataSize]))
-		}
+		packet := c.buf
+		msgLen := dataSize
 
-		if !full {
-			if serverCtx.IsDebug == true {
-				logging.Log("data packet was not fully received ")
+		if protoVer == GT6_PROTO_V2 { //加密协议则首先解密
+			pkt, err := proto.Gt3AesDecrypt(string(c.buf[8: dataSize]))
+			if err != nil {
+				logging.Log("GT06 Gt3AesDecrypt data packet failed, " + err.Error())
 				break
 			}
+
+			packet = pkt
+			msgLen = uint16(len(packet))
 		}
 
-		if full && dataBuf[bufSize - 1] != ')' {
+		//记录解密后(如果需要解密)的是些什么数据
+		logging.Log(string(packet))
+
+		if packet[msgLen - 1] != ')' || msgLen < 29 {
 			logging.Log("bad format of data packet, it must end with )")
 			break
 		}
 
-		// 消息接收不完整，如果是微聊（BP34）等需要支持续传的请求，
-		// 则将当前不完整的数据加入续传队列，等待下一次连接以后进行续传
-		// 否则，为普通命令请求如BP01，BP09等，直接丢弃并关闭连接
-		if !full && cmd != proto.StringCmd(proto.DRT_SEND_MINICHAT) {
-			break  //退出循环和go routine，连接关闭
+		//将IMEI和cmd解析出来
+		imei := proto.Str2Num(string(packet[9:  24]), 10)
+		cmd := string(packet[24 : 28])
+
+		//记录收到的是些什么数据
+		if cmd == proto.StringCmd(proto.DRT_SEND_MINICHAT) {
+			logging.Log(string(packet[0: 80]))
+		}else{
+			logging.Log(string(packet[0: dataSize]))
 		}
+
+		//// 消息接收不完整，如果是微聊（BP34）等需要支持续传的请求，
+		//// 则将当前不完整的数据加入续传队列，等待下一次连接以后进行续传
+		//// 否则，为普通命令请求如BP01，BP09等，直接丢弃并关闭连接
+		//if !full && cmd != proto.StringCmd(proto.DRT_SEND_MINICHAT) {
+		//	break  //退出循环和go routine，连接关闭
+		//}
+
+		c.lastActiveTime = time.Now().Unix()
 
 		c.imei = imei
 		if c.saved == false && full {
@@ -422,8 +441,8 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		msg.Header.Header.ID = proto.NewMsgID()
 		msg.Header.Header.Imei = imei
 		msg.Header.Header.Cmd = proto.IntCmd(cmd)
-		msg.Data = make([]byte, n)
-		copy(msg.Data, dataBuf[0: n]) //不包含头部28字节
+		msg.Data = make([]byte, msgLen - MsgHeaderSize)
+		copy(msg.Data, packet[MsgHeaderSize: msgLen]) //不包含头部28字节
 		if  msg.Header.Header.Cmd ==  proto.DRT_SEND_MINICHAT {
 			msg.Header.Header.Status = 1
 		}else{
@@ -769,4 +788,16 @@ func BackgroundCleanerLoop(serverCtx *svrctx.ServerContext) {
 	//
 	//	time.Sleep(time.Duration(serverCtx.BackgroundCleanerDelayTimeSecs) * time.Second)
 	//}
+}
+
+func preparseMsgHeader(header string) int {
+	if header[0] == '(' {//明文
+		return GT6_PROTO_V1
+	}else if header[0] == 'G' && header[1] == 'T' {//加密版本的协议，先解密
+		return GT6_PROTO_V2
+	}else{//非法
+		logging.Log("bad header for GT06: " + header)
+	}
+
+	return GT6_PROTO_INVALID
 }

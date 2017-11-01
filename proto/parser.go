@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/url"
 	"io/ioutil"
+	"net"
 )
 
 const (
@@ -353,6 +354,11 @@ type HttpAPIResult struct {
 	ErrMsg string  			`json:"errmsg"`
 	Imei string  				`json:"imei"`
 	Data  string  			`json:"data"`
+}
+
+type HttpFetchNotificationParams struct {
+	AccessToken string		`json:"accessToken"`
+	Devices []uint64  		`json:"devices"`
 }
 
 type HttpQueryAppVersionResult struct {
@@ -925,8 +931,14 @@ func init()  {
 	//	cursteps += oldsteps
 	//}
 	//a := Str2Num("A", 16)
-	//fmt.Println(a)
+	//ip := StringIpToInt("213.137.13.4")
+	//fmt.Println(ParseTimeZone(parseUint8Array("00:00")))
+	////fmt.Println(GetTimeZone(ip)) //67996117)) //StringIpToInt("213.137.13.4")))
 	//os.Exit(0)
+	//fmt.Println(ParseTimeZone(("00:00")))
+	////fmt.Println(GetTimeZone(ip)) //67996117)) //StringIpToInt("213.137.13.4")))
+	//os.Exit(0)
+
 
 	LoadIPInfosFromFile()
 	LoadEPOFromFile()
@@ -1003,6 +1015,44 @@ func LoadIPInfosFromFile()  {
 	ipinfoListLock.Lock()
 	IPInfoList = tmpIPInfoList
 	ipinfoListLock.Unlock()
+}
+
+func inet_ntoa(ipnr int64) net.IP {
+	var bytes [4]byte
+	bytes[0] = byte(ipnr & 0xFF)
+	bytes[1] = byte((ipnr >> 8) & 0xFF)
+	bytes[2] = byte((ipnr >> 16) & 0xFF)
+	bytes[3] = byte((ipnr >> 24) & 0xFF)
+
+	return net.IPv4(bytes[3],bytes[2],bytes[1],bytes[0])
+}
+
+func StringIpToInt(ipstring string) uint32 {
+	//ipSegs := strings.Split(ipstring, ".")
+	//var ipInt uint32 = 0
+	//var pos uint = 24
+	//for _, ipSeg := range ipSegs {
+	//	tempInt, _ := strconv.Atoi(ipSeg)
+	//	tempInt = tempInt << pos
+	//	ipInt = ipInt | uint32(tempInt)
+	//	pos -= 8
+	//}
+	//return ipInt
+	bits := strings.Split(ipstring, ".")
+
+	b0, _ := strconv.Atoi(bits[0])
+	b1, _ := strconv.Atoi(bits[1])
+	b2, _ := strconv.Atoi(bits[2])
+	b3, _ := strconv.Atoi(bits[3])
+
+	var sum int64
+
+	sum += int64(b0) << 24
+	sum += int64(b1) << 16
+	sum += int64(b2) << 8
+	sum += int64(b3)
+
+	return uint32(sum)
 }
 
 func GetTimeZone(uiIP uint32) int32 {
