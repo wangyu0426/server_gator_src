@@ -1502,18 +1502,18 @@ func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan
 		Data: MakeStructToJson(result), ConnID: 0}
 
 	if apiBaseURL != "" {
+		ownerName := Num2Str(imei, 10)
 		DeviceInfoListLock.Lock()
 		deviceInfo, ok := (*DeviceInfoList)[imei]
 		if ok && deviceInfo != nil {
-			ownerName := deviceInfo.OwnerName
-			if ownerName == "" {
-				ownerName = Num2Str(imei, 10)
+			if deviceInfo.OwnerName != "" {
+				ownerName = deviceInfo.OwnerName
 			}
-
-			PushNotificationToApp(apiBaseURL, imei, "",  ownerName, chat.DateTime, ALARM_NEW_MINICHAT, "")
 		}
 
 		DeviceInfoListLock.Unlock()
+
+		PushNotificationToApp(apiBaseURL, imei, "",  ownerName, chat.DateTime, ALARM_NEW_MINICHAT, "")
 	}
 
 	return true
@@ -3051,20 +3051,19 @@ func (service *GT06Service) NotifyAlarmMsg() bool {
 	//}
 	//
 	//logging.Log(fmt.Sprintf("[%d] read php notify api response:, %s", service.imei, body))
-
+	ownerName := Num2Str(service.imei, 10)
 	DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*DeviceInfoList)[service.imei]
 	if ok && deviceInfo != nil {
-		ownerName := deviceInfo.OwnerName
-		if ownerName == "" {
-			ownerName = Num2Str(service.imei, 10)
+		if deviceInfo.OwnerName != "" {
+			ownerName = deviceInfo.OwnerName
 		}
-
-		PushNotificationToApp(service.reqCtx.APNSServerBaseURL, service.imei, "",  ownerName,
-			service.cur.DataTime, service.cur.AlarmType, service.cur.ZoneName)
 	}
 
 	DeviceInfoListLock.Unlock()
+
+	PushNotificationToApp(service.reqCtx.APNSServerBaseURL, service.imei, "",  ownerName,
+		service.cur.DataTime, service.cur.AlarmType, service.cur.ZoneName)
 
 	return true
 }

@@ -44,8 +44,8 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 	for   {
 		select {
 		case connAdd:=<-addConnChan:
-			logging.Log("new connection added")
 			TcpClientTable[connAdd.imei] = connAdd
+			logging.Log(fmt.Sprintf("%d new connection added", connAdd.imei))
 		case connDel := <-delConnChan:
 			if connDel == nil {
 				logging.Log("main lopp exit, connection manager goroutine exit")

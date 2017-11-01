@@ -1372,19 +1372,19 @@ func (service *GT03Service) NotifyAlarmMsg() bool {
 	//
 	//logging.Log(fmt.Sprintf("[%d] read php notify api response:, %s", service.imei, body))
 
+	ownerName := Num2Str(service.imei, 10)
 	DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*DeviceInfoList)[service.imei]
 	if ok && deviceInfo != nil {
-		ownerName := deviceInfo.OwnerName
-		if ownerName == "" {
-			ownerName = Num2Str(service.imei, 10)
+		if deviceInfo.OwnerName != "" {
+			ownerName = deviceInfo.OwnerName
 		}
-
-		PushNotificationToApp(service.reqCtx.APNSServerBaseURL, service.imei, "",  ownerName,
-			service.cur.DataTime, service.cur.AlarmType, service.cur.ZoneName)
 	}
 
 	DeviceInfoListLock.Unlock()
+
+	PushNotificationToApp(service.reqCtx.APNSServerBaseURL, service.imei, "",  ownerName,
+		service.cur.DataTime, service.cur.AlarmType, service.cur.ZoneName)
 
 	return true
 }
