@@ -225,7 +225,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 	defer logging.PanicLogAndExit("ConnReadLoop")
 
 	defer func() {
-		logging.Log("client connection closed")
+		logging.Log(fmt.Sprintf("%d client connection closed", c.imei))
 		delConnChan <- c
 	}()
 
