@@ -44,6 +44,20 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 	for   {
 		select {
 		case connAdd:=<-addConnChan:
+			connDel, ok := TcpClientTable[connAdd.imei]
+			if ok && connDel != nil && connDel.connid != connAdd.connid {
+				connDel.SetClosed()
+				close(connDel.requestChan)
+				close(connDel.responseChan)
+				close(connDel.closeChan)
+				connDel.conn.Close()
+
+				delete(TcpClientTable, connDel.imei)
+				logging.Log(fmt.Sprintf("%d connection deleted from TcpClientTable", connAdd.imei))
+			}else {
+				logging.Log(fmt.Sprintf("%d will delete connection from TcpClientTable, but connection not found", connAdd.imei))
+			}
+
 			TcpClientTable[connAdd.imei] = connAdd
 			logging.Log(fmt.Sprintf("%d new connection added", connAdd.imei))
 		case connDel := <-delConnChan:
@@ -52,8 +66,8 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				return
 			}
 
-			_, ok := TcpClientTable[connDel.imei]
-			if ok {
+			theConn, ok := TcpClientTable[connDel.imei]
+			if ok && theConn != nil && theConn.connid == connDel.connid {
 				connDel.SetClosed()
 				close(connDel.requestChan)
 				close(connDel.responseChan)
@@ -61,9 +75,9 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				connDel.conn.Close()
 
 				delete(TcpClientTable, connDel.imei)
-				logging.Log("connection deleted from TcpClientTable")
+				logging.Log(fmt.Sprintf("%d connection deleted from TcpClientTable", connDel.imei))
 			}else {
-				logging.Log("will delete connection from TcpClientTable, but connection not found")
+				logging.Log(fmt.Sprintf("%d will delete connection from TcpClientTable, but connection not found", connDel.imei))
 			}
 		case msg := <- serverCtx.GT3TcpServerChan:
 			if msg == nil {

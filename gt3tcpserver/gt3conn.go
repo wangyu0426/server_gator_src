@@ -9,6 +9,7 @@ import (
 )
 
 type Connection struct {
+	connid uint64
 	closeFlag int32
 	saved bool
 	imei uint64
@@ -28,6 +29,7 @@ type Connection struct {
 func newConn(conn *net.TCPConn)  *Connection{
 	addr,  _:= net.ResolveTCPAddr("tcp", conn.RemoteAddr().String())
 	return &Connection{
+		connid: proto.NewMsgID(),
 		conn: conn,
 		IP:  binary.BigEndian.Uint32(addr.IP.To4()),
 		Port: addr.Port,
