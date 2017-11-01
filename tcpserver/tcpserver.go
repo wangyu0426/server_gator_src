@@ -386,8 +386,8 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 			break  //退出循环和go routine，连接关闭
 		}
 
-		packet := c.buf
 		msgLen := dataSize
+		packet := c.buf[0: msgLen]
 
 		if protoVer == GT6_PROTO_V2 { //加密协议则首先解密
 			pkt, err := proto.Gt3AesDecrypt(string(c.buf[8: dataSize]))

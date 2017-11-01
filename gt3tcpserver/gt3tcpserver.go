@@ -276,8 +276,8 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 			}else{
 				//分发完整消息
 				//首先判断协议版本
-				packet := c.buf
 				msgLen := parseLen
+				packet := c.buf[0: msgLen]
 
 				if gt3protoVer != GT3_PROTO_V1  && gt3protoVer != GT3_PROTO_V2 {
 					logging.Log("bad proto of data packet")
