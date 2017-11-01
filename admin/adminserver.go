@@ -301,10 +301,13 @@ func AdminServerLoop(exitServerFunc func())  {
 	})
 
 	adminsvr.HandleFunc("shutdown", func(out *redeo.Responder, _ *redeo.Request) error {
+		out.WriteInlineString("Server is shutting down 1 by redis command line")
+
 		logging.Log("Server shutdown by redis command line")
 		if exitServerFunc != nil {
 			exitServerFunc()
 		}
+		out.WriteInlineString("Server is shutting down 2 by redis command line")
 		adminsvr.Close()
 		return nil
 	})
