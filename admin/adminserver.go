@@ -301,19 +301,17 @@ func AdminServerLoop(exitServerFunc func())  {
 	})
 
 	adminsvr.HandleFunc("shutdown", func(out *redeo.Responder, _ *redeo.Request) error {
-		out.WriteInlineString("Server is shutting down 1 by redis command line")
-
 		logging.Log("Server shutdown by redis command line")
 		if exitServerFunc != nil {
 			exitServerFunc()
 		}
-		out.WriteInlineString("Server is shutting down 2 by redis command line")
 		adminsvr.Close()
 		return nil
 	})
 
 	fmt.Println(fmt.Sprintf("Listening on tcp://%s", adminsvr.Addr()))
 	adminsvr.ListenAndServe()
+	logging.Log("Server will exit")
 }
 
 //将错误或报警信息通知管理员，可以通过发送邮件、短信、电话、QQ等？告知管理员
