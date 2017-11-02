@@ -430,7 +430,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		if cmd == proto.StringCmd(proto.DRT_SEND_MINICHAT) {
 			logging.Log(string(packet[0: 80]))
 		}else{
-			logging.Log(string(packet[0: dataSize]))
+			logging.Log(string(packet[0: msgLen]))
 		}
 
 		//// 消息接收不完整，如果是微聊（BP34）等需要支持续传的请求，
@@ -450,7 +450,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 
 		msg := &proto.MsgData{}
 		msg.Header.Header.Version = proto.MSG_HEADER_VER_EX
-		msg.Header.Header.Size = dataSize
+		msg.Header.Header.Size = msgLen
 		msg.Header.Header.From = proto.MsgFromDeviceToTcpServer
 		msg.Header.Header.ID = proto.NewMsgID()
 		msg.Header.Header.Imei = imei
