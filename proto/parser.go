@@ -359,6 +359,23 @@ type HttpAPIResult struct {
 type HttpFetchNotificationParams struct {
 	AccessToken string		`json:"accessToken"`
 	Devices []uint64  		`json:"devices"`
+	LastUpdates []uint64  	`json:"lastUpdates"`
+}
+
+type AlarmItem struct {
+	Time uint64	`json:"time"`
+	Alarm string 	`json:"alarm"`
+}
+
+type DeviceAlarms struct {
+	Imei uint64				`json:"imei"`
+	Alarms []AlarmItem 	`json:"alarms"`
+}
+
+type HttpFetchNotificationResult struct {
+	ErrCode int					`json:"errcode"`
+	ErrMsg string  				`json:"errmsg"`
+	Alarms []DeviceAlarms  	`json:"alarms"`
 }
 
 type HttpQueryAppVersionResult struct {

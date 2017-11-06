@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"golang.org/x/net/websocket"
+	"github.com/garyburd/redigo/redis"
 	"io/ioutil"
 	"strings"
 	"sync"
@@ -62,6 +63,27 @@ type AddDeviceChanCtx struct {
 	connid uint64
 }
 
+var (
+	redisPool *redis.Pool
+)
+
+func initRedisPool(redisURI string) {
+	if redisURI == "" {
+		redisURI =  ":6379"
+	}
+	redisPool = &redis.Pool{
+		MaxIdle:   100,
+		MaxActive: 12000,
+		Dial: func() (redis.Conn, error) {
+			c, err := redis.Dial("tcp", redisURI)
+			if err != nil {
+				logging.PanicLogAndExit(fmt.Sprintf("connect to redis(%s) got error: %s", redisURI, err))
+			}
+			return c, nil
+		},
+	}
+}
+
 func init() {
 	logging.Log("appserver init")
 	models.PrintSelf()
@@ -89,6 +111,10 @@ func LocalAPIServerRunLoop(serverCtx *svrctx.ServerContext) {
 func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	defer logging.PanicLogAndExit("AppServerRunLoop")
 
+	// initial redis
+	initRedisPool(fmt.Sprintf(":%d", serverCtx.RedisPort))
+	defer redisPool.Close()
+
 	appServerChan = serverCtx.AppServerChan
 
 	//for managing connection, 对内负责管理APP连接对象，对外为TCP server提供通信接口
@@ -105,17 +131,20 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	//http.HandleFunc("/api/cmd", HandleApiCmd)
 	//http.Handle(svrctx.Get().HttpStaticURL, http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
 
-	mux := http.NewServeMux()
-	mux.Handle("/",  http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
-	mux.HandleFunc("/api/gator3-version", GetAppVersionOnline)
+	if serverCtx.UseHttps {
+		mux := http.NewServeMux()
+		mux.Handle("/", http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
+		mux.HandleFunc("/api/gator3-version", GetAppVersionOnline)
 
-	go http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), mux)
-
-	//go http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), nil)
-
-	fmt.Println(http.ListenAndServeTLS(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSSPort),
-		"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.cer",
-		"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.key",nil))
+		go http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), mux)
+		err := http.ListenAndServeTLS(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSSPort),
+			"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.cer",
+			"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.key",nil)
+		logging.Log("http.ListenAndServeTLS return error: " + err.Error())
+	}else{
+		err := http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), nil)
+		logging.Log("http.ListenAndServe return error: " + err.Error())
+	}
 }
 
 //for managing connection, 对内负责管理APP连接对象，对外为TCP server提供通信接口
@@ -1116,7 +1145,7 @@ func TcpServerBridgeRunLoop(serverCtx *svrctx.ServerContext) {
 
 func GetNotifications(w http.ResponseWriter, r *http.Request) {
 	status := 200
-	result := proto.HttpAPIResult{}
+	result := proto.HttpFetchNotificationResult{}
 	result.ErrCode = 0
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1131,7 +1160,9 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if params.AccessToken == "" || len(params.Devices) == 0 {
+	logging.Log("Params: " + proto.MakeStructToJson(&params))
+
+	if params.AccessToken == "" || len(params.Devices) == 0 || len(params.LastUpdates) == 0 || (len(params.Devices)  != len(params.LastUpdates)){
 		result.ErrCode = -1
 		status = 400
 		JSON(w, status, &result)
@@ -1147,7 +1178,41 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//通过devices IMEI来获取通知数据(报警和微聊)
-	result.Data = proto.MakeStructToJson(&params)
+	conn := redisPool.Get()
+	defer conn.Close()
+
+	for i, imei := range params.Devices {
+		if imei != 0 {
+			deviceAlarms := proto.DeviceAlarms{}
+			deviceAlarms.Imei = imei
+			reply, err := conn.Do("LRANGE", fmt.Sprintf("ntfy:%d", imei), 0, -1)
+			if err != nil {
+				logging.Log(fmt.Sprintf("failed to LRANGE of ntfy:%d.", imei))
+				result.ErrCode = -1
+				status = 400
+				JSON(w, status, &result)
+				return
+			}
+
+			arr := reply.([]interface{})
+			for _, item := range arr {
+				alarmContent := parseUint8Array(item)
+				if alarmContent != "" {
+					alarmItem := proto.AlarmItem{}
+					err := json.Unmarshal([]byte(alarmContent), &alarmItem)
+					if err != nil {
+						logging.Log(fmt.Sprintf("parse json string failed for ntfy:%d, err: %s", imei, err.Error()))
+					}else{
+						if alarmItem.Time >  params.LastUpdates[i] {
+							deviceAlarms.Alarms = append(deviceAlarms.Alarms, alarmItem)
+						}
+					}
+				}
+			}
+
+			result.Alarms = append(result.Alarms, deviceAlarms)
+		}
+	}
 
 	JSON(w, status, &result)
 }

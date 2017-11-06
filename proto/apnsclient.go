@@ -32,7 +32,7 @@ type pushJSON struct {
 	FamilyNumber string `json:"familyNumber"`
 	OwnerName string `json:"ownerName"`
 	Time uint64  `json:"time"`
-	AlarmType uint8  `json:"larmType"`
+	AlarmType uint8  `json:"alarmType"`
 	ZoneName string `json:"zoneName"`
 }
 

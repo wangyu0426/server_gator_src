@@ -32,6 +32,7 @@ type ServerContext struct {
 	BindAddr      string
 	Gt3Port          uint16
 	Port          uint16
+	UseHttps bool
 	HttpServerName string
 	WSPort        uint16
 	WSSPort        uint16
