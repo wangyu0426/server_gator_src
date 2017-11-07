@@ -52,7 +52,7 @@ func parseMsgString(bufMsg []byte, out *GT03Service) {
 	}else{
 		if gt3result.m_shWiFiNum > 0 {
 			out.wiFiNum = uint16(gt3result.m_shWiFiNum)
-			for i := 0; i < int(gt3result.m_shWiFiNum); i++ {
+			for i := 0; i < int(gt3result.m_shWiFiNum) && i < 6; i++ {
 				out.wifiInfoList[i].WIFIName = C.GoString(&gt3result.m_astWifiInfo[i].m_szWIFIName[0])
 				//macid := C.GoString(&gt3result.m_astWifiInfo[i].m_szMacID[0])
 				//out.wifiInfoList[i].MacID = []byte(macid)
@@ -66,7 +66,7 @@ func parseMsgString(bufMsg []byte, out *GT03Service) {
 
 		if gt3result.m_shLBSNum > 0{
 			out.lbsNum = uint16(gt3result.m_shLBSNum)
-			for i := 0; i < int(gt3result.m_shLBSNum); i++ {
+			for i := 0; i < int(gt3result.m_shLBSNum) && i < 8; i++ {
 				out.lbsInfoList[i].Mcc = int32(gt3result.m_astLBSInfo[i].m_iMcc)
 				out.lbsInfoList[i].Mnc = int32(gt3result.m_astLBSInfo[i].m_iMnc)
 				out.lbsInfoList[i].Lac = int32(gt3result.m_astLBSInfo[i].m_iLac)

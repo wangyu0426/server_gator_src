@@ -537,9 +537,9 @@ func (service *GT03Service) ProcessLocate() bool {
 		if  service.cur.OrigBattery >= 3 {
 			service.cur.Battery =  service.cur.OrigBattery - 2
 		}
-
-		service.CountSteps()
 	}
+
+	service.CountSteps()
 
 	logging.Log(fmt.Sprintf("%d - middle: m_iAlarmStatu=%d, parsed location:  m_DateTime=%d, m_lng=%f, m_lat=%f",
 		service.imei, service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
