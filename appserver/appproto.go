@@ -1118,6 +1118,8 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 				deviceInfo.DisableWiFi = (proto.Str2Num(setting.NewValue, 10)) == 1
 			case proto.DisableLBSFieldName:
 				deviceInfo.DisableLBS =  (proto.Str2Num(setting.NewValue, 10)) == 1
+			case proto.RedirectIPPortFieldName:
+				deviceInfo.RedirectIPPort =  (proto.Str2Num(setting.NewValue, 10)) == 1
 			case proto.HideTimer0FieldName:
 				fallthrough
 			case proto.HideTimer1FieldName:

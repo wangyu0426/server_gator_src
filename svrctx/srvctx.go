@@ -25,6 +25,11 @@ type  DBConfig struct {
 	DBPoolMaxConn int
 }
 
+type DeviceRedirectApiInfo struct {
+	CompanyName string
+	AccessToken string
+}
+
 type ServerContext struct {
 	WaitLock      *sync.WaitGroup  `json:"-"`
 	ProcessName   string
@@ -62,6 +67,8 @@ type ServerContext struct {
 
 	DbMysqlConfig      DBConfig
 	DbPgsqlConfig      DBConfig
+
+	RedirectApiCompanyList []DeviceRedirectApiInfo
 
 	PGPool *pgx.ConnPool  `json:"-"`
 	MySQLPool *sql.DB  `json:"-"`
@@ -155,7 +162,7 @@ func init()  {
 		serverCtx.HttpServerName = serverCtx.LocalDebugHttpServerName
 	}
 
-	fmt.Println("serverCtx.HttpServerName: ", serverCtx.HttpServerName)
+	fmt.Println("serverCtx.HttpServerName: ", serverCtx.HttpServerName, serverCtx.RedirectApiCompanyList)
 
 	//创建postgresql连接池
 	var err error

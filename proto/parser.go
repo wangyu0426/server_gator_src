@@ -352,8 +352,15 @@ type DeviceSettingResult struct {
 type HttpAPIResult struct {
 	ErrCode int				`json:"errcode"`
 	ErrMsg string  			`json:"errmsg"`
-	Imei string  				`json:"imei"`
-	Data  string  			`json:"data"`
+	Imei string  				`json:"imei,omitempty"`
+	Data  string  			`json:"data,omitempty"`
+}
+
+type HttpResetDeviceIPPortParams struct {
+	Imei string  					`json:"imei"`
+	CompanyName string		`json:"companyName"`
+	AccessToken string			`json:"accessToken"`
+	ResetIPPort string 			`json:"resetIPPort"`
 }
 
 type HttpFetchNotificationParams struct {
@@ -596,6 +603,7 @@ var HideTimer3FieldName 		= "HideTimer3"
 var FenceFieldName 			= "Fence"
 var DisableWiFiFieldName 		= "DisableWiFi"
 var DisableLBSFieldName 		= "DisableLBS"
+var RedirectIPPortFieldName 	= "RedirectIPPort"
 
 var CountryCodeFieldName	= "CountryCode"
 
@@ -725,6 +733,7 @@ type DeviceInfo struct {
 	HideVoiceMonitor bool
 	DisableWiFi bool
 	DisableLBS bool
+	RedirectIPPort bool
 	ApnSms string
 	CountryCode string
 	Avatar string
@@ -1322,7 +1331,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		" w.ChildPowerOff, w.UseDST, w.SocketModeOff, w.Volume, w.Lang, w.VerifyCode, w.Fence1,w.Fence2, w.Fence3," +
 		" w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, " +
 		" w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2," +
-		" w.HideTimer3, w.DisableWiFi,w.DisableLBS, pm.model, c.name, c.host, c.port, c.Redirect, c.APN  from watchinfo w join device d on w.recid=d.recid join productmodel pm  " +
+		" w.HideTimer3, w.DisableWiFi,w.DisableLBS,w.RedirectIPPort, pm.model, c.name, c.host, c.port, c.Redirect, c.APN  from watchinfo w join device d on w.recid=d.recid join productmodel pm  " +
 		" on d.modelid=pm.recid join companies c on d.companyid=c.recid where pm.model != 'WH01' ")
 	if err != nil {
 		fmt.Println("LoadDeviceInfoFromDB failed,", err.Error())
@@ -1361,6 +1370,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		ApnSms interface{}
 		DisableWiFi interface{}
 		DisableLBS interface{}
+		RedirectIPPort interface{}
 	)
 
 	tmpDeviceInfoList := &map[uint64]*DeviceInfo{}
@@ -1372,7 +1382,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 			&ChildPowerOff, &UseDST, &SocketModeOff, &Volume, &Lang, &VerifyCode, &Fences[0], &Fences[1], &Fences[2],
 			&Fences[3], &Fences[4], &Fences[5], &Fences[6], &Fences[7], &Fences[8], &Fences[9], &WatchAlarms[0], &WatchAlarms[1],
 			&WatchAlarms[2], &WatchAlarms[3], &WatchAlarms[4], &HideSelf, &HideTimers[0], &HideTimers[1], &HideTimers[2],
-			&HideTimers[3], &DisableWiFi, &DisableLBS, &Model, &Company, &CompanyHost, &CompanyPort, &RedirectServer, &ApnSms)
+			&HideTimers[3], &DisableWiFi, &DisableLBS, &RedirectIPPort, &Model, &Company, &CompanyHost, &CompanyPort, &RedirectServer, &ApnSms)
 		if err != nil {
 			fmt.Println("row scan err: ", err.Error())
 		}
@@ -1403,6 +1413,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		deviceInfo.ApnSms = parseUint8Array(ApnSms)
 		deviceInfo.DisableWiFi = parseUint8Array(DisableWiFi) == "1"
 		deviceInfo.DisableLBS = parseUint8Array(DisableLBS) == "1"
+		deviceInfo.RedirectIPPort = parseUint8Array(RedirectIPPort) == "1"
 
 		(*tmpDeviceInfoList)[deviceInfo.Imei] = deviceInfo
 

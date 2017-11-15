@@ -415,7 +415,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		logging.Log(fmt.Sprintf("invalid deivce, imei: %d cmd: %s", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd)))
 		return false
 	}else{
-		if deviceInfo != nil  && deviceInfo.RedirectServer && deviceInfo.CompanyHost != "" && deviceInfo.CompanyPort != 0{
+		if deviceInfo != nil  && (deviceInfo.RedirectServer || deviceInfo.RedirectIPPort) && deviceInfo.CompanyHost != "" && deviceInfo.CompanyPort != 0{
 			id := makeId()
 			resp := &ResponseItem{CMD_AP01, service.makeReplyMsg(false,
 				service.makeResetHostPortReplyMsg(deviceInfo.CompanyHost, deviceInfo.CompanyPort, id), id)}

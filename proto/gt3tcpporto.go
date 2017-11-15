@@ -141,7 +141,7 @@ func (service *GT03Service)DoRequest(msg *MsgData) bool  {
 		//		deviceInfo.CompanyHost, deviceInfo.CompanyPort))
 		//	return true
 		//}
-		if deviceInfo != nil  && deviceInfo.RedirectServer && deviceInfo.CompanyHost != "" && deviceInfo.CompanyPort != 0{
+		if deviceInfo != nil  && (deviceInfo.RedirectServer || deviceInfo.RedirectIPPort) && deviceInfo.CompanyHost != "" && deviceInfo.CompanyPort != 0{
 			resp := &ResponseItem{CMD_GT3_AP01_RESET_IP_PORT, service.makeReplyMsg(
 				service.makeResetHostPortReplyMsg(deviceInfo.CompanyHost, deviceInfo.CompanyPort))}
 			service.rspList = append(service.rspList, resp)

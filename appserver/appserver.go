@@ -125,6 +125,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	http.Handle("/",  http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
 	http.HandleFunc("/api/gator3-version", GetAppVersionOnline)
 	http.HandleFunc("/api/notifications", GetNotifications)
+	http.HandleFunc("/api/reset-device-ipport", ResetDeviceIPPort)
 	http.HandleFunc(svrctx.Get().HttpUploadURL, HandleUploadFile)
 	http.Handle("/wsapi", websocket.Handler(OnClientConnected))
 
@@ -1215,4 +1216,103 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 	}
 
 	JSON(w, status, &result)
+}
+
+
+func ResetDeviceIPPort(w http.ResponseWriter, r *http.Request) {
+	status := 200
+	result := proto.HttpAPIResult{}
+	result.ErrCode = 0
+
+	w.Header().Set("Content-Type", "application/json")
+
+	params := proto.HttpResetDeviceIPPortParams{}
+	err := json.NewDecoder(r.Body).Decode(&params)
+	if err != nil{
+		logging.Log("parse HttpResetDeviceIPPortParams failed: " + err.Error())
+		result.ErrCode = -1
+		result.ErrMsg = "parse json params failed"
+		status = 200
+		JSON(w, status, &result)
+		return
+	}
+
+	logging.Log("Params: " + proto.MakeStructToJson(&params))
+
+	if params.Imei == "" || params.AccessToken == "" || params.CompanyName == ""  || params.ResetIPPort == "" {
+		result.ErrCode = -1
+		result.ErrMsg = "params cannot be empy"
+		status = 200
+		JSON(w, status, &result)
+		return
+	}
+
+	if IsCompanyAccessTokenValid(params.CompanyName, params.AccessToken) == false {
+		logging.Log("invalid access token: " + params.AccessToken)
+		result.ErrCode = -1
+		result.ErrMsg = "company name or access token invalid"
+		status = 200
+		JSON(w, status, &result)
+		return
+	}
+
+	if params.ResetIPPort != "0" && params.ResetIPPort != "1" {
+		logging.Log("invalid param ResetIPPort: " + params.ResetIPPort)
+		result.ErrCode = -1
+		result.ErrMsg = "resetIPPort invalid"
+		status = 200
+		JSON(w, status, &result)
+		return
+	}
+
+	//reset deivce ip port
+	imeiNotFound := false
+	imei := proto.Str2Num(params.Imei, 10)
+	proto.DeviceInfoListLock.Lock()
+	device, ok := (*proto.DeviceInfoList)[imei]
+	if ok && device != nil && device.Company == params.CompanyName {
+		if device.RedirectIPPort = false; params.ResetIPPort == "1" {
+			device.RedirectIPPort = true
+		}
+	}else{
+		imeiNotFound = true
+	}
+	proto.DeviceInfoListLock.Unlock()
+
+	if imeiNotFound {
+		errmsg := fmt.Sprintf("imei %d dose not belong to the company %s ", imei, params.CompanyName)
+		logging.Log(errmsg)
+		result.ErrCode = -1
+		result.ErrMsg = errmsg
+		status = 200
+		JSON(w, status, &result)
+		return
+	}
+
+	settings := make([]proto.SettingParam, 1)
+	settings[0].FieldName = "RedirectIPPort"
+	settings[0].NewValue = params.ResetIPPort
+
+	ret := UpdateDeviceSettingInDB(imei, settings, nil)
+	if ret == false {
+		errmsg := fmt.Sprintf("imei %d failed to save the setting ", imei)
+		logging.Log(errmsg)
+		result.ErrCode = -1
+		result.ErrMsg = errmsg
+		status = 200
+		JSON(w, status, &result)
+		return
+	}
+
+	JSON(w, status, &result)
+}
+
+func IsCompanyAccessTokenValid(companyName, accessToken string)  bool {
+	for _, info := range svrctx.Get().RedirectApiCompanyList {
+		if info.CompanyName == companyName && info.AccessToken == accessToken {
+			return true
+		}
+	}
+
+	return false
 }
