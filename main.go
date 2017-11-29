@@ -11,6 +11,7 @@ import (
 	_ "net/http/pprof"
 	"log"
 	"net/http"
+	"fmt"
 )
 
 func main() {
@@ -40,6 +41,7 @@ func main() {
 	}()
 
 	go appserver.TcpServerBridgeRunLoop(svrctx.Get())
+	//listen 127.0.0.1,recv query data from PHP.
 	go appserver.LocalAPIServerRunLoop(svrctx.Get())
 	go gt3tcpserver.TcpServerRunLoop(svrctx.Get())
 	go tcpserver.TcpServerRunLoop(svrctx.Get())
@@ -47,7 +49,7 @@ func main() {
 
 	//svrctx.Get().WaitLock.Wait()
 	//svrctx.Get().WaitLock.Wait()
-
+	fmt.Println("test")
 	admin.AdminServerLoop(ExitServer)
 
 	logging.Log("go-tcp-server exit")

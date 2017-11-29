@@ -63,6 +63,16 @@ type AddDeviceChanCtx struct {
 	connid uint64
 }
 
+type MyFileServer struct {
+}
+
+func (myfs*MyFileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	upath := r.URL.Path
+	if strings.Contains(upath, ".") {
+		http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)).ServeHTTP(w, r)
+	}
+}
+
 var (
 	redisPool *redis.Pool
 )
@@ -122,9 +132,12 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 	go AddDeviceManagerLoop()
 
-	http.Handle("/",  http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
+	http.Handle("/",  &MyFileServer{})
+	//cong fuwuqi huoqu zuixin app banben
 	http.HandleFunc("/api/gator3-version", GetAppVersionOnline)
+	//android notify
 	http.HandleFunc("/api/notifications", GetNotifications)
+	//reconnect to a new server port
 	http.HandleFunc("/api/reset-device-ipport", ResetDeviceIPPort)
 	http.HandleFunc(svrctx.Get().HttpUploadURL, HandleUploadFile)
 	http.Handle("/wsapi", websocket.Handler(OnClientConnected))
@@ -134,7 +147,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 	if serverCtx.UseHttps {
 		mux := http.NewServeMux()
-		mux.Handle("/", http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
+		mux.Handle("/",  &MyFileServer{})
 		mux.HandleFunc("/api/gator3-version", GetAppVersionOnline)
 
 		go http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), mux)
@@ -210,7 +223,7 @@ func AppConnManagerLoop() {
 				os.Exit(-1)
 			}
 
-			//logging.Log("send data to app:" + fmt.Sprint(string(msg.Cmd)))
+			logging.Log("send data to app:" + fmt.Sprint(string(msg.Cmd)))
 
 			if msg.Cmd == proto.DeviceLocateNowAckCmdName {
 				params := proto.AppRequestTcpConnParams{}
@@ -504,24 +517,80 @@ func AppConnReadLoop(c *AppConnection) {
 			return
 		}
 
-		logging.Log("recv: " + string(buf[0: n]))
-
 		var itf interface{}
+		//chenqw,20171124
+		//desdata,err :=proto.Gt3AesDecrypt(string(buf[0:n]))
+		//logging.Log("desdata:" + string(desdata))
+		err =json.Unmarshal(buf[0:n], &itf)
+		//end
+		logging.Log("recv from appclient: " + string(buf[0: n]))
 
-		err =json.Unmarshal(buf[0: n], &itf)
+
+
 		if err != nil {
-			logging.Log("parse recved json data failed, " + err.Error())
+			logging.Log("AppConnReadLoop,parse recved json data failed, " + err.Error())
 			return
 		}
 
+		/*msg is :{
+		"cmd":"heartbeat",
+		"data":{"encrypt":"xxxxx"}
+		}
+	}*/
 		msg:= itf.(map[string]interface{})
-		data := msg["data"]
+		var newMsg map[string]interface{}
+		var params map[string]interface{}
+		//logging.Log("parsed msg: " + string(msg["data"]))
+		/*---------------------------------------------------------*/
+		if msg["cmd"] == nil {
+			gts01 := msg["GTS01"].(string)
+			logging.Log("gts01:" + gts01)
+			desdata, err := proto.AppserDecrypt(gts01)
+			logging.Log("desdata:" + string(desdata))
+			var itfdec interface{}
+			err = json.Unmarshal([]byte(desdata), &itfdec)
+			if err != nil {
+				logging.Log("desdata to json failed, " + err.Error())
+				return
+			}
+			newMsg = itfdec.(map[string]interface{})
+			msg = newMsg
+			params = newMsg["data"].(map[string]interface{})
+		}else {
+			params = msg["data"].(map[string]interface{})
+		}
+		/*---------------------------------------------------------*/
+
+		/*data := msg["data"]
 		if data == nil || proto.MakeStructToJson(&data) == "" {
 			logging.Log("parse recved json data is empty ")
 			return
 		}
 
-		params := msg["data"].(map[string]interface{})
+
+
+		encData := msg["data"].(map[string]interface{})
+		if encData["encrypt"] != nil {
+			logging.Log("encryt is add.")
+			logging.Log("encData: " + encData["encrypt"].(string))
+			desdata, err := proto.AppserDecrypt(encData["encrypt"].(string))
+			logging.Log("desdata:" + string(desdata))
+			var itfdec interface{}
+			err = json.Unmarshal([]byte(desdata), &itfdec)
+			if err != nil {
+				logging.Log("desdata to json failed, " + err.Error())
+				return
+			}
+
+			newMsg = itfdec.(map[string]interface{})
+		}
+
+
+		if encData["encrypt"] != nil {
+			params = newMsg["data"].(map[string]interface{})
+		} else {
+			params = msg["data"].(map[string]interface{})
+		}*/
 
 		if ( params["username"] == nil ||  params["username"].(string) == "") {
 			//没有username
@@ -591,11 +660,71 @@ func AppConnWriteLoop(c *AppConnection) {
 			}
 
 			sendData := proto.MakeStructToJson(data)
-			if n, err := c.conn.Write([]byte(sendData)); err != nil {
-				logging.Log(fmt.Sprintf("send data to client failed: %s,  %d bytes sent",  err.Error(), n))
-			}else{
-				logging.Log(fmt.Sprintf("send data to client: %s,  %d bytes sent", sendData, n))
+			if proto.DevConnidenc[c.ID] == true {
+				/*sendData = strings.Replace(sendData, "\\", "", -1)
+				logging.Log(fmt.Sprintf("sendData: %s", sendData))
+				//chenqw,20171124
+				pos := strings.Index(sendData, "data")
+				if pos == -1 {
+					return
+				}
+				pos += len("data:")
+				commondata := sendData[:pos+1]
+				//commondata   {"cmd":"login-ack","data":
+				logging.Log(fmt.Sprintf("sendData[:pos + 1]: %s\n\n", commondata))
+				pos -= len("data:")
+				byteToenc := sendData[pos-1:len(sendData)-1]
+				//byteToenc = byteToenc[1:len(byteToenc) - 1]
+				pos = strings.Index(byteToenc, "\"{")
+				if pos == -1 {
+					return
+				}
+				encrytSendDataleft := byteToenc[:pos]
+				encrytSendDataleft += byteToenc[pos+1:]
+				pos = strings.Index(encrytSendDataleft, "}\"")
+				if pos == -1 {
+					return
+				}
+				encrytSendData := encrytSendDataleft[:pos+1]
+				encrytSendData += encrytSendDataleft[pos+2:]
+				wholeEnc := "{"
+				wholeEnc += encrytSendData
+				wholeEnc += "}"
+				logging.Log(fmt.Sprintf("byteToenc: %s\n\n", wholeEnc))
+				encrytSendData, err := proto.AppserAesEncrypt(wholeEnc)
+				if err != nil {
+					return
+				}
+				//strings.Join([]string{commondata,encrytSendData},"")
+				Headtag := "{\"encrypt\":\"GTA01:" //Head tag
+				commondata += Headtag
+				commondata += encrytSendData
+				commondata += "\"}}"*/
+				/*-------------------------------------------------------------------*/
+				sendData = strings.Replace(sendData, "\\", "", -1)
+				logging.Log(fmt.Sprintf("sendData: %s", sendData))
+				commondata := "{\"GTA01\":"
+				encrytSendData, err := proto.AppserAesEncrypt(sendData)
+				if err != nil {
+					return
+				}
+				commondata += "\"{" + encrytSendData + "\"}"
+
+				/*-------------------------------------------------------------------*/
+				if n, err := c.conn.Write([]byte(commondata)); err != nil {
+					logging.Log(fmt.Sprintf("send data to client failed: %s,  %d bytes sent", err.Error(), n))
+				} else {
+					logging.Log(fmt.Sprintf("send data to client: %s,  %d bytes sent", commondata, n))
+				}
+			} else {
+				//send data with no encrypt
+				if n, err := c.conn.Write([]byte(sendData)); err != nil {
+					logging.Log(fmt.Sprintf("send data to client failed: %s,  %d bytes sent", err.Error(), n))
+				} else {
+					logging.Log(fmt.Sprintf("send data to client: %s,  %d bytes sent", sendData, n))
+				}
 			}
+
 		}
 	}
 }
@@ -985,7 +1114,7 @@ func AddAccessToken(accessToken string)  {
 	AccessTokenTableLock.Unlock()
 }
 
-func ValidAccessTokenFromService(AccessToken string)  bool {
+func ValidAccessTokenFromService(AccessToken string)  (bool, []string) {
 	url := "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
 	if svrctx.Get().IsDebugLocal {
 		url = "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
@@ -995,37 +1124,49 @@ func ValidAccessTokenFromService(AccessToken string)  bool {
 	resp, err := http.Get(url)
 	if err != nil {
 		logging.Log("get user devices failed, " + err.Error())
-		return false
+		return false, nil
 	}
 
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
+	logging.Log(fmt.Sprintf("ValidAccessTokenFromService: ",string(body)))
 	if err != nil {
 		logging.Log("response has err, " + err.Error())
-		return false
+		return false, nil
 	}
 
 	var itf interface{}
 	err = json.Unmarshal(body, &itf)
 	if err != nil {
 		logging.Log("parse login response as json failed, " + err.Error())
-		return false
+		return false, nil
 	}
 
 	userDevicesData := itf.(map[string]interface{})
 	if userDevicesData == nil {
-		return false
+		return false, nil
 	}
 
 	status := userDevicesData["status"].(float64)
-	if status == 0  {
-		return true
-	}else{
-		return false
+	if status != 0  {
+		return false, nil
 	}
 
-	return true
+	var imeiList []string
+	devices := userDevicesData["devices"]
+	if devices != nil {
+		for _, d := range devices.([]interface{}) {
+			device := d.(map[string]interface{})
+			if device == nil || device["IMEI"] == nil {
+				continue
+			}
+
+			imeiList = append(imeiList, device["IMEI"].(string))
+		}
+	}
+
+	return true, imeiList
 }
 
 func getUserDevicesImei(username string) []uint64  {
@@ -1170,7 +1311,8 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if IsAccessTokenValid(params.AccessToken) == false {
+	valid, imeiList := IsAccessTokenValid(params.AccessToken)
+	if valid  == false {
 		logging.Log("invalid access token: " + params.AccessToken)
 		result.ErrCode = -1
 		status = 400
@@ -1183,7 +1325,7 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	for i, imei := range params.Devices {
-		if imei != 0 {
+		if imei != 0 && InStringArray(proto.Num2Str(imei, 10), imeiList){
 			deviceAlarms := proto.DeviceAlarms{}
 			deviceAlarms.Imei = imei
 			reply, err := conn.Do("LRANGE", fmt.Sprintf("ntfy:%d", imei), 0, -1)
@@ -1310,6 +1452,20 @@ func ResetDeviceIPPort(w http.ResponseWriter, r *http.Request) {
 func IsCompanyAccessTokenValid(companyName, accessToken string)  bool {
 	for _, info := range svrctx.Get().RedirectApiCompanyList {
 		if info.CompanyName == companyName && info.AccessToken == accessToken {
+			return true
+		}
+	}
+
+	return false
+}
+
+func InStringArray(s string, arr []string) bool {
+	if arr == nil {
+		return false
+	}
+
+	for _, elem := range arr{
+		if s == elem {
 			return true
 		}
 	}

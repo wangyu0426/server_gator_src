@@ -850,6 +850,9 @@ var company_DisableLBS = []string {
 	"Gotthard Handels AG",
 }
 
+//chenqw,20171129,encrypted flag
+var DevConnidenc = map[uint64]bool{}
+
 func init()  {
 	//Gt3Test()
 	//os.Exit(0)

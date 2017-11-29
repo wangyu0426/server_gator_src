@@ -36,39 +36,93 @@ func base64Decode(src []byte) ([]byte, error) {
 func init()  {
 }
 
-func IsAccessTokenValid(accessToken string) bool {
+func IsAccessTokenValid(accessToken string) (bool, []string) {
+	var imeiList []string
 	valid := false
-	AccessTokenTableLock.Lock()
+	//需要进行更多验证
+	if valid, imeiList = ValidAccessTokenFromService(accessToken); valid {
+		AccessTokenTableLock.Lock()
+		AccessTokenTable[accessToken] = true
+		AccessTokenTableLock.Unlock()
+		valid = true
+	}
+	/*AccessTokenTableLock.Lock()
 	logined, ok := AccessTokenTable[accessToken]
 	if ok && logined {
 		//验证通过
 		valid = true
 	}else{
 		//需要进行更多验证
-		if ValidAccessTokenFromService(accessToken) {
+		if valid, imeiList = ValidAccessTokenFromService(accessToken); valid {
 			AccessTokenTable[accessToken] = true
 			valid = true
 		}
 	}
-	AccessTokenTableLock.Unlock()
+	AccessTokenTableLock.Unlock()*/
 
-	return valid
+	return valid, imeiList
 }
 
 func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data []byte) bool {
+	logging.Log(fmt.Sprintf("HandleAppRequest: %s",string(data)))
+	//chenqw,20171124
+	//data,err := proto.Gt3AesDecrypt(string(data))
+	//logging.Log("Decrypt recved json data: " + string(data))
 	var itf interface{}
-	err:=json.Unmarshal(data, &itf)
+	err :=json.Unmarshal(data, &itf)
 	if err != nil {
 		logging.Log("parse recved json data failed, " + err.Error())
 		return false
 	}
 
 	msg:= itf.(map[string]interface{})
-	cmd :=  msg["cmd"]
+	/*cmd :=  msg["cmd"]
 	if cmd == nil {
 		return false
-	}
+	}*/
 
+	//chenqw,20171124
+	//default false ,no encrypt
+	proto.DevConnidenc[connid] = false
+	/*------------------------------------------------------------------*/
+	if msg["cmd"] == nil {
+		gts01 := msg["GTS01"].(string)
+		if gts01 == "" {
+			return false
+		}
+		logging.Log("HandleAppRequest  gts01:" + gts01)
+		desdata, err := proto.AppserDecrypt(gts01)
+		logging.Log("HandleAppRequest desdata:" + string(desdata))
+		var itfdec interface{}
+		err = json.Unmarshal([]byte(desdata), &itfdec)
+		if err != nil {
+			logging.Log("desdata to json failed, " + err.Error())
+			return false
+		}
+		newMsg := itfdec.(map[string]interface{})
+		msg = newMsg
+	}else {
+
+	}
+	/*------------------------------------------------------------------*/
+	/*encData := msg["data"].(map[string]interface{})
+	if encData["encrypt"] != nil {
+		proto.DevConnidenc[connid] = true
+		desdata, err := proto.AppserDecrypt(encData["encrypt"].(string))
+		logging.Log("HandleAppRequest:desdata:" + string(desdata))
+		var itfdec interface{}
+		err = json.Unmarshal([]byte(desdata), &itfdec)
+		if err != nil {
+			logging.Log("desdata to json failed, " + err.Error())
+			return false
+		}
+		newMsg := itfdec.(map[string]interface{})
+		//now msg map struct is same as before encrypted......
+		msg["data"] = newMsg["data"]
+	}*/
+
+	var imeiList []string
+	valid := false
 	params := msg["data"].(map[string]interface{})
 
 	if ( params["accessToken"] == nil ||  params["accessToken"].(string) == "") { //没有accesstoken
@@ -78,15 +132,20 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 			logging.Log("access token is bad, not login and register")
 			return false
 		}
-	}else{//有accesstoken，那么需要对token进行验证
+	}else{
+		/*有accesstoken，那么需要对token进行验证,if accesstoken's imei belongs to one of the imeilist,
+			then accesskoken verify is passed!
+		*/
 		accessToken := params["accessToken"].(string)
-		valid := IsAccessTokenValid(accessToken)
+		valid, imeiList = IsAccessTokenValid(accessToken)
+		logging.Log(fmt.Sprint( "imeiList 0 :", params["username"], params["accessToken"], imeiList))
 		if valid == false{
 			logging.Log("access token is not found")
 			return false
 		}
 	}
 
+	logging.Log(fmt.Sprintf("handle cmd:%s",cmd))
 	switch cmd{
 	case proto.LoginCmdName:
 		return login(connid, params["username"].(string), params["password"].(string), false)
@@ -118,19 +177,30 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 			return false
 		}
 
-		return handleHeartBeat(connid, &params)
+		logging.Log(fmt.Sprint( "imeiList 1 :", params.UserName, params.AccessToken, imeiList))
+		return handleHeartBeat(imeiList, connid, &params)
 
 	case proto.VerifyCodeCmdName:
 		datas := msg["data"].(map[string]interface{})
 		params := proto.DeviceBaseParams{Imei: datas["imei"].(string),
 			UserName: datas["username"].(string),
 			AccessToken: datas["accessToken"].(string)}
+
+		/*if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}*/
+
 		return getDeviceVerifyCode(connid, &params)
 	case proto.RefreshDeviceCmdName:
 		datas := msg["data"].(map[string]interface{})
 		params := proto.DeviceBaseParams{Imei: datas["imei"].(string),
 			UserName: datas["username"].(string),
 			AccessToken: datas["accessToken"].(string)}
+
+		if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}
+
 		return refreshDevice(connid, &params)
 	case proto.SetDeviceCmdName:
 		jsonString, _ := json.Marshal(msg["data"])
@@ -140,12 +210,22 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 			logging.Log("set-device parse json failed, " + err.Error())
 			return false
 		}
+
+		if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}
+
 		return AppUpdateDeviceSetting(connid, &params, false, "")
 	case proto.GetDeviceByImeiCmdName:
 		datas := msg["data"].(map[string]interface{})
 		params := proto.DeviceAddParams{Imei: datas["imei"].(string),
 			UserName: datas["username"].(string),
 			AccessToken: datas["accessToken"].(string)}
+
+		/*if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}*/
+
 		//return getDeviceInfoByImei(connid, &params)
 		addCtx := AddDeviceChanCtx{cmd: proto.GetDeviceByImeiCmdName, connid: connid, params: &params}
 		addDeviceManagerChan <- &addCtx
@@ -158,6 +238,10 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 			return false
 		}
 
+		/*if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}*/
+
 		addDeviceManagerChan <- &AddDeviceChanCtx{cmd: proto.AddDeviceCmdName, connid: connid, params: &params}
 	case proto.DeleteDeviceCmdName:
 		jsonString, _ := json.Marshal(msg["data"])
@@ -165,6 +249,10 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		err:=json.Unmarshal(jsonString, &params)
 		if err != nil {
 			logging.Log("delete-device parse json failed, " + err.Error())
+			return false
+		}
+
+		if InStringArray(params.Imei, imeiList) == false {
 			return false
 		}
 
@@ -178,6 +266,10 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 			return false
 		}
 
+		if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}
+
 		return AppDeleteVoices(connid, &params)
 	case proto.DeviceLocateNowCmdName:
 		datas := msg["data"].(map[string]interface{})
@@ -185,6 +277,10 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 			UserName: datas["username"].(string),
 			AccessToken: datas["accessToken"].(string),
 			Phone: datas["phone"].(string)}
+
+		if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}
 
 		return AppActiveDeviceToLocateNow(connid, &params)
 	case proto.ActiveDeviceCmdName:
@@ -202,6 +298,10 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 			AccessToken: datas["accessToken"].(string),
 			Phone: datas["phone"].(string)}
 
+		if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}
+
 		return AppActiveDeviceSos(connid, &params)
 	case proto.SetDeviceVoiceMonitorCmdName:
 		datas := msg["data"].(map[string]interface{})
@@ -209,6 +309,10 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 			UserName: datas["username"].(string),
 			AccessToken: datas["accessToken"].(string),
 			Phone: datas["phone"].(string)}
+
+		if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}
 
 		return AppSetDeviceVoiceMonitor(connid, &params)
 	case proto.GetAlarmsCmdName:
@@ -222,6 +326,10 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 			return false
 		}
 
+		if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}
+
 		return AppQueryLocations(connid, &params)
 	case proto.DeleteAlarmsCmdName:
 		jsonString, _ := json.Marshal(msg["data"])
@@ -229,6 +337,10 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		err:=json.Unmarshal(jsonString, &params)
 		if err != nil {
 			logging.Log(cmd.(string) + " parse json failed, " + err.Error())
+			return false
+		}
+
+		if InStringArray(params.Imei, imeiList) == false {
 			return false
 		}
 
@@ -240,12 +352,16 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 	return true
 }
 
-func handleHeartBeat(connid uint64, params *proto.HeartbeatParams) bool {
+func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatParams) bool {
 	if params.AccessToken == ""{
 		return true
 	}
 
 	for i, imei := range params.Devices {
+		if InStringArray(imei, imeiList) == false {
+			continue
+		}
+
 		imeiUint64 := proto.Str2Num(imei, 10)
 		if params.FamilyNumbers == nil || len(params.FamilyNumbers) < (i + 1) {
 			if params.UUID != "" &&  params.DeviceToken != "" {
@@ -263,20 +379,26 @@ func handleHeartBeat(connid uint64, params *proto.HeartbeatParams) bool {
 	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
 	if params.SelectedDevice == "" {
 		for _, imei := range params.Devices {
+			if InStringArray(imei, imeiList) == false {
+				continue
+			}
+
 			imeiUint64 := proto.Str2Num(imei, 10)
 			result.Locations = append(result.Locations, svrctx.GetDeviceData(imeiUint64, svrctx.Get().PGPool))
 			result.Minichat = append(result.Minichat, proto.GetChatListForApp(imeiUint64, params.UserName)...)
 		}
 	}else{
-		imeiUint64 := proto.Str2Num(params.SelectedDevice, 10)
-		endTime := uint64(params.Timestamp)
-		beginTime := endTime - endTime %1000000
-		result.Locations = append(result.Locations, svrctx.GetDeviceData(imeiUint64, svrctx.Get().PGPool))
-		result.Minichat = append(result.Minichat, proto.GetChatListForApp(imeiUint64, params.UserName)...)
+		if InStringArray(params.SelectedDevice, imeiList) {
+			imeiUint64 := proto.Str2Num(params.SelectedDevice, 10)
+			endTime := uint64(params.Timestamp)
+			beginTime := endTime - endTime % 1000000
+			result.Locations = append(result.Locations, svrctx.GetDeviceData(imeiUint64, svrctx.Get().PGPool))
+			result.Minichat = append(result.Minichat, proto.GetChatListForApp(imeiUint64, params.UserName)...)
 
-		alarms := svrctx.QueryLocations(imeiUint64, svrctx.Get().PGPool, beginTime, endTime, false, true)
-		if alarms != nil {
-			result.Alarms = append(result.Alarms, (*alarms)...)
+			alarms := svrctx.QueryLocations(imeiUint64, svrctx.Get().PGPool, beginTime, endTime, false, true)
+			if alarms != nil {
+				result.Alarms = append(result.Alarms, (*alarms)...)
+			}
 		}
 	}
 
@@ -1388,6 +1510,18 @@ func AppActiveDeviceSos(connid uint64, params *proto.DeviceActiveParams) bool {
 func AppSetDeviceVoiceMonitor(connid uint64, params *proto.DeviceActiveParams) bool {
 	//return AppActiveDevice(proto.ActiveDeviceSosCmdName, proto.CMD_AP16, params)
 	imei := proto.Str2Num(params.Imei, 10)
+	canRequest := false
+	//首先判断是否支持语音监听
+	proto.DeviceInfoListLock.Lock()
+	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+	if ok && deviceInfo != nil {
+		canRequest = deviceInfo.HideVoiceMonitor == false
+	}
+	proto.DeviceInfoListLock.Unlock()
+
+	if canRequest == false {
+		return false
+	}
 	isGT06 := proto.GetDeviceModel(imei) == proto.DM_GT06
 	id := proto.NewMsgID()
 	svrctx.Get().TcpServerChan <- proto.MakeReplyMsg(imei, true,
@@ -1527,4 +1661,58 @@ func parseUint8Array(data interface{}) string {
 	}
 
 	return string([]byte(data.([]uint8)))
+}
+
+func checkOwnedDevices(AccessToken string)  []string {
+	url := "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
+	if svrctx.Get().IsDebugLocal {
+		url = "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
+	}
+
+	logging.Log("url: " + url)
+	resp, err := http.Get(url)
+	if err != nil {
+		logging.Log("get user devices failed, " + err.Error())
+		return nil
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logging.Log("response has err, " + err.Error())
+		return nil
+	}
+
+	var itf interface{}
+	err = json.Unmarshal(body, &itf)
+	if err != nil {
+		logging.Log("parse login response as json failed, " + err.Error())
+		return nil
+	}
+
+	userDevicesData := itf.(map[string]interface{})
+	if userDevicesData == nil {
+		return nil
+	}
+
+	status := userDevicesData["status"].(float64)
+	if status != 0  {
+		return nil
+	}
+
+	var imeiList []string
+	devices := userDevicesData["devices"]
+	if devices != nil {
+		for _, d := range devices.([]interface{}) {
+			device := d.(map[string]interface{})
+			if device == nil || device["IMEI"] == nil {
+				continue
+			}
+
+			imeiList = append(imeiList, device["IMEI"].(string))
+		}
+	}
+
+	return imeiList
 }

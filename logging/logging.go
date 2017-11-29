@@ -78,7 +78,9 @@ func Log(msg string)  {
 		logInputChan <- []byte((fmt.Sprint("[%s] %s\n", time.Now().String(), msg)))
 	}
 
-	fmt.Println(msg)
+	tNow := time.Now()
+	timeNow := tNow.Format("2006-01-02 15:04:05")
+	fmt.Println(timeNow + " " + msg)
 }
 
 func writeLog(msg string)  {
@@ -124,8 +126,8 @@ func PanicLogAndExit(errmsg string){
 	errText := fmt.Sprint("get panic: ",  errmsg, ", ", err, ", ", string(PanicTrace(128)))
 	Log(errText)
 
-	SendMail("38945787@qq.com", "38945787@qq.com",  "Go Server Panic", errText, "",
-		"smtp.qq.com", 587, "38945787@qq.com", "dumaakzcswglbibe")
+	SendMail("835280181@qq.com", "835280181@qq.com",  "Go Server Panic", errText, "",
+		"smtp.qq.com", 587, "835280181@qq.com", "zmblbqvsomaybehb")
 
 	panic("panic error cause exit")
 }
@@ -140,13 +142,13 @@ func PanicLogAndCatch(errmsg string){
 	errText := fmt.Sprint("get panic: ",  errmsg, ", ", err, ", ", string(PanicTrace(128)))
 	Log(errText)
 
-	SendMail("38945787@qq.com", "38945787@qq.com",  "Go Server Panic", errText, "",
-		"smtp.qq.com", 587, "38945787@qq.com", "dumaakzcswglbibe")
+	SendMail("835280181@qq.com", "835280181@qq.com",  "Go Server Panic", errText, "",
+		"smtp.qq.com", 587, "835280181@qq.com", "zmblbqvsomaybehb")
 }
 
 func SendMailToDefaultReceiver(body string)  {
-	SendMail("38945787@qq.com", "38945787@qq.com",  "Go Server Msg", body, "",
-		"smtp.qq.com", 587, "38945787@qq.com", "dumaakzcswglbibe")
+	SendMail("835280181@qq.com", "835280181@qq.com",  "Go Server Msg", body, "",
+		"smtp.qq.com", 587, "835280181@qq.com", "zmblbqvsomaybehb")
 }
 
 func SendMail(from, to, subject, text, attachmentFile, mailServer  string, mailPort int, user, password string)  {
