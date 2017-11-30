@@ -1493,7 +1493,7 @@ func (service *GT06Service)  NotifyAppWithNewMinichat(chat ChatInfo) bool  {
 func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan *AppMsgData,  chat ChatInfo) bool  {
 	result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
 
-	fmt.Println("heartbeat-ack: ", MakeStructToJson(result))
+	fmt.Println("NotifyAppWithNewMinichat heartbeat-ack: ", MakeStructToJson(result))
 
 	result.Minichat = append(result.Minichat, GetChatListForApp(imei, "")...)
 

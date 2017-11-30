@@ -95,25 +95,23 @@ func AppserAesEncrypt(data string) (string, error) {
 func AppserDecrypt(encrypted string) (string, error) {
 	logging.Log("recv from appclient des: " + encrypted)
 	var err error
-	/*src, err := base64Decode([]byte(encrypted))
-	if err != nil {
-		return nil, err
-	}*/
-	newdes := encrypted[6:]
-	base64dec,_ := base64Decode([]byte(newdes))
+	src, err := base64Decode([]byte(encrypted))
+	//if err != nil {
+	//	return "", err
+	//}
+	//newdes := encrypted[6:]
+	//base64dec,_ := base64Decode([]byte(newdes))
 
-
-	decrypted := make([]byte, len(base64dec))
+	decrypted := make([]byte, len(src))
 	var block cipher.Block
 	block, err = aes.NewCipher(key_app)
 	if err != nil {
 		return "", err
 	}
 
-
-	logging.Log("newdes: " + string(newdes))
 	decrypter := cipher.NewCTR(block, key_iv)
-	decrypter.XORKeyStream(decrypted, []byte(base64dec))
+	decrypter.XORKeyStream(decrypted, []byte(src))
+	decrypted = PKCS7UnPadding(decrypted,block.BlockSize())
 	logging.Log("decrypted: " + string(decrypted))
 
 	return string(decrypted), nil

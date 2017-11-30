@@ -521,76 +521,47 @@ func AppConnReadLoop(c *AppConnection) {
 		//chenqw,20171124
 		//desdata,err :=proto.Gt3AesDecrypt(string(buf[0:n]))
 		//logging.Log("desdata:" + string(desdata))
-		err =json.Unmarshal(buf[0:n], &itf)
-		//end
 		logging.Log("recv from appclient: " + string(buf[0: n]))
-
-
-
-		if err != nil {
-			logging.Log("AppConnReadLoop,parse recved json data failed, " + err.Error())
-			return
+		if buf[0] == '"'{
+			buf[n - 1] = 0
+			buf = buf[1:n - 1]
+			n = n - 1
+			logging.Log("new from appclient: " + string(buf[0:n]))
 		}
 
-		/*msg is :{
-		"cmd":"heartbeat",
-		"data":{"encrypt":"xxxxx"}
-		}
-	}*/
-		msg:= itf.(map[string]interface{})
-		var newMsg map[string]interface{}
-		var params map[string]interface{}
-		//logging.Log("parsed msg: " + string(msg["data"]))
-		/*---------------------------------------------------------*/
-		if msg["cmd"] == nil {
-			gts01 := msg["GTS01"].(string)
-			logging.Log("gts01:" + gts01)
-			desdata, err := proto.AppserDecrypt(gts01)
-			logging.Log("desdata:" + string(desdata))
-			var itfdec interface{}
-			err = json.Unmarshal([]byte(desdata), &itfdec)
+		header := buf[:6]
+		if string(header) == "GTS01:" {
+			ens := buf[6:len(buf)]
+
+			logging.Log("ens: " + string(ens))
+			desc,err := proto.AppserDecrypt(string(ens))
 			if err != nil {
-				logging.Log("desdata to json failed, " + err.Error())
+				logging.Log("GTS01:AppserDecrypt failed, " + err.Error())
 				return
 			}
-			newMsg = itfdec.(map[string]interface{})
-			msg = newMsg
-			params = newMsg["data"].(map[string]interface{})
-		}else {
-			params = msg["data"].(map[string]interface{})
-		}
-		/*---------------------------------------------------------*/
+			logging.Log("GTS01:desc data , " + desc)
+			err =json.Unmarshal([]byte(desc), &itf)
+			if err != nil {
+				logging.Log("GTS01:parse recved json data failed, " + err.Error())
+				return
+			}
 
-		/*data := msg["data"]
+		} else  {
+			err =json.Unmarshal(buf[0:n], &itf)
+			if err != nil {
+				logging.Log("AppConnReadLoop,parse recved json data failed, " + err.Error())
+				return
+			}
+		}
+
+		msg:= itf.(map[string]interface{})
+		data := msg["data"]
 		if data == nil || proto.MakeStructToJson(&data) == "" {
 			logging.Log("parse recved json data is empty ")
 			return
 		}
 
-
-
-		encData := msg["data"].(map[string]interface{})
-		if encData["encrypt"] != nil {
-			logging.Log("encryt is add.")
-			logging.Log("encData: " + encData["encrypt"].(string))
-			desdata, err := proto.AppserDecrypt(encData["encrypt"].(string))
-			logging.Log("desdata:" + string(desdata))
-			var itfdec interface{}
-			err = json.Unmarshal([]byte(desdata), &itfdec)
-			if err != nil {
-				logging.Log("desdata to json failed, " + err.Error())
-				return
-			}
-
-			newMsg = itfdec.(map[string]interface{})
-		}
-
-
-		if encData["encrypt"] != nil {
-			params = newMsg["data"].(map[string]interface{})
-		} else {
-			params = msg["data"].(map[string]interface{})
-		}*/
+		params := msg["data"].(map[string]interface{})
 
 		if ( params["username"] == nil ||  params["username"].(string) == "") {
 			//没有username
@@ -661,60 +632,55 @@ func AppConnWriteLoop(c *AppConnection) {
 
 			sendData := proto.MakeStructToJson(data)
 			if proto.DevConnidenc[c.ID] == true {
-				/*sendData = strings.Replace(sendData, "\\", "", -1)
+				sendData = strings.Replace(sendData, "\\", "", -1)
 				logging.Log(fmt.Sprintf("sendData: %s", sendData))
 				//chenqw,20171124
 				pos := strings.Index(sendData, "data")
 				if pos == -1 {
 					return
 				}
-				pos += len("data:")
-				commondata := sendData[:pos+1]
+				commondata := sendData[:pos]
+				//pos += len("data:")
+
 				//commondata   {"cmd":"login-ack","data":
 				logging.Log(fmt.Sprintf("sendData[:pos + 1]: %s\n\n", commondata))
-				pos -= len("data:")
-				byteToenc := sendData[pos-1:len(sendData)-1]
+				//pos -= len("data:")
+				byteToenc := sendData[pos:]
 				//byteToenc = byteToenc[1:len(byteToenc) - 1]
 				pos = strings.Index(byteToenc, "\"{")
 				if pos == -1 {
 					return
 				}
-				encrytSendDataleft := byteToenc[:pos]
-				encrytSendDataleft += byteToenc[pos+1:]
-				pos = strings.Index(encrytSendDataleft, "}\"")
+				Data := byteToenc[:pos]
+				Data += byteToenc[pos+1:]
+				pos = strings.Index(Data, "}\"")
 				if pos == -1 {
 					return
 				}
-				encrytSendData := encrytSendDataleft[:pos+1]
-				encrytSendData += encrytSendDataleft[pos+2:]
-				wholeEnc := "{"
-				wholeEnc += encrytSendData
-				wholeEnc += "}"
-				logging.Log(fmt.Sprintf("byteToenc: %s\n\n", wholeEnc))
-				encrytSendData, err := proto.AppserAesEncrypt(wholeEnc)
-				if err != nil {
-					return
-				}
-				//strings.Join([]string{commondata,encrytSendData},"")
-				Headtag := "{\"encrypt\":\"GTA01:" //Head tag
-				commondata += Headtag
+				encrytSendData := Data[:pos+1]
+				encrytSendData += Data[pos+2:]
 				commondata += encrytSendData
-				commondata += "\"}}"*/
-				/*-------------------------------------------------------------------*/
-				sendData = strings.Replace(sendData, "\\", "", -1)
-				logging.Log(fmt.Sprintf("sendData: %s", sendData))
-				commondata := "{\"GTA01\":"
-				encrytSendData, err := proto.AppserAesEncrypt(sendData)
+				logging.Log(fmt.Sprintf("the new enc data: %s\n\n", commondata))
+				encrytSendData, err := proto.AppserAesEncrypt(commondata)
 				if err != nil {
 					return
 				}
-				commondata += "\"{" + encrytSendData + "\"}"
+				/*-------------------------------------------------------------------*/
+
+				logging.Log(fmt.Sprintf("sendData: %s", sendData))
+				//commondata := "{\"GTA01\":"
+				//encrytSendData, err := proto.AppserAesEncrypt(sendData)
+				if err != nil {
+					return
+				}
+				theDataToApp := "{\"GTA01\":"
+				theDataToApp += "\"" + encrytSendData + "\"}"
 
 				/*-------------------------------------------------------------------*/
-				if n, err := c.conn.Write([]byte(commondata)); err != nil {
-					logging.Log(fmt.Sprintf("send data to client failed: %s,  %d bytes sent", err.Error(), n))
+				if n, err := c.conn.Write([]byte(theDataToApp)); err != nil {
+					logging.Log(fmt.Sprintf("send commondata to client failed: %s,  %d bytes sent", err.Error(), n))
 				} else {
-					logging.Log(fmt.Sprintf("send data to client: %s,  %d bytes sent", commondata, n))
+					logging.Log(fmt.Sprintf("send commondata to client: %s,  %d bytes sent", theDataToApp, n))
 				}
 			} else {
 				//send data with no encrypt

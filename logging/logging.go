@@ -64,7 +64,7 @@ func GetLogDir() string {
 }
 
 func Log(msg string)  {
-	funcAddr, file, line, ok := runtime.Caller(1)
+	funcAddr, file, line, ok := runtime.Caller(0)
 	if strings.Contains(file, "appserver.go") || strings.Contains(file, "appproto.go") {
 		if strings.Contains(msg, "heartbeat") {
 			return
@@ -81,6 +81,7 @@ func Log(msg string)  {
 	tNow := time.Now()
 	timeNow := tNow.Format("2006-01-02 15:04:05")
 	fmt.Println(timeNow + " " + msg)
+
 }
 
 func writeLog(msg string)  {

@@ -65,46 +65,42 @@ func IsAccessTokenValid(accessToken string) (bool, []string) {
 
 func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data []byte) bool {
 	logging.Log(fmt.Sprintf("HandleAppRequest: %s",string(data)))
-	//chenqw,20171124
-	//data,err := proto.Gt3AesDecrypt(string(data))
-	//logging.Log("Decrypt recved json data: " + string(data))
+
 	var itf interface{}
-	err :=json.Unmarshal(data, &itf)
-	if err != nil {
-		logging.Log("parse recved json data failed, " + err.Error())
-		return false
+	header := data[:6]
+	proto.DevConnidenc[connid] = false
+	if string(header) == "GTS01:" {
+		logging.Log(fmt.Sprintf("handle connid:%ld\n\n",connid))
+		proto.DevConnidenc[connid] = true
+		ens := data[6:len(data)]
+		logging.Log("ens: " + string(ens))
+		desc,err := proto.AppserDecrypt(string(ens))
+		if err != nil {
+			logging.Log("GTS01:AppserDecrypt failed, " + err.Error())
+			return false
+		}
+		err =json.Unmarshal([]byte(desc), &itf)
+		if err != nil {
+			logging.Log("GTS01:parse recved json data failed, " + err.Error())
+			return false
+		}
+
+	} else  {
+		err :=json.Unmarshal(data[0:], &itf)
+		if err != nil {
+			logging.Log("AppConnReadLoop,parse recved json data failed, " + err.Error())
+			return false
+		}
 	}
 
 	msg:= itf.(map[string]interface{})
-	/*cmd :=  msg["cmd"]
+	cmd :=  msg["cmd"]
 	if cmd == nil {
 		return false
-	}*/
+	}
 
 	//chenqw,20171124
 	//default false ,no encrypt
-	proto.DevConnidenc[connid] = false
-	/*------------------------------------------------------------------*/
-	if msg["cmd"] == nil {
-		gts01 := msg["GTS01"].(string)
-		if gts01 == "" {
-			return false
-		}
-		logging.Log("HandleAppRequest  gts01:" + gts01)
-		desdata, err := proto.AppserDecrypt(gts01)
-		logging.Log("HandleAppRequest desdata:" + string(desdata))
-		var itfdec interface{}
-		err = json.Unmarshal([]byte(desdata), &itfdec)
-		if err != nil {
-			logging.Log("desdata to json failed, " + err.Error())
-			return false
-		}
-		newMsg := itfdec.(map[string]interface{})
-		msg = newMsg
-	}else {
-
-	}
-	/*------------------------------------------------------------------*/
 	/*encData := msg["data"].(map[string]interface{})
 	if encData["encrypt"] != nil {
 		proto.DevConnidenc[connid] = true
@@ -145,7 +141,7 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		}
 	}
 
-	logging.Log(fmt.Sprintf("handle cmd:%s",cmd))
+	logging.Log(fmt.Sprintf("handle cmd:%s\n\n",cmd))
 	switch cmd{
 	case proto.LoginCmdName:
 		return login(connid, params["username"].(string), params["password"].(string), false)
@@ -438,7 +434,7 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	}
 
 	urlRequest += reqType
-
+	logging.Log("urlRequest" + urlRequest)
 	resp, err := http.PostForm(urlRequest, url.Values{"username": {username}, "password": {password}})
 	if err != nil {
 		logging.Log("app " + reqType + "failed, " + err.Error())
