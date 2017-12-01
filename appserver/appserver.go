@@ -632,14 +632,14 @@ func AppConnWriteLoop(c *AppConnection) {
 
 			sendData := proto.MakeStructToJson(data)
 			if proto.DevConnidenc[c.ID] == true {
-				sendData = strings.Replace(sendData, "\\", "", -1)
-				logging.Log(fmt.Sprintf("sendData: %s", sendData))
+				//sendData = strings.Replace(sendData, "\\", "", -1)
+				//logging.Log(fmt.Sprintf("sendData: %s", sendData))
 				//chenqw,20171124
 				pos := strings.Index(sendData, "data")
 				if pos == -1 {
 					return
 				}
-				commondata := sendData[:pos]
+				/*commondata := sendData[:pos]
 				//pos += len("data:")
 
 				//commondata   {"cmd":"login-ack","data":
@@ -659,9 +659,9 @@ func AppConnWriteLoop(c *AppConnection) {
 				}
 				encrytSendData := Data[:pos+1]
 				encrytSendData += Data[pos+2:]
-				commondata += encrytSendData
-				logging.Log(fmt.Sprintf("the new enc data: %s\n\n", commondata))
-				encrytSendData, err := proto.AppserAesEncrypt(commondata)
+				commondata += encrytSendData*/
+				logging.Log(fmt.Sprintf("the new enc data: %s\n\n", sendData))
+				encrytSendData, err := proto.AppserAesEncrypt(sendData)
 				if err != nil {
 					return
 				}
@@ -1287,7 +1287,11 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//通过devices IMEI来获取通知数据(报警和微聊)
-	conn := redisPool.Get()
+	var conn redis.Conn
+	conn = redisPool.Get()
+	if conn == nil {
+		return
+	}
 	defer conn.Close()
 
 	for i, imei := range params.Devices {

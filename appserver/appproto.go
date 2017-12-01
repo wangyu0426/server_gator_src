@@ -64,13 +64,13 @@ func IsAccessTokenValid(accessToken string) (bool, []string) {
 }
 
 func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data []byte) bool {
-	logging.Log(fmt.Sprintf("HandleAppRequest: %s",string(data)))
+	logging.Log(fmt.Sprintf("HandleAppRequest: %s\n",string(data)))
 
 	var itf interface{}
 	header := data[:6]
 	proto.DevConnidenc[connid] = false
 	if string(header) == "GTS01:" {
-		logging.Log(fmt.Sprintf("handle connid:%ld\n\n",connid))
+		logging.Log(fmt.Sprintf("handle connid:%d\n\n",connid))
 		proto.DevConnidenc[connid] = true
 		ens := data[6:len(data)]
 		logging.Log("ens: " + string(ens))
@@ -95,6 +95,7 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 
 	msg:= itf.(map[string]interface{})
 	cmd :=  msg["cmd"]
+
 	if cmd == nil {
 		return false
 	}
@@ -120,7 +121,7 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 	var imeiList []string
 	valid := false
 	params := msg["data"].(map[string]interface{})
-
+	//logging.Log(fmt.Sprintf("handle cmd:%s,accessToken:%s\n\n",cmd,params["accessToken"].(string)))
 	if ( params["accessToken"] == nil ||  params["accessToken"].(string) == "") { //没有accesstoken
 		//同时又不是注册和登录，那么认为是非法请求
 		if cmd.(string) != proto.LoginCmdName && cmd.(string) != proto.RegisterCmdName  &&
@@ -141,9 +142,10 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		}
 	}
 
-	logging.Log(fmt.Sprintf("handle cmd:%s\n\n",cmd))
+
 	switch cmd{
 	case proto.LoginCmdName:
+		logging.Log(fmt.Sprintf("Login username:%s,password:%s\n\n",params["username"].(string), params["password"].(string)))
 		return login(connid, params["username"].(string), params["password"].(string), false)
 
 	case proto.RegisterCmdName:
@@ -164,7 +166,7 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		//params := proto.HeartBeatParams{TimeStamp: datas["timestamp"].(string),
 		//	UserName: datas["username"].(string),
 		//	AccessToken: datas["accessToken"].(string)}
-
+		logging.Log(fmt.Sprintf("Hearbeat username:%s,accessToken:%s\n\n",params["username"].(string), params["accessToken"].(string)))
 		jsonString, _ := json.Marshal(msg["data"])
 		params := proto.HeartbeatParams{}
 		err:=json.Unmarshal(jsonString, &params)
@@ -465,9 +467,9 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	accessToken := loginData["accessToken"]
 	devices := loginData["devices"]
 
-	//logging.Log("status: " + fmt.Sprint(status))
-	//logging.Log("accessToken: " + fmt.Sprint(accessToken))
-	//logging.Log("devices: " + fmt.Sprint(devices))
+	logging.Log("status: " + fmt.Sprint(status))
+	logging.Log("accessToken: " + fmt.Sprint(accessToken))
+	logging.Log("devices: " + fmt.Sprint(devices))
 	if status != nil && accessToken != nil {
 		AddAccessToken(accessToken.(string))
 		if isRegister == false {
