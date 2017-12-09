@@ -852,7 +852,9 @@ var company_DisableLBS = []string {
 
 //chenqw,20171129,encrypted flag
 var DevConnidenc = map[uint64]bool{}
-
+//dev's max logining count when login with wrong password
+var LoginTimeOut = map[uint64]int64{}
+var ConnidLogin = map[uint64]int{}
 func init()  {
 	//Gt3Test()
 	//os.Exit(0)

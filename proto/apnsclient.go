@@ -77,6 +77,6 @@ func requestAPNS(apiURL string,  imei uint64, bodyParams  io.Reader)  bool {
 		return false
 	}
 
-	logging.Log(Num2Str(imei, 10) + " requestAPNS response body: " + string(body))
+	logging.Log(Num2Str(imei, 10) + apiURL + " requestAPNS response body: " + string(body))
 	return true
 }

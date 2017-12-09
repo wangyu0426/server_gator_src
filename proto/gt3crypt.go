@@ -93,7 +93,7 @@ func AppserAesEncrypt(data string) (string, error) {
 }
 
 func AppserDecrypt(encrypted string) (string, error) {
-	logging.Log("recv from appclient des: " + encrypted)
+	//logging.Log("recv from appclient des: " + encrypted)
 	var err error
 	src, err := base64Decode([]byte(encrypted))
 	//if err != nil {
@@ -112,7 +112,7 @@ func AppserDecrypt(encrypted string) (string, error) {
 	decrypter := cipher.NewCTR(block, key_iv)
 	decrypter.XORKeyStream(decrypted, []byte(src))
 	decrypted = PKCS7UnPadding(decrypted,block.BlockSize())
-	logging.Log("decrypted: " + string(decrypted))
+	//logging.Log("decrypted: " + string(decrypted))
 
 	return string(decrypted), nil
 }

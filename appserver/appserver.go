@@ -533,7 +533,7 @@ func AppConnReadLoop(c *AppConnection) {
 		if string(header) == "GTS01:" {
 			ens := buf[6:len(buf)]
 
-			logging.Log("ens: " + string(ens))
+			//logging.Log("ens: " + string(ens))
 			desc,err := proto.AppserDecrypt(string(ens))
 			if err != nil {
 				logging.Log("GTS01:AppserDecrypt failed, " + err.Error())
@@ -667,12 +667,12 @@ func AppConnWriteLoop(c *AppConnection) {
 				}
 				/*-------------------------------------------------------------------*/
 
-				logging.Log(fmt.Sprintf("sendData: %s", sendData))
+				//logging.Log(fmt.Sprintf("sendData: %s", sendData))
 				//commondata := "{\"GTA01\":"
 				//encrytSendData, err := proto.AppserAesEncrypt(sendData)
-				if err != nil {
-					return
-				}
+				//if err != nil {
+				//	return
+				//}
 				theDataToApp := "{\"GTA01\":"
 				theDataToApp += "\"" + encrytSendData + "\"}"
 
@@ -1086,7 +1086,7 @@ func ValidAccessTokenFromService(AccessToken string)  (bool, []string) {
 		url = "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
 	}
 
-	logging.Log("url: " + url)
+	//logging.Log("url: " + url)
 	resp, err := http.Get(url)
 	if err != nil {
 		logging.Log("get user devices failed, " + err.Error())
@@ -1096,7 +1096,7 @@ func ValidAccessTokenFromService(AccessToken string)  (bool, []string) {
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
-	logging.Log(fmt.Sprintf("ValidAccessTokenFromService: ",string(body)))
+	//logging.Log(fmt.Sprintf("ValidAccessTokenFromService: ",string(body)))
 	if err != nil {
 		logging.Log("response has err, " + err.Error())
 		return false, nil
@@ -1268,7 +1268,7 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logging.Log("Params: " + proto.MakeStructToJson(&params))
+	//logging.Log("GetNotifications Params: " + proto.MakeStructToJson(&params))
 
 	if params.AccessToken == "" || len(params.Devices) == 0 || len(params.LastUpdates) == 0 || (len(params.Devices)  != len(params.LastUpdates)){
 		result.ErrCode = -1

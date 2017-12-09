@@ -70,10 +70,10 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 	header := data[:6]
 	proto.DevConnidenc[connid] = false
 	if string(header) == "GTS01:" {
-		logging.Log(fmt.Sprintf("handle connid:%d\n\n",connid))
+		//logging.Log(fmt.Sprintf("handle connid:%d\n\n",connid))
 		proto.DevConnidenc[connid] = true
 		ens := data[6:len(data)]
-		logging.Log("ens: " + string(ens))
+		//logging.Log("ens: " + string(ens))
 		desc,err := proto.AppserDecrypt(string(ens))
 		if err != nil {
 			logging.Log("GTS01:AppserDecrypt failed, " + err.Error())
@@ -145,7 +145,7 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 
 	switch cmd{
 	case proto.LoginCmdName:
-		logging.Log(fmt.Sprintf("Login username:%s,password:%s\n\n",params["username"].(string), params["password"].(string)))
+		//logging.Log(fmt.Sprintf("Login username:%s,password:%s\n\n",params["username"].(string), params["password"].(string)))
 		return login(connid, params["username"].(string), params["password"].(string), false)
 
 	case proto.RegisterCmdName:
@@ -239,7 +239,7 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		/*if InStringArray(params.Imei, imeiList) == false {
 			return false
 		}*/
-
+		logging.Log("AddDeviceCmdName:" + string(jsonString))
 		addDeviceManagerChan <- &AddDeviceChanCtx{cmd: proto.AddDeviceCmdName, connid: connid, params: &params}
 	case proto.DeleteDeviceCmdName:
 		jsonString, _ := json.Marshal(msg["data"])
@@ -436,7 +436,7 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	}
 
 	urlRequest += reqType
-	logging.Log("urlRequest" + urlRequest)
+
 	resp, err := http.PostForm(urlRequest, url.Values{"username": {username}, "password": {password}})
 	if err != nil {
 		logging.Log("app " + reqType + "failed, " + err.Error())
@@ -467,6 +467,14 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	accessToken := loginData["accessToken"]
 	devices := loginData["devices"]
 
+	//handle wrong login password
+	if accessToken == nil {
+
+		proto.ConnidLogin[connid] += 1
+		proto.LoginTimeOut[connid] = time.Now().Unix()
+
+	}
+
 	logging.Log("status: " + fmt.Sprint(status))
 	logging.Log("accessToken: " + fmt.Sprint(accessToken))
 	logging.Log("devices: " + fmt.Sprint(devices))
@@ -480,6 +488,8 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 					if device == nil || device["IMEI"] == nil {
 						continue
 					}
+
+					proto.ConnidLogin[connid] = 0
 
 					imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
 					logging.Log("device: " + fmt.Sprint(imei))
@@ -550,9 +560,23 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 				UserName: username,
 				Data: "{\"status\": -1}", ConnID: connid})
 		}else{
-			appServerChan <- (&proto.AppMsgData{Cmd: proto.LoginAckCmdName,
-				UserName: username,
-				Data: "{\"status\": -1}", ConnID: connid})
+			if accessToken == nil {
+				if proto.ConnidLogin[connid] == 5 {
+					proto.ConnidLogin[connid] = 0
+					appServerChan <- (&proto.AppMsgData{Cmd:proto.LoginAckCmdName,
+						UserName:username,
+						Data:"{\"status\": -3}", ConnID: connid})
+				}else {
+					appServerChan <- (&proto.AppMsgData{Cmd:proto.LoginAckCmdName,
+						UserName:username,
+						Data:"{\"status\": -2}", ConnID: connid})
+				}
+
+			}else {
+				appServerChan <- (&proto.AppMsgData{Cmd: proto.LoginAckCmdName,
+					UserName: username,
+					Data: "{\"status\": -1}", ConnID: connid})
+			}
 		}
 	}
 
@@ -1053,6 +1077,14 @@ func addDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 
 			setting = proto.SettingParam{proto.TimeZoneFieldName, "", params.TimeZone, 0}
 			newSettings.Settings = append(newSettings.Settings, setting)
+		}
+		for i := 0;i < len(newSettings.Settings) ;i++{
+			logging.Log("newSettings.Settings:" +
+				fmt.Sprintf("FiledName:%s,CurValue:%s,NewValue:%s,Index:%d",
+					newSettings.Settings[i].FieldName,
+					newSettings.Settings[i].CurValue,
+					newSettings.Settings[i].NewValue,
+					newSettings.Settings[i].Index))
 		}
 
 		return AppUpdateDeviceSetting(connid, &newSettings, true, params.MySimID)
@@ -1667,7 +1699,7 @@ func checkOwnedDevices(AccessToken string)  []string {
 		url = "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
 	}
 
-	logging.Log("url: " + url)
+	//logging.Log("url: " + url)
 	resp, err := http.Get(url)
 	if err != nil {
 		logging.Log("get user devices failed, " + err.Error())
