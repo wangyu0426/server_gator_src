@@ -86,11 +86,12 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		}
 
 	} else  {
-		err :=json.Unmarshal(data[0:], &itf)
+		return false
+		/*err :=json.Unmarshal(data[0:], &itf)
 		if err != nil {
 			logging.Log("AppConnReadLoop,parse recved json data failed, " + err.Error())
 			return false
-		}
+		}*/
 	}
 
 	msg:= itf.(map[string]interface{})
@@ -592,6 +593,7 @@ func resetPassword(connid uint64, username string) bool {
 
 	reqType := "reset"
 	urlRequest += reqType
+
 
 	resp, err := http.PostForm(urlRequest, url.Values{"username": {username}})
 	if err != nil {

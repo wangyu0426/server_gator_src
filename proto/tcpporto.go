@@ -430,7 +430,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	DeviceInfoListLock.Unlock()
 
 	service.GetWatchDataInfo(service.imei)
-
+	logging.Log(fmt.Sprintf("DoRequest msg.Data:%s",msg.Data))
 	if service.cmd == DRT_SET_IP_PORT_ACK  ||       // 同BP01，手表设置服务器IP端口的ACK
 		service.cmd == DRT_SET_APN_ACK     ||        // 同BP02，手表设置APN的ACK
 		service.cmd == DRT_SYNC_TIME_ACK  ||   // 同BP03，手表请求对时ACK
@@ -452,7 +452,6 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		service.cmd == DRT_DELETE_PHONE_PHOTO_ACK  ||    	// 同BP25	，手表对删除亲情号图片的ACK
 		service.cmd == DRT_FETCH_APP_URL_ACK {     	//  同BP26	，手表获取app下载页面URL的ACK
 
-
 		service.isCmdForAck = true
 
 		if service.cmd == DRT_QUERY_TEL_USE_ACK {
@@ -467,6 +466,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			if lastAckOK == 1 {
 				//回复成功，通知app成功
 				if service.cmd == DRT_SET_PHONE_NUMBERS_ACK{
+					logging.Log("AddPendingPhotoData:3" + fmt.Sprintf("  msg.Data:%s",msg.Data))
 					ResolvePendingPhotoData(service.imei, msgIdForAck)
 				}
 			}else{
@@ -2109,6 +2109,8 @@ func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
 	//失败：(002F0103357593060153353BP23,
 	// 13026618172,6,1,0)
 	//首先解析出包状态信息，亲情号，序号和确认状态
+	logging.Log("ProcessPushPhotoAck: " + string(pszMsg))
+	logging.Log("AddPendingPhotoData:6")
 	fields := strings.SplitN(string(pszMsg), ",", 4)
 	if len(fields) != 4 {
 		//字段个数不对
@@ -2133,6 +2135,29 @@ func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
 
 	if lastBlockOk != 1 {
 		logging.Log(fmt.Sprintf("[%d] last block failed,  status is  %d, %s", service.imei, lastBlockOk,  fields[3]))
+		return false
+	}
+
+	//if last status == -1,it means the phone didn't exist in the watch
+	//chenqw,20171214
+	lastStatus := Str2SignedNum(fields[3],10)
+	if lastStatus == -1 {
+		msg := &MsgData{}
+		msg.Header.Header.Imei = service.imei
+		msg.Header.Header.ID = NewMsgID()
+		msg.Header.Header.Status = 1
+		DeviceInfoListLock.Lock()
+		deviceInfo, ok := (*DeviceInfoList)[service.imei]
+		DeviceInfoListLock.Unlock()
+		if ok && deviceInfo != nil {
+			body := fmt.Sprintf("%015dAP06%s,%016X)", service.imei,
+				makeDeviceFamilyPhoneNumbers(&deviceInfo.Family,  true),   msg.Header.Header.ID)
+			msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+
+			resp := &ResponseItem{CMD_AP06, msg}
+			service.rspList = append(service.rspList, resp)
+		}
+
 		return false
 	}
 
@@ -2196,7 +2221,7 @@ func (service *GT06Service) ProcessRspPhoto() bool {
 	//目前每次只下载一个图片文件，并且同一个亲情号只对应一份头像图片
 	//并且对于BP11命令永远都是从头开始发送文件的第一包
 	//发送之前首先创建任务表，如果已存在任务表，则直接覆盖
-
+	logging.Log("AddPendingPhotoData:4")
 	AppNewPhotoListLock.Lock()
 	appNewPhotoList, ok := AppNewPhotoList[service.imei]
 	if ok && appNewPhotoList != nil && len(*appNewPhotoList) > 0 {
@@ -2312,6 +2337,7 @@ func (service *GT06Service) PushChatNum() bool {
 }
 
 func (service *GT06Service) PushNewPhotoNum() bool {
+	logging.Log("AddPendingPhotoData:5")
 	newAvatars := 0
 	AppNewPhotoListLock.Lock()
 	newPhotoList, ok := AppNewPhotoList[service.imei]
@@ -3680,6 +3706,7 @@ func ResolvePendingPhotoData(imei, msgId uint64) {
 	isFound := false
 	var resolvedItem *PhotoSettingTask
 	tempList:= []*PhotoSettingTask{}
+	logging.Log("AddPendingPhotoData:2")
 	AppNewPhotoPendingListLock.Lock()
 	photoList, ok := AppNewPhotoPendingList[imei]
 	if ok && photoList != nil {

@@ -1641,6 +1641,14 @@ func Str2Num(str string, base int)  uint64 {
 	return value
 }
 
+func Str2SignedNum(str string,base int) int64 {
+	if len(str) == 0 {
+		return  int64(0)
+	}
+	value, _ := strconv.ParseInt(str,base,0)
+	return  value
+}
+
 func Num2Str(num uint64, base int)  string {
 	if base == 10 {
 		return fmt.Sprintf("%d", num)

@@ -80,7 +80,9 @@ type ServerContext struct {
 	AndroidAppURL string
 	IOSAppURL string
 
+	//channel that communicates with phone app
 	AppServerChan chan *proto.AppMsgData  `json:"-"`
+	//app has updated or setted device ,so send msg to device
 	TcpServerChan chan *proto.MsgData `json:"-"`
 	GT6TcpServerChan chan *proto.MsgData `json:"-"`
 	GT3TcpServerChan chan *proto.MsgData `json:"-"`
@@ -340,6 +342,7 @@ func PushChatNum(imei uint64) bool {
 }
 
 func AddPendingPhotoData(imei uint64, photoData proto.PhotoSettingInfo) {
+	logging.Log("AddPendingPhotoData:1")
 	photoTask := proto.PhotoSettingTask{Info: photoData}
 	proto.AppNewPhotoPendingListLock.Lock()
 	photoList, ok := proto.AppNewPhotoPendingList[imei]

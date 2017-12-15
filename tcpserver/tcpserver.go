@@ -326,16 +326,16 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 
 }
 
-//for reading
+//for reading read data command from watch
 func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 	defer logging.PanicLogAndExit("ConnReadLoop")
 
 	defer func() {
-		logging.Log("client connection closed")
+		logging.Log(fmt.Sprintf("client %d connection closed",c.connid))
 		delConnChan <- c
 	}()
 
-	logging.Log("new connection from: " +  c.conn.RemoteAddr().String())
+	logging.Log(fmt.Sprintf("new client connection %d from: ",c.connid) +  c.conn.RemoteAddr().String())
 
 	for  {
 		if len(c.buf) == 0 {
@@ -415,7 +415,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		}
 
 		//记录解密后(如果需要解密)的是些什么数据
-		logging.Log(string(packet))
+		logging.Log("from watch data decryted: " + string(packet))
 
 		if packet[msgLen - 1] != ')' || msgLen < 29 {
 			logging.Log("bad format of data packet, it must end with )")
@@ -428,9 +428,9 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 
 		//记录收到的是些什么数据
 		if cmd == proto.StringCmd(proto.DRT_SEND_MINICHAT) {
-			logging.Log(string(packet[0: 80]))
+			logging.Log("DRT_SEND_MINICHAT" + string(packet[0: msgLen]))
 		}else{
-			logging.Log(string(packet[0: msgLen]))
+			logging.Log("NOT DRT_SEND_MINICHAT" + string(packet[0: msgLen]))
 		}
 
 		//// 消息接收不完整，如果是微聊（BP34）等需要支持续传的请求，

@@ -112,7 +112,7 @@ func LocalAPIServerRunLoop(serverCtx *svrctx.ServerContext) {
 	defer logging.PanicLogAndExit("LocalAPIServerRunLoop")
 
 	http.HandleFunc("/api/get-locations", GetLocationsByURL)
-	http.HandleFunc("/GetWatchData", GetLocationsByURL)
+	http.HandleFunc("/GetWatchData", GetLocationsByURLfromPHP)
 	addr := fmt.Sprintf("%s:%d", serverCtx.LocalAPIBindAddr, serverCtx.LocalAPIPort)
 	logging.Log("LocalAPIServer listen:  " + addr)
 	http.ListenAndServe(addr, nil)
@@ -294,6 +294,36 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	imei := r.FormValue("imei")
 	username := r.FormValue("username")
 	fieldname := r.FormValue("fieldname")
+	accessToken := r.FormValue("accessToken")
+	phone := r.FormValue("phone")
+	logging.Log(fmt.Sprintf( "HandleUploadFile imei %s username %s fieldname %s accessToken %s phone %s",
+		imei,username,fieldname,accessToken,phone))
+	if imei[:6] != "GTS01:" || username[:6] != "GTS01:" || accessToken[:6] != "GTS01:" {
+		logging.Log("HandleUploadFile:not encrypted!")
+		return
+	}
+	imei,err := proto.AppserDecrypt(imei[6:])
+	username,err = proto.AppserDecrypt(username[6:])
+	accessToken,err = proto.AppserDecrypt(accessToken[6:])
+	if phone != "" {
+		phone, err = proto.AppserDecrypt(phone[6:])
+	}
+	if err != nil {
+		logging.Log("HandleUploadFile minichat:AppserDecrypt failed!")
+		return
+	}
+
+	if err != nil {
+		logging.Log("HandleUploadFile:AppserDecrypt failed!")
+		return
+	}
+	valid, imeiList := IsAccessTokenValid(accessToken)
+	logging.Log(fmt.Sprint( "imeiList 0 :", r.FormValue("username"), r.FormValue("accessToken"), imeiList))
+	if valid == false{
+		logging.Log("HandleUploadFile:access token is not found")
+		return
+	}
+
 	uploadType := r.FormValue("type")
 	fmt.Println(uploadType)
 
@@ -364,7 +394,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 			if uploadType == "contactAvatar" {
 				photoInfo := proto.PhotoSettingInfo{}
 				photoInfo.CreateTime = proto.NewMsgID()
-				photoInfo.Member.Phone = r.FormValue("phone")
+				photoInfo.Member.Phone = phone
 				photoInfo.ContentType = proto.ChatContentPhoto
 				photoInfo.Content = fileName//proto.MakeTimestampIdString()
 				photoInfo.MsgId = proto.Str2Num(r.FormValue("msgId"), 10)
@@ -383,7 +413,6 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if uploadType == "minichat" {
 		imeiUint64 := proto.Str2Num(imei, 10)
-		phone := r.FormValue("phone")
 
 		//if svrctx.IsPhoneNumberInFamilyList(imeiUint64, phone) == false {
 		//	result.ErrCode = 500
@@ -466,6 +495,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 
 		logging.Log(fmt.Sprintf("[%d] app upload chat: %s", imeiUint64, proto.MakeStructToJson(chat)))
 		svrctx.AddChatData(imeiUint64, chat)
+		//send to app while heart-beat arrive
 		proto.AddChatForApp(chat)
 
 		//这里应该通知APP，微聊列表有新的项
@@ -479,6 +509,274 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	} else {
 	}
 }
+
+/*func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
+	result := proto.HttpAPIResult{
+		ErrCode: 0,
+		ErrMsg: "",
+		Imei: "0",
+	}
+	//chenqw,20171210
+	var itf interface{}
+	//encBody := make([]byte, 10240)
+	//_,err := r.Body.Read(encBody)
+	//r.ParseForm()
+	defer r.Body.Close()
+	encBody,err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return
+	}
+	//logging.Log(fmt.Sprintf("HandleUploadFile,encBody: %s",string(encBody)))
+	n := len(encBody)
+
+	if encBody[0] == '"'{
+		encBody[n - 1] = 0
+		encBody = encBody[1:n - 1]
+		n = n - 1
+		logging.Log("HandleUploadFile from appclient: " + string(encBody))
+	}
+	head := encBody[0:6]
+	if string(head) != "GTS01:" {
+		logging.Log("HandleUploadFile:bad form")
+		return
+	}
+	descBody,err := proto.AppserDecrypt(string(encBody[6:]))
+	if err != nil {
+		logging.Log("HandleUploadFile:AppserDecrypt failed" + err.Error())
+		return
+	}
+	logging.Log("HandleUploadFile,descBody: %s" + string(descBody))
+	err =json.Unmarshal([]byte(descBody), &itf)
+	if err != nil {
+		logging.Log("HandleUploadFile GTS01:parse recved json data failed, " + err.Error())
+		return
+	}
+	params := itf.(map[string]interface{})
+	w.Header().Set("Content-Type", "application/json")
+
+	//imei := r.FormValue("imei")
+	//username := r.FormValue("username")
+	//fieldname := r.FormValue("fieldname")
+	//uploadType := r.FormValue("type")
+
+	imei := params["imei"].(string)
+	username := params["username"].(string)
+	fieldname := params["fieldname"].(string)
+	uploadType := params["type"].(string)
+
+	phone := params["phone"].(string)
+
+	accessToken := params["accessToken"].(string)
+	valid, imeiList := IsAccessTokenValid(accessToken)
+	logging.Log(fmt.Sprint( "imeiList 0 :", params["username"], params["accessToken"], imeiList))
+	if valid == false{
+		logging.Log("HandleUploadFile:access token is not found")
+		return
+	}
+	logging.Log(fmt.Sprintf("HandleUploadFile imei = %s,username = %s,fieldname = %s,uploadType = %s",
+		imei,username,fieldname,uploadType))
+
+	result.Imei = imei
+
+	//_,fileInfo, err1 := ctx.FormFile(uploadType)
+	//if err1 != nil {
+	//	result.ErrCode = 500
+	//	ctx.JSON(500, result)
+	//	return
+	//}
+	//
+	//file,err2 :=fileInfo.Open()
+	//if err2 != nil {
+	//	result.ErrCode = 500
+	//	result.ErrMsg = "server failed to open the uploaded  file"
+	//	ctx.JSON(500, result)
+	//	return
+	//}
+	//
+	//defer file.Close()
+	//fileData, err3 :=ioutil.ReadAll(file)
+	//if err3 != nil {
+	//	result.ErrCode = 500
+	//	result.ErrMsg = "server failed to read the data of  the uploaded  file"
+	//	ctx.JSON(500, result)
+	//	return
+	//}
+
+	if uploadType != "minichat" {
+		index :=  proto.Num2Str(uint64(params["index"].(float64)),10)
+		msgId := proto.Num2Str(uint64(params["msgId"].(float64)),10)
+		//fileData, err := base64Decode([]byte(r.FormValue(uploadType)))
+		fileData, err := base64Decode([]byte(params[uploadType].(string)))
+		if err != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "upload bad data"
+			JSON(w, 500, &result)
+			return
+		}
+
+		os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir + imei, 0755)
+		fileName, timestampString := "", proto.MakeTimestampIdString()
+
+		if uploadType == "contactAvatar" {
+			//contactIndex := r.FormValue("index")
+			contactIndex := index
+			fileName += "contact_" + contactIndex + "_"
+		}
+
+		fileName += timestampString + ".jpg"
+
+		uploadTypeDir := svrctx.Get().HttpStaticAvatarDir
+
+		//fileData encrypt
+		err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + uploadTypeDir + imei + "/" + fileName, fileData, 0666)
+		if err4 != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to save the uploaded  file"
+			JSON(w, 500, &result)
+			return
+		}
+
+		settings := make([]proto.SettingParam, 1)
+		if uploadType == "contactAvatar" {
+			settings[0].Index = int(proto.Str2Num(index, 10))
+		}
+		settings[0].FieldName = fieldname
+		settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir + imei + "/" + fileName
+
+		ret := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
+		if ret {
+			if uploadType == "contactAvatar" {
+				photoInfo := proto.PhotoSettingInfo{}
+				photoInfo.CreateTime = proto.NewMsgID()
+				//photoInfo.Member.Phone = r.FormValue("phone")
+				photoInfo.Member.Phone = phone
+				photoInfo.ContentType = proto.ChatContentPhoto
+				photoInfo.Content = fileName//proto.MakeTimestampIdString()
+				//photoInfo.MsgId = proto.Str2Num(r.FormValue("msgId"), 10)
+				photoInfo.MsgId = proto.Str2Num(msgId,10)
+				svrctx.AddPendingPhotoData(proto.Str2Num(imei, 10), photoInfo)
+			}
+
+			result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort, svrctx.Get().HttpStaticURL +
+				svrctx.Get().HttpStaticAvatarDir + imei + "/" + fileName)
+			fmt.Println(fileName)
+			JSON(w, 200, &result)
+		} else {
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to update the device setting in db"
+			JSON(w, 500, &result)
+			return
+		}
+	} else if uploadType == "minichat" {
+		imeiUint64 := proto.Str2Num(imei, 10)
+		//phone := r.FormValue("phone")
+		timestamp := proto.Num2Str(uint64(params["timestamp"].(float64)),10)
+		duration := proto.Num2Str(uint64(params["duration"].(float64)),10)
+		//if svrctx.IsPhoneNumberInFamilyList(imeiUint64, phone) == false {
+		//	result.ErrCode = 500
+		//	result.ErrMsg = fmt.Sprintf("phone number %s is not in the family phone list", phone)
+		//	result.Data = ""
+		//	JSON(w, 500, &result)
+		//	return
+		//}
+
+		/*_, fileInfo, err5 := r.FormFile(uploadType)
+
+		if err5 != nil {
+			logging.Log("minichat" + err5.Error())
+			result.ErrCode = 500
+			result.ErrMsg = "the uploaded type is not a file"
+			JSON(w, 500, &result)
+			return
+		}
+
+		file, err6 := fileInfo.Open()
+		if err6 != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to open the uploaded  file"
+			JSON(w, 500, &result)
+			return
+		}
+
+		defer file.Close()
+		fileData, err7 := ioutil.ReadAll(file)
+		if err7 != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to read the data of  the uploaded  file"
+			JSON(w, 500, &result)
+			return
+		}
+
+		if len(fileData) == 0 {
+			result.ErrCode = 500
+			result.ErrMsg = "no content in the uploaded  file (size is 0)"
+			JSON(w, 500, &result)
+			return
+		}*/
+
+		/*fileData, err := base64Decode([]byte(params[uploadType].(string)))
+		if err != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "upload bad data"
+			JSON(w, 500, &result)
+			return
+		}
+
+		os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticMinichatDir + imei, 0755)
+		fileName, timestampString := "", proto.MakeTimestampIdString()
+		fileName += timestampString + ".aac"
+
+		uploadTypeDir := svrctx.Get().HttpStaticMinichatDir
+		filePath := svrctx.Get().HttpStaticDir + uploadTypeDir + imei + "/" + fileName
+		fileAmrPath := svrctx.Get().HttpStaticDir + uploadTypeDir + imei + "/" + timestampString + ".amr"
+
+		//fileData encrypt
+		err8 := ioutil.WriteFile(filePath, fileData, 0666)
+		if err8 != nil {
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to save the uploaded  file"
+			JSON(w, 500, &result)
+			return
+		}
+
+		chat := proto.ChatInfo{}
+		chat.CreateTime = proto.NewMsgID()
+		chat.Imei = imeiUint64
+		chat.Sender = phone
+		chat.SenderType = 1
+		chat.SenderUser = username
+		chat.VoiceMilisecs = int(proto.Str2Num(duration, 10))
+		chat.ContentType = proto.ChatContentVoice
+		chat.Content = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort, svrctx.Get().HttpStaticURL +
+			svrctx.Get().HttpStaticMinichatDir + imei + "/" + fileName)//timestampString
+		chat.FileID = proto.Str2Num(timestampString, 10)
+		if len(timestamp) == 14 {
+			chat.DateTime = proto.Str2Num(timestamp[2:14], 10)
+		} else {
+			chat.DateTime = proto.Str2Num(timestampString[0:12], 10)
+		}
+
+		args := fmt.Sprintf("-i %s -acodec amr_nb -ab 3.2k -ar 8000 %s", filePath, fileAmrPath)
+		err9, _ := proto.ExecCmd("ffmpeg", strings.Split(args, " ")...)
+		if err9 != nil {
+			logging.Log(fmt.Sprintf("[%d] ffmpeg %s failed, %s", imeiUint64, args, err9.Error()))
+		}
+
+		logging.Log(fmt.Sprintf("[%d] app upload chat: %s", imeiUint64, proto.MakeStructToJson(chat)))
+		svrctx.AddChatData(imeiUint64, chat)
+		proto.AddChatForApp(chat)
+
+		//这里应该通知APP，微聊列表有新的项
+		proto.NotifyAppWithNewMinichat("", imeiUint64, appServerChan, chat)
+		//result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
+		//svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)
+
+		fmt.Println(fileName)
+		JSON(w, 200, &result)
+		return
+	} else {
+	}
+}*/
 
 func OnClientConnected(conn *websocket.Conn) {
 	connection := newAppConn(conn)
@@ -547,11 +845,12 @@ func AppConnReadLoop(c *AppConnection) {
 			}
 
 		} else  {
-			err =json.Unmarshal(buf[0:n], &itf)
+			/*err =json.Unmarshal(buf[0:n], &itf)
 			if err != nil {
 				logging.Log("AppConnReadLoop,parse recved json data failed, " + err.Error())
 				return
-			}
+			}*/
+			return
 		}
 
 		msg:= itf.(map[string]interface{})
@@ -743,7 +1042,14 @@ func JSON2(w http.ResponseWriter, ret int,  data interface{}) {
 	//
 	encodedString := buf //strings.Replace(buf, "\\", "\\\\", -1)
 	fmt.Println(encodedString)
-	w.Write([]byte(encodedString))
+	encrytSendData, err := proto.AppserAesEncrypt(encodedString)
+	if err != nil {
+		return
+	}
+	theDataToApp := "{\"GTA01\":"
+	theDataToApp += "\"" + encrytSendData + "\"}"
+	fmt.Println(encrytSendData)
+	w.Write([]byte(theDataToApp))
 }
 
 
@@ -760,11 +1066,36 @@ func JSON(w http.ResponseWriter, ret int,  data interface{}) {
 	////unescapedString := bytes.Replace([]byte(buf), andHex, and, -1)
 	//
 	encodedString := buf //strings.Replace(buf, "\\", "\\\\", -1)
-	fmt.Println(encodedString)
+	encrytSendData, err := proto.AppserAesEncrypt(encodedString)
+	if err != nil {
+		return
+	}
+	theDataToApp := "{\"GTA01\":"
+	theDataToApp += "\"" + encrytSendData + "\"}"
+	//fmt.Println(theDataToApp)
+	w.Write([]byte(theDataToApp))
+}
+
+func JSON2PHP(w http.ResponseWriter, ret int,  data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(ret)
+	buf := (proto.MakeStructToJson(&data))
+	//
+	////andHex := []byte("\\u0026")
+	////and    := []byte("&")
+	//
+	////result = bytes.Replace(buf, ltHex, lt, -1)
+	////result = bytes.Replace(result, gtHex, gt, -1)
+	////unescapedString := bytes.Replace([]byte(buf), andHex, and, -1)
+	//
+	encodedString := buf //strings.Replace(buf, "\\", "\\\\", -1)
+	fmt.Println("JSON2PHP" + encodedString)
 	w.Write([]byte(encodedString))
 }
 
 func GetLocationsByURL(w http.ResponseWriter, r *http.Request) {
+	logging.Log(fmt.Sprintf("GetLocationsByURL from %s:%s:%s:%s:%s:%s:%s\n",
+		r.URL.Scheme,r.URL.Host,r.URL.Path,r.URL.ForceQuery,r.URL.Fragment,r.URL.RawPath,r.URL.User))
 	w.Header().Set("Content-Type", "application/json")
 	systemno := proto.Str2Num(r.FormValue("systemno"), 10)
 	proto.SystemNo2ImeiMapLock.Lock()
@@ -823,7 +1154,69 @@ func GetLocationsByURL(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func GetLocationsByURLfromPHP(w http.ResponseWriter, r *http.Request) {
+	logging.Log(fmt.Sprintf("GetLocationsByURL from %s:%s:%s:%s:%s:%s:%s\n",
+		r.URL.Scheme,r.URL.Host,r.URL.Path,r.URL.ForceQuery,r.URL.Fragment,r.URL.RawPath,r.URL.User))
+	w.Header().Set("Content-Type", "application/json")
+	systemno := proto.Str2Num(r.FormValue("systemno"), 10)
+	proto.SystemNo2ImeiMapLock.Lock()
+	imei, ok := proto.SystemNo2ImeiMap[systemno]
+	proto.SystemNo2ImeiMapLock.Unlock()
+	if ok == false || imei == 0 {
+		logging.Log(fmt.Sprintf("bad imei for systemno %d ", systemno))
+		dataResult := proto.PhpQueryLocationsResult{Result: -1, ResultStr: "",  Systemno: systemno}
+		JSON2PHP(w, 200, &dataResult)
+		return
+	}
+
+	datatype := r.FormValue("datatype")
+	var locations *[]proto.LocationData
+	if datatype == "1"{
+		dataResult := proto.PhpQueryLocationsResult{Result: 0, ResultStr: "",  Systemno: systemno}
+		data := svrctx.GetDeviceData(imei, svrctx.Get().PGPool)
+		dataResult.Data = append(dataResult.Data, data.DataTime)
+		dataResult.Data = append(dataResult.Data, int64(data.Lat * 1000000))
+		dataResult.Data = append(dataResult.Data, int64(data.Lng * 1000000))
+		dataResult.Data = append(dataResult.Data, data.Steps)
+		dataResult.Data = append(dataResult.Data, data.Battery)
+		dataResult.Data = append(dataResult.Data, data.AlarmType)
+		dataResult.Data = append(dataResult.Data, data.ReadFlag)
+		dataResult.Data = append(dataResult.Data, data.LocateType)
+		dataResult.Data = append(dataResult.Data, data.ZoneName)
+		dataResult.Data = append(dataResult.Data, data.Accracy)
+		JSON2PHP(w, 200, &dataResult)
+	}else if(datatype == "2"){
+		dataResult := proto.PhpQueryLocationsResult{Result: 0, ResultStr: "",  Systemno: systemno}
+		beginTime := proto.Str2Num("20" + r.FormValue("start"), 10)
+		endTime := proto.Str2Num("20" + r.FormValue("end"), 10)
+
+		locations = svrctx.QueryLocations(imei, svrctx.Get().PGPool, beginTime, endTime, true, false)
+		if locations != nil && len(*locations) > 0 {
+			for _, data := range *locations {
+				dataItem := []interface{}{}
+				dataItem = append(dataItem, data.DataTime)
+				dataItem = append(dataItem, int64(data.Lat * 1000000))
+				dataItem = append(dataItem, int64(data.Lng * 1000000))
+				dataItem = append(dataItem, data.Steps)
+				dataItem = append(dataItem, data.Battery)
+				dataItem = append(dataItem, data.AlarmType)
+				dataItem = append(dataItem, data.ReadFlag)
+				dataItem = append(dataItem, data.LocateType)
+				dataItem = append(dataItem, data.ZoneName)
+				dataItem = append(dataItem, data.Accracy)
+
+				dataResult.Data = append(dataResult.Data, dataItem)
+			}
+		}else{
+			dataResult.Data = []interface{}{}
+		}
+
+		JSON2PHP(w, 200, &dataResult)
+	}
+}
+
 func GetAppVersionOnline(w http.ResponseWriter, r *http.Request) {
+	logging.Log("GetAppVersionOnline from")
 	result := proto.HttpQueryAppVersionResult{}
 	result.Status = -1
 
@@ -1332,6 +1725,7 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 
 
 func ResetDeviceIPPort(w http.ResponseWriter, r *http.Request) {
+	logging.Log("ResetDeviceIPPort from")
 	status := 200
 	result := proto.HttpAPIResult{}
 	result.ErrCode = 0
