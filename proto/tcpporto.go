@@ -469,11 +469,37 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 					logging.Log("AddPendingPhotoData:3" + fmt.Sprintf("  msg.Data:%s",msg.Data))
 					ResolvePendingPhotoData(service.imei, msgIdForAck)
 				}
-			}else{
+				resp := &ResponseItem{CMD_ACK,  service.makeAckParsedMsg(msgIdForAck)}
+				service.rspList = append(service.rspList, resp)
+			}else if service.cmd == DRT_DELETE_PHONE_PHOTO_ACK {
+				//chenqw,20171218,handle success flag -1
+				if Str2SignedNum(string(msg.Data[16:18]),10) == -1 {
+					msg := &MsgData{}
+					msg.Header.Header.Imei = service.imei
+					msg.Header.Header.ID = NewMsgID()
+					msg.Header.Header.Status = 0
+					DeviceInfoListLock.Lock()
+					deviceInfo, ok := (*DeviceInfoList)[service.imei]
+					DeviceInfoListLock.Unlock()
+					if ok && deviceInfo != nil {
+						body := fmt.Sprintf("%015dAP06%s,%016X)", service.imei,
+							makeDeviceFamilyPhoneNumbers(&deviceInfo.Family,  true),   msg.Header.Header.ID)
+						msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+
+						resp := &ResponseItem{CMD_AP06, msg}
+						service.rspList = append(service.rspList, resp)
+						logging.Log(fmt.Sprintf("BP25 AP06body:%s",body))
+					}
+				} else {
+					resp := &ResponseItem{CMD_ACK,  service.makeAckParsedMsg(msgIdForAck)}
+					service.rspList = append(service.rspList, resp)
+				}
+			} else{
 				//回复失败，通知APP失败
+				resp := &ResponseItem{CMD_ACK,  service.makeAckParsedMsg(msgIdForAck)}
+				service.rspList = append(service.rspList, resp)
 			}
-			resp := &ResponseItem{CMD_ACK,  service.makeAckParsedMsg(msgIdForAck)}
-			service.rspList = append(service.rspList, resp)
+
 		}
 	}else if service.cmd == DRT_SYNC_TIME {  //BP00 对时
 		madeData, id := service.makeSyncTimeReplyMsg()
@@ -1653,6 +1679,42 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		return false
 	}
 
+	//chenqw,2017118
+	bFond := false
+	DeviceInfoListLock.Lock()
+	deviceInfo, ok := (*DeviceInfoList)[service.imei]
+	DeviceInfoListLock.Unlock()
+	if ok {
+		for i := 0; i < len(deviceInfo.Family); i++ {
+			if fields[0] == deviceInfo.Family[i].Phone {
+				bFond = true
+				break
+			}
+		}
+	}
+	if !bFond && ok {
+		//send AP06 cmd and AP34 with -1,first AP34 with -1
+		resp := &ResponseItem{CMD_AP34,  service.makeReplyMsg(false, service.makeDeviceChatAckMsg(
+			fields[0], fields[1], fields[2], fields[3], "1", -1), makeId())}
+		service.rspList = append(service.rspList, resp)
+
+		msg := &MsgData{}
+		msg.Header.Header.Imei = service.imei
+		msg.Header.Header.ID = NewMsgID()
+		msg.Header.Header.Status = 1
+		body := fmt.Sprintf("%015dAP06%s,%016X)", service.imei,
+			makeDeviceFamilyPhoneNumbers(&deviceInfo.Family,  true),   msg.Header.Header.ID)
+		msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+
+		resp = &ResponseItem{CMD_AP06, msg}
+		service.rspList = append(service.rspList, resp)
+		logging.Log(fmt.Sprintf("ProcessMicChat AP06body:%s",body))
+		return true
+	} else if !ok {
+		logging.Log(fmt.Sprintf("ProcessMicChat IMEI is not in deviceinfolist",))
+		return false
+	}
+
 	//以下是数据完整的处理,
 	//首先查找当前任务是否已经存在
 	newChatInfo := ChatInfo{}
@@ -2031,6 +2093,31 @@ func (service *GT06Service) ProcessPushMicChatAck(pszMsg []byte) bool {
 		return false
 	}
 
+	//if last status == -1,it means the phone didn't exist in the watch
+	//chenqw,20171214
+	lastStatus := Str2SignedNum(fields[4],10)
+	logging.Log(fmt.Sprintf("AP06lastStatus:%d",lastStatus))
+	if lastStatus == -1 {
+		msg := &MsgData{}
+		msg.Header.Header.Imei = service.imei
+		msg.Header.Header.ID = NewMsgID()
+		msg.Header.Header.Status = 0
+		DeviceInfoListLock.Lock()
+		deviceInfo, ok := (*DeviceInfoList)[service.imei]
+		DeviceInfoListLock.Unlock()
+		if ok && deviceInfo != nil {
+			body := fmt.Sprintf("%015dAP06%s,%016X)", service.imei,
+				makeDeviceFamilyPhoneNumbers(&deviceInfo.Family,  true),   msg.Header.Header.ID)
+			msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+
+			resp := &ResponseItem{CMD_AP06, msg}
+			service.rspList = append(service.rspList, resp)
+			logging.Log(fmt.Sprintf("AP06body:%s",body))
+		}
+
+		return false
+	}
+
 	timeId := Str2Num(fields[1], 10)
 	blockCount := int(Str2Num(fields[2], 10))
 	blockIndex := int(Str2Num(fields[3], 10))
@@ -2118,6 +2205,31 @@ func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
 		return false
 	}
 
+	//if last status == -1,it means the phone didn't exist in the watch
+	//chenqw,20171214
+	lastStatus := Str2SignedNum(fields[3],10)
+	logging.Log(fmt.Sprintf("AP06lastStatus:%d",lastStatus))
+	if lastStatus == -1 {
+		msg := &MsgData{}
+		msg.Header.Header.Imei = service.imei
+		msg.Header.Header.ID = NewMsgID()
+		msg.Header.Header.Status = 0
+		DeviceInfoListLock.Lock()
+		deviceInfo, ok := (*DeviceInfoList)[service.imei]
+		DeviceInfoListLock.Unlock()
+		if ok && deviceInfo != nil {
+			body := fmt.Sprintf("%015dAP06%s,%016X)", service.imei,
+				makeDeviceFamilyPhoneNumbers(&deviceInfo.Family,  true),   msg.Header.Header.ID)
+			msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+
+			resp := &ResponseItem{CMD_AP06, msg}
+			service.rspList = append(service.rspList, resp)
+			logging.Log(fmt.Sprintf("AP06body:%s",body))
+		}
+
+		return false
+	}
+
 	if len(fields[3]) == 0 || len(fields[3]) != 2 || (fields[3][0] != '0' && fields[3][0] != '1') {
 		logging.Log(fmt.Sprintf("[%d] the ack status %s is bad", service.imei, fields[3]))
 		return false
@@ -2135,29 +2247,6 @@ func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
 
 	if lastBlockOk != 1 {
 		logging.Log(fmt.Sprintf("[%d] last block failed,  status is  %d, %s", service.imei, lastBlockOk,  fields[3]))
-		return false
-	}
-
-	//if last status == -1,it means the phone didn't exist in the watch
-	//chenqw,20171214
-	lastStatus := Str2SignedNum(fields[3],10)
-	if lastStatus == -1 {
-		msg := &MsgData{}
-		msg.Header.Header.Imei = service.imei
-		msg.Header.Header.ID = NewMsgID()
-		msg.Header.Header.Status = 1
-		DeviceInfoListLock.Lock()
-		deviceInfo, ok := (*DeviceInfoList)[service.imei]
-		DeviceInfoListLock.Unlock()
-		if ok && deviceInfo != nil {
-			body := fmt.Sprintf("%015dAP06%s,%016X)", service.imei,
-				makeDeviceFamilyPhoneNumbers(&deviceInfo.Family,  true),   msg.Header.Header.ID)
-			msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-
-			resp := &ResponseItem{CMD_AP06, msg}
-			service.rspList = append(service.rspList, resp)
-		}
-
 		return false
 	}
 

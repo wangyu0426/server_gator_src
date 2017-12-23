@@ -73,6 +73,24 @@ func (myfs*MyFileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type Getdeviceinfoimei struct {
+	Model 		string		`json:"model"`
+	Recid string			`json:"recid"`
+	Avatar string			`json:"Avatar"`
+	SimID	string			`json:"SimID"`
+	PhoneNumbers string		`json:"PhoneNumbers"`
+	IMEI	string			`json:"IMEI"`
+	OwnerName	string		`json:"OwnerName"`
+	LocateInterval	string	`json:"LocateInterval"`
+	TimeZone	string		`json:"TimeZone"`
+	Fence1	string			`json:"Fence1"`
+	Fence2	string			`json:"Fence2"`
+	CountryCode	string		`json:"CountryCode"`
+	Features	[]byte	`json:"features"`
+	IsAdmin	bool			`json:"isAdmin"`
+	Added	bool			`json:"added"`
+}
+
 var (
 	redisPool *redis.Pool
 )
@@ -141,6 +159,9 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	http.HandleFunc("/api/reset-device-ipport", ResetDeviceIPPort)
 	http.HandleFunc(svrctx.Get().HttpUploadURL, HandleUploadFile)
 	http.Handle("/wsapi", websocket.Handler(OnClientConnected))
+
+	//for php get device data
+	http.HandleFunc("/api/get-device-by-imei",GetDeviceByimei)
 
 	//http.HandleFunc("/api/cmd", HandleApiCmd)
 	//http.Handle(svrctx.Get().HttpStaticURL, http.FileServer(http.Dir(svrctx.Get().HttpStaticDir)))
@@ -1821,6 +1842,70 @@ func IsCompanyAccessTokenValid(companyName, accessToken string)  bool {
 	}
 
 	return false
+}
+
+func GetDeviceByimei(w http.ResponseWriter, r *http.Request) {
+	//logging.Log("http GetDeviceByimei from")
+	status := 200
+	result := Getdeviceinfoimei{}
+	/*body,err :=ioutil.ReadAll(r.Body)
+	if err != nil {
+		return
+	}*/
+	imei := r.FormValue("IMEI")
+	accesstoken := r.FormValue("access-token")
+	if imei == "" {
+		logging.Log(fmt.Sprintf("GetDeviceByimei imei or accesstoken is null," +
+			"imei:%s,accesstoken:%s",imei,accesstoken))
+		status = 400
+		JSON2PHP(w, status, &result)
+		return
+	}
+	/*valid, _ :=IsAccessTokenValid(accesstoken)
+	if valid == false {
+		logging.Log("GetDeviceByimei invalid access token: " + accesstoken)
+		status = 400
+		JSON2PHP(w, status, &result)
+		return
+
+	}*/
+	/*if !InStringArray(imei,imeiList) {
+		logging.Log("invalid imei: " + imei)
+		status = 400
+		JSON2PHP(w, status, &result)
+		return
+	}*/
+
+	proto.DeviceInfoListLock.Lock()
+	imeiUint64 := proto.Str2Num(imei,10)
+	deviceInfo, ok := (*proto.DeviceInfoList)[imeiUint64]
+	if ok && deviceInfo != nil {
+		result.IMEI = imei
+	}else{
+		//logging.Log(params.Imei + "  imei not found")
+	}
+	proto.DeviceInfoListLock.Unlock()
+
+	//result.IsAdmin = (deviceInfo.IsAdmin != 0)
+	result.Avatar = deviceInfo.Avatar
+	for i := 0;i < len(deviceInfo.Family);i++ {
+		result.PhoneNumbers += deviceInfo.Family[i].Phone
+		result.PhoneNumbers += ","
+	}
+	result.OwnerName = "caref1dai"
+	result.SimID = deviceInfo.SimID
+	result.CountryCode = deviceInfo.CountryCode
+	result.TimeZone = proto.Num2Str(uint64(deviceInfo.TimeZone),10)
+	result.LocateInterval = proto.Num2Str(uint64(deviceInfo.LocateInterval),10)
+	result.Model = "WH01"
+	result.Recid = "7282d071-4087-11e5-9bb1-002590c4e092"
+	result.Fence1 = "{\"Radius\":\"200\",\"Name\":\"office\",\"Center\":\"22.583372549212,113.91363854324001\"}"
+	result.Fence2 = "{\"Radius\":200,\"Name\":\"xingdong\",\"Center\":\"22.583885219827,113.91483074585\"}"
+	result.Added = true
+	result.Features = make([]byte,20)
+	result.IsAdmin = true
+	logging.Log("http GetDeviceByimei from : " + imei + accesstoken)
+	JSON2PHP(w,status,&result)
 }
 
 func InStringArray(s string, arr []string) bool {
