@@ -334,10 +334,6 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err != nil {
-		logging.Log("HandleUploadFile:AppserDecrypt failed!")
-		return
-	}
 	valid, imeiList := IsAccessTokenValid(accessToken)
 	logging.Log(fmt.Sprint( "imeiList 0 :", r.FormValue("username"), r.FormValue("accessToken"), imeiList))
 	if valid == false{
@@ -419,6 +415,25 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 				photoInfo.ContentType = proto.ChatContentPhoto
 				photoInfo.Content = fileName//proto.MakeTimestampIdString()
 				photoInfo.MsgId = proto.Str2Num(r.FormValue("msgId"), 10)
+
+				//check the phone is valid
+				bFound := false
+				imeiUint64 := proto.Str2Num(imei, 10)
+				proto.Mapimei2PhoneLock.Lock()
+				for index,_ := range proto.Mapimei2Phone[imeiUint64] {
+					if proto.Mapimei2Phone[imeiUint64][index] == phone {
+						bFound = true;
+						break
+					}
+				}
+				proto.Mapimei2PhoneLock.Unlock()
+				if !bFound {
+					result.ErrCode = 500
+					result.ErrMsg = "set avatar:the phone number is invalid"
+					JSON(w, 500, &result)
+					return
+				}
+
 				svrctx.AddPendingPhotoData(proto.Str2Num(imei, 10), photoInfo)
 			}
 
@@ -512,6 +527,23 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		err9, _ := proto.ExecCmd("ffmpeg", strings.Split(args, " ")...)
 		if err9 != nil {
 			logging.Log(fmt.Sprintf("[%d] ffmpeg %s failed, %s", imeiUint64, args, err9.Error()))
+		}
+
+		//check the phone is valid
+		bFound := false
+		proto.Mapimei2PhoneLock.Lock()
+		for index,_ := range proto.Mapimei2Phone[imeiUint64] {
+			if proto.Mapimei2Phone[imeiUint64][index] == phone {
+				bFound = true;
+				break
+			}
+		}
+		proto.Mapimei2PhoneLock.Unlock()
+		if !bFound {
+			result.ErrCode = 500
+			result.ErrMsg = "the phone number is invalid"
+			JSON(w, 500, &result)
+			return
 		}
 
 		logging.Log(fmt.Sprintf("[%d] app upload chat: %s", imeiUint64, proto.MakeStructToJson(chat)))
@@ -1000,14 +1032,14 @@ func AppConnWriteLoop(c *AppConnection) {
 				if n, err := c.conn.Write([]byte(theDataToApp)); err != nil {
 					logging.Log(fmt.Sprintf("send commondata to client failed: %s,  %d bytes sent", err.Error(), n))
 				} else {
-					logging.Log(fmt.Sprintf("send commondata to client: %s,  %d bytes sent", theDataToApp, n))
+					//logging.Log(fmt.Sprintf("send commondata to client: %s,  %d bytes sent", theDataToApp, n))
 				}
 			} else {
 				//send data with no encrypt
 				if n, err := c.conn.Write([]byte(sendData)); err != nil {
 					logging.Log(fmt.Sprintf("send data to client failed: %s,  %d bytes sent", err.Error(), n))
 				} else {
-					logging.Log(fmt.Sprintf("send data to client: %s,  %d bytes sent", sendData, n))
+					//logging.Log(fmt.Sprintf("send data to client: %s,  %d bytes sent", sendData, n))
 				}
 			}
 
@@ -1111,6 +1143,9 @@ func JSON2PHP(w http.ResponseWriter, ret int,  data interface{}) {
 	//
 	encodedString := buf //strings.Replace(buf, "\\", "\\\\", -1)
 	fmt.Println("JSON2PHP" + encodedString)
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET,OPTIONS,DELETE,PUT")
+	w.Header().Set("Access-Control-Allow-Headers", "x-requested-with,content-type")
 	w.Write([]byte(encodedString))
 }
 
@@ -1500,7 +1535,7 @@ func ValidAccessTokenFromService(AccessToken string)  (bool, []string) {
 		url = "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
 	}
 
-	//logging.Log("url: " + url)
+	logging.Log("url: " + url)
 	resp, err := http.Get(url)
 	if err != nil {
 		logging.Log("get user devices failed, " + err.Error())
@@ -1746,7 +1781,7 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 
 
 func ResetDeviceIPPort(w http.ResponseWriter, r *http.Request) {
-	logging.Log("ResetDeviceIPPort from")
+	//logging.Log("ResetDeviceIPPort from")
 	status := 200
 	result := proto.HttpAPIResult{}
 	result.ErrCode = 0
@@ -1901,10 +1936,12 @@ func GetDeviceByimei(w http.ResponseWriter, r *http.Request) {
 	result.Recid = "7282d071-4087-11e5-9bb1-002590c4e092"
 	result.Fence1 = "{\"Radius\":\"200\",\"Name\":\"office\",\"Center\":\"22.583372549212,113.91363854324001\"}"
 	result.Fence2 = "{\"Radius\":200,\"Name\":\"xingdong\",\"Center\":\"22.583885219827,113.91483074585\"}"
-	result.Added = true
+	result.Added = false
 	result.Features = make([]byte,20)
-	result.IsAdmin = true
-	logging.Log("http GetDeviceByimei from : " + imei + accesstoken)
+	result.IsAdmin = false
+	result.TimeZone = "+08:00"
+	result.Avatar = "http://service.gatorcn.com/tracker/web/static/images/child.png"
+	//logging.Log("http GetDeviceByimei from : " + imei + accesstoken)
 	JSON2PHP(w,status,&result)
 }
 

@@ -444,6 +444,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 
 		c.imei = imei
 		if c.saved == false && full {
+			logging.Log("new TCP connect")
 			c.saved = true
 			addConnChan <- c
 		}
@@ -455,6 +456,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		msg.Header.Header.ID = proto.NewMsgID()
 		msg.Header.Header.Imei = imei
 		msg.Header.Header.Cmd = proto.IntCmd(cmd)
+		msg.Header.Header.DevVersion = string(packet[5:9])
 		msg.Data = make([]byte, msgLen - MsgHeaderSize)
 		copy(msg.Data, packet[MsgHeaderSize: msgLen]) //不包含头部28字节
 		if  msg.Header.Header.Cmd ==  proto.DRT_SEND_MINICHAT {

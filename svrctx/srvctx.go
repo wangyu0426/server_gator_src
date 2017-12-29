@@ -14,6 +14,7 @@ import (
 	"os"
 	"encoding/json"
 	"io/ioutil"
+	//"../tcpserver"
 )
 
 type  DBConfig struct {
@@ -319,23 +320,28 @@ func PushPhotoNum(imei uint64) bool {
 }
 
 func PushChatNum(imei uint64) bool {
+	//get the count of the minchat,notify the watch to download the minchat with cmd AP11
 	chatData := GetChatData(imei, -1)
 	if len(chatData) > 0 {
-		//通知终端有聊天信息
-		model := proto.GetDeviceModel(imei)
-		if model == proto.DM_GT06 {
-			msg := proto.MakeReplyMsg(imei, false,
-				proto.MakeFileNumReplyMsg(imei, proto.ChatContentVoice, len(chatData), true),
-				proto.NewMsgID())
-			msg.Header.Header.Cmd = proto.CMD_AP11
-			serverCtx.TcpServerChan <- msg
-		}else if model == proto.DM_GTI3  || model == proto.DM_GT03 {
-			msg := proto.MakeReplyMsg(imei, false,
-				proto.MakeFileNumReplyMsg(imei, proto.ChatContentVoice, len(chatData), false),
-				proto.NewMsgID())
-			msg.Header.Header.Cmd = proto.CMD_GT3_AP15_PUSH_CHAT_COUNT
-			serverCtx.TcpServerChan <- msg
-		}
+		//if the connect is unlinked,then send the whole chat with once AP11,not send AP11 everytime
+		//_,ok := tcpserver.TcpClientTable[imei]
+		//if ok {
+			//通知终端有聊天信息
+			model := proto.GetDeviceModel(imei)
+			if model == proto.DM_GT06 {
+				msg := proto.MakeReplyMsg(imei, false,
+					proto.MakeFileNumReplyMsg(imei, proto.ChatContentVoice, len(chatData), true),
+					proto.NewMsgID())
+				msg.Header.Header.Cmd = proto.CMD_AP11
+				serverCtx.TcpServerChan <- msg
+			} else if model == proto.DM_GTI3 || model == proto.DM_GT03 {
+				msg := proto.MakeReplyMsg(imei, false,
+					proto.MakeFileNumReplyMsg(imei, proto.ChatContentVoice, len(chatData), false),
+					proto.NewMsgID())
+				msg.Header.Header.Cmd = proto.CMD_GT3_AP15_PUSH_CHAT_COUNT
+				serverCtx.TcpServerChan <- msg
+			}
+		//}
 	}
 
 	return true

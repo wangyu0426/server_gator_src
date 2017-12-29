@@ -280,6 +280,8 @@ type MsgHeader struct {
 
 	Imei  uint64 /*设备的IMEI*/
 
+	DevVersion string
+
 }
 
 type MsgResumeHeader struct {
@@ -504,6 +506,9 @@ type DeviceAddParams struct {
 	VerifyCode string		`json:"verifyCode"`
 	IsAdmin int		`json:"isAdmin"`
 	TimeZone  string 	`json:"timezone"`
+
+	//chenqw
+	AccountType int `json:"account_type"`
 }
 
 type SettingParam struct {
@@ -699,6 +704,9 @@ type FamilyMember struct {
 	Avatar string `json:"avatar"`
 	Type int `json:"type"`
 	Index int `json:"index"`
+
+	IsAdmin int `json:"is_admin"`
+	Username string `json:"username"`
 }
 
 type ContactAvatars struct {
@@ -799,6 +807,8 @@ type DeviceInfoResult struct {
 	ContactAvatar [MAX_FAMILY_MEMBER_NUM]string
 	HideVoiceMonitor bool
 	ApnSms string
+
+	AccountType int
 }
 
 type WIFIInfo  struct  {
@@ -824,7 +834,23 @@ type WatchStatus struct {
 	Battery uint8
 }
 
-
+type Getdeviceinfoimei struct {
+	Model,
+	Recid,
+	Avatar,
+	SimID	string
+	PhoneNumbers string
+	IMEI	string
+	OwnerName	string
+	LocateInterval	string
+	TimeZone	string
+	Fence1	string
+	Fence2	string
+	CountryCode	string
+	features	string
+	IsAdmin	bool
+	Added	bool
+}
 
 
 var offsets = []uint8{2, 2, 1, 1, 2, 8, 8, 4, 4, 4, 4}
@@ -1391,7 +1417,8 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 			&ChildPowerOff, &UseDST, &SocketModeOff, &Volume, &Lang, &VerifyCode, &Fences[0], &Fences[1], &Fences[2],
 			&Fences[3], &Fences[4], &Fences[5], &Fences[6], &Fences[7], &Fences[8], &Fences[9], &WatchAlarms[0], &WatchAlarms[1],
 			&WatchAlarms[2], &WatchAlarms[3], &WatchAlarms[4], &HideSelf, &HideTimers[0], &HideTimers[1], &HideTimers[2],
-			&HideTimers[3], &DisableWiFi, &DisableLBS, &RedirectIPPort,&LocateInterval, &Model, &Company, &CompanyHost, &CompanyPort, &RedirectServer, &ApnSms)
+			&HideTimers[3], &DisableWiFi, &DisableLBS, &RedirectIPPort,&LocateInterval, &Model, &Company, &CompanyHost,
+			&CompanyPort, &RedirectServer, &ApnSms)
 		if err != nil {
 			fmt.Println("row scan err: ", err.Error())
 		}
@@ -1427,6 +1454,13 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		(*tmpDeviceInfoList)[deviceInfo.Imei] = deviceInfo
 
 		tmpSystemNo2ImeiMap[deviceInfo.Imei % 100000000000] = deviceInfo.Imei
+
+		for i := 0;i < len(deviceInfo.Family);i++ {
+			if deviceInfo.Family[i].Phone == ""{
+				continue
+			}
+			Mapimei2Phone[deviceInfo.Imei] = append(Mapimei2Phone[deviceInfo.Imei], deviceInfo.Family[i].Phone)
+		}
 	}
 
 	fmt.Println("deviceinfo list len: ", len(*tmpDeviceInfoList))
@@ -1514,10 +1548,11 @@ func ParseHideTimers(timers []interface{}, hidetimerList *[MAX_HIDE_TIMER_NUM]Hi
 func ParseSinglePhoneNumberString(phone string, i int)  FamilyMember{
 	member := FamilyMember{}
 	if len(phone) == 0 {
+		member.Username = "0"
 		return member
 	}
 
-	fields := strings.SplitN(phone, "|", 3)
+	fields := strings.Split(phone, "|")
 	if len(fields) == 0 {
 		return member
 	}
@@ -1535,7 +1570,10 @@ func ParseSinglePhoneNumberString(phone string, i int)  FamilyMember{
 	}
 
 	member.Index = i
-
+ 	if len(fields) >= 5 {
+		member.IsAdmin = int(Str2Num(fields[3], 10))
+		member.Username = fields[4]
+	}
 	return member
 }
 
@@ -1925,4 +1963,30 @@ func GetCachedDevicesCount()  int{
 	DeviceInfoListLock.Unlock()
 
 	return count
+}
+
+func SplitPhone(phoneNumbers string) string {
+	phonemembers :=strings.Split(phoneNumbers,",")
+	newPhoneNumbers := ""
+	for index,member := range phonemembers {
+		if len(member) == 3 {
+			//|0|
+			newPhoneNumbers += member
+			if index + 1 != len(phonemembers) {
+				newPhoneNumbers += ","
+			}
+			continue
+		}
+		if strings.Count(member,"|") == 2 && len(member) > 3 {
+			member += "|0|0|"
+			newPhoneNumbers += member
+			if index + 1 != len(phonemembers) {
+				newPhoneNumbers += ","
+			}
+			continue
+		}
+
+	}
+
+	return newPhoneNumbers
 }

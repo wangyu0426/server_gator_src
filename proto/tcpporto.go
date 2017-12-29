@@ -206,6 +206,17 @@ type DeviceCache struct {
 	ResponseCache []ResponseItem
 }
 
+type DeviceVer struct {
+	devVer string
+	isCmdForAP06Ack bool
+}
+
+var MapDeviceVer = map[uint64]DeviceVer{}
+var MapDeviceVerLock = &sync.Mutex{}
+
+var Mapimei2PhoneLock = &sync.Mutex{}
+var Mapimei2Phone = map[uint64][]string{}
+
 type GT06Service struct {
 	imei uint64
 	msgSize uint64
@@ -237,6 +248,8 @@ type GT06Service struct {
 	RXLEVEL int32
 	rspList []*ResponseItem
 	reqCtx RequestContext
+
+	devVer string
 }
 
 const DEVICEID_BIT_NUM = 15
@@ -391,6 +404,27 @@ func (service *GT06Service)PreDoRequest() bool  {
 	return true
 }
 
+func (service *GT06Service) DoSendCmd() bool {
+	msg := &MsgData{}
+	msg.Header.Header.Imei = service.imei
+	msg.Header.Header.ID = NewMsgID()
+	msg.Header.Header.Status = 0
+	DeviceInfoListLock.Lock()
+	deviceInfo, ok := (*DeviceInfoList)[service.imei]
+	DeviceInfoListLock.Unlock()
+	if ok && deviceInfo != nil {
+		body := fmt.Sprintf("%015dAP06%s,%016X)", service.imei,
+			makeDeviceFamilyPhoneNumbers(&deviceInfo.Family, true), msg.Header.Header.ID)
+		msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+
+		resp := &ResponseItem{CMD_AP06, msg}
+		service.rspList = append(service.rspList, resp)
+		logging.Log(fmt.Sprintf("AP06body:%s", body))
+	}
+
+	return  true
+}
+
 func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	//logging.Log("Get Input Msg: " + string(msg.Data))
 	//logging.Log(fmt.Sprintf("imei: %d cmd: %s; go routines: %d", msg.Header.Header.Imei, StringCmd(msg.Header.Header.Cmd), runtime.NumGoroutine()))
@@ -402,7 +436,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	service.cmd = msg.Header.Header.Cmd
 
 	service.cur.Imei = service.imei
-
+	service.devVer = msg.Header.Header.DevVersion
 	if IsDeviceInCompanyBlacklist(service.imei) {
 		logging.Log(fmt.Sprintf("device %d  is in the company black list", service.imei))
 		return false
@@ -466,6 +500,15 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			if lastAckOK == 1 {
 				//回复成功，通知app成功
 				if service.cmd == DRT_SET_PHONE_NUMBERS_ACK{
+					MapDeviceVerLock.Lock()
+					DeviceVer,ok := MapDeviceVer[service.imei]
+					if ok{
+						logging.Log(fmt.Sprintf("  DeviceVer.isCmdForAP06Ack:%d:%d",DeviceVer.isCmdForAP06Ack,service.imei))
+						DeviceVer.isCmdForAP06Ack = true
+						MapDeviceVer[service.imei] = DeviceVer
+					}
+					MapDeviceVerLock.Unlock()
+
 					logging.Log("AddPendingPhotoData:3" + fmt.Sprintf("  msg.Data:%s",msg.Data))
 					ResolvePendingPhotoData(service.imei, msgIdForAck)
 				}
@@ -620,6 +663,14 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		}
 	}else if service.cmd == DRT_FETCH_FILE {
 		//BP11, 手表获取未读微聊或亲情号头像设置数目
+		/*DeviceVer,ok := MapDeviceVer[service.imei]
+		if ok {
+			if DeviceVer.isCmdForAP06Ack == false {
+				logging.Log("DRT_FETCH_FILE lastStatus")
+				service.DoSendCmd()
+			}
+		}*/
+
 		logging.Log("ProcessRspFetchFile 1")
 		bufOffset++
 		ret = service.ProcessRspFetchFile(msg.Data[bufOffset: ])
@@ -1357,6 +1408,12 @@ func MakeFileNumReplyMsg(imei uint64, fileType, chatNum int, isGT06 bool) []byte
 			cmd = "AP23"
 		}
 
+		MapDeviceVerLock.Lock()
+		var stdev DeviceVer
+		stdev.isCmdForAP06Ack = false
+		MapDeviceVer[imei] = stdev
+		MapDeviceVerLock.Unlock()
+
 		body := fmt.Sprintf("%015dAP11,%s,%02d)", imei, cmd, chatNum)
 		size := fmt.Sprintf("(%04X", 5 + len(body))
 
@@ -1686,13 +1743,20 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 	DeviceInfoListLock.Unlock()
 	if ok {
 		for i := 0; i < len(deviceInfo.Family); i++ {
-			if fields[0] == deviceInfo.Family[i].Phone {
+			if fields[0] == deviceInfo.Family[i].Phone || fields[0] == "0" {
 				bFond = true
 				break
 			}
 		}
 	}
-	if !bFond && ok {
+	MapDeviceVerLock.Lock()
+	DevVersion := service.devVer
+	var stdev DeviceVer
+	stdev.devVer = DevVersion
+	stdev.isCmdForAP06Ack = false
+	MapDeviceVer[service.imei] = stdev
+	MapDeviceVerLock.Unlock()
+	if !bFond && ok && DevVersion == "0106" {
 		//send AP06 cmd and AP34 with -1,first AP34 with -1
 		resp := &ResponseItem{CMD_AP34,  service.makeReplyMsg(false, service.makeDeviceChatAckMsg(
 			fields[0], fields[1], fields[2], fields[3], "1", -1), makeId())}
@@ -1827,6 +1891,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		//通知APP有新的微聊信息。。。
 		newChatInfo.Content = fmt.Sprintf("%swatch/%d/%d.aac", service.reqCtx.DeviceMinichatBaseUrl,
 			service.imei, fileId)
+		logging.Log("newChatInfo.Content")
 		AddChatForApp(newChatInfo)
 		service.NotifyAppWithNewMinichat(newChatInfo)
 	}
@@ -2094,28 +2159,28 @@ func (service *GT06Service) ProcessPushMicChatAck(pszMsg []byte) bool {
 	}
 
 	//if last status == -1,it means the phone didn't exist in the watch
-	//chenqw,20171214
-	lastStatus := Str2SignedNum(fields[4],10)
-	logging.Log(fmt.Sprintf("AP06lastStatus:%d",lastStatus))
-	if lastStatus == -1 {
-		msg := &MsgData{}
-		msg.Header.Header.Imei = service.imei
-		msg.Header.Header.ID = NewMsgID()
-		msg.Header.Header.Status = 0
-		DeviceInfoListLock.Lock()
-		deviceInfo, ok := (*DeviceInfoList)[service.imei]
-		DeviceInfoListLock.Unlock()
-		if ok && deviceInfo != nil {
-			body := fmt.Sprintf("%015dAP06%s,%016X)", service.imei,
-				makeDeviceFamilyPhoneNumbers(&deviceInfo.Family,  true),   msg.Header.Header.ID)
-			msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-
-			resp := &ResponseItem{CMD_AP06, msg}
-			service.rspList = append(service.rspList, resp)
-			logging.Log(fmt.Sprintf("AP06body:%s",body))
+	//chenqw,20171214  compatible with older version 0105
+	MapDeviceVerLock.Lock()
+	DevVersion := service.devVer
+	var stdev DeviceVer
+	stdev.devVer = DevVersion
+	stdev.isCmdForAP06Ack = false
+	MapDeviceVer[service.imei] = stdev
+	MapDeviceVerLock.Unlock()
+	if 0 == strings.Compare(DevVersion,"0106") {
+		lastStatus := Str2SignedNum(fields[4], 10)
+		logging.Log(fmt.Sprintf("AP06lastStatus:%d", lastStatus))
+		if lastStatus == -1 {
+			service.DoSendCmd()
+			return false
 		}
-
-		return false
+	} else {
+		/*lastStatus := Str2SignedNum(fields[4], 10)
+		if lastStatus == 0 {
+			logging.Log(fmt.Sprintf("ProcessPushMicChatAck lastStatus %d",lastStatus))
+			service.DoSendCmd()
+			return false
+		}*/
 	}
 
 	timeId := Str2Num(fields[1], 10)
@@ -2206,28 +2271,31 @@ func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
 	}
 
 	//if last status == -1,it means the phone didn't exist in the watch
-	//chenqw,20171214
-	lastStatus := Str2SignedNum(fields[3],10)
-	logging.Log(fmt.Sprintf("AP06lastStatus:%d",lastStatus))
-	if lastStatus == -1 {
-		msg := &MsgData{}
-		msg.Header.Header.Imei = service.imei
-		msg.Header.Header.ID = NewMsgID()
-		msg.Header.Header.Status = 0
-		DeviceInfoListLock.Lock()
-		deviceInfo, ok := (*DeviceInfoList)[service.imei]
-		DeviceInfoListLock.Unlock()
-		if ok && deviceInfo != nil {
-			body := fmt.Sprintf("%015dAP06%s,%016X)", service.imei,
-				makeDeviceFamilyPhoneNumbers(&deviceInfo.Family,  true),   msg.Header.Header.ID)
-			msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+	//chenqw,20171214 compatible with older version 0105
+	MapDeviceVerLock.Lock()
+	DevVersion := service.devVer
+	var stdev DeviceVer
+	stdev.devVer = DevVersion
+	stdev.isCmdForAP06Ack = false
+	MapDeviceVer[service.imei] = stdev
+	MapDeviceVerLock.Unlock()
 
-			resp := &ResponseItem{CMD_AP06, msg}
-			service.rspList = append(service.rspList, resp)
-			logging.Log(fmt.Sprintf("AP06body:%s",body))
+	if DevVersion == "0106" {
+		lastStatus := Str2SignedNum(fields[3], 10)
+		logging.Log(fmt.Sprintf("AP06lastStatus:%d", lastStatus))
+		if lastStatus == -1 {
+			service.DoSendCmd()
+
+			return false
 		}
+	} else {
+		/*lastStatus := Str2SignedNum(fields[3], 10)
+		if lastStatus == 0 {
+			logging.Log(fmt.Sprintf("ProcessPushPhotoAck lastStatus %d",lastStatus))
+			service.DoSendCmd()
 
-		return false
+			return false
+		}*/
 	}
 
 	if len(fields[3]) == 0 || len(fields[3]) != 2 || (fields[3][0] != '0' && fields[3][0] != '1') {
@@ -2416,6 +2484,7 @@ func (service *GT06Service) PushChatNum() bool {
 		chatData := service.reqCtx.GetChatDataFunc(service.imei, -1)
 		if len(chatData) > 0 {
 			//通知终端有聊天信息
+			logging.Log("PushChatNum CMD_AP11")
 			resp := &ResponseItem{CMD_AP11,  service.makeReplyMsg(false,
 				service.makeFileNumReplyMsg(ChatContentVoice, len(chatData)), makeId())}
 			service.rspList = append(service.rspList, resp)
@@ -2442,6 +2511,7 @@ func (service *GT06Service) PushNewPhotoNum() bool {
 	AppNewPhotoListLock.Unlock()
 
 	if newAvatars > 0 {
+		logging.Log("PushNewPhotoNum CMD_AP11")
 		resp := &ResponseItem{CMD_AP11,  service.makeReplyMsg(false,
 			service.makeFileNumReplyMsg(ChatContentPhoto, newAvatars), makeId())}
 		service.rspList = append(service.rspList, resp)
