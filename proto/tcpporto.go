@@ -165,6 +165,8 @@ type ChatInfo struct {
 	Content string 		`json:"content"`	//如contentType是文件类型，则Content是以时间戳id命名的文件名
 	Flags  int
 	CreateTime  uint64  //服务器生成时间
+
+	FilePath string
 }
 
 
@@ -176,6 +178,7 @@ type PhotoSettingInfo struct {
 	MsgId uint64
 	Flags  int
 	CreateTime  uint64  //服务器生成时间
+	FilePath string
 }
 
 type DataBlock struct {
@@ -795,9 +798,9 @@ func (service *GT06Service)DoResponse() []*MsgData  {
 		//ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
 	}
 
-	if service.needSendChatNum {
-		service.PushChatNum()
-	}
+	//if service.needSendChatNum {
+	//	service.PushChatNum()
+	//}
 
 	if service.needSendPhoto {
 		logging.Log(fmt.Sprint("ProcessRspFetchFile 5, ", service.needSendPhoto,
@@ -2212,7 +2215,7 @@ func (service *GT06Service) ProcessPushMicChatAck(pszMsg []byte) bool {
 
 		if  (*chatTask)[0].Data.BlockIndex != int(blockIndex){
 			AppSendChatListLock.Unlock()
-			logging.Log(fmt.Sprintf("[%d] block count or index is not invalid, %d, %d for %d, %d",
+			logging.Log(fmt.Sprintf("[%d] block count or index is not invalid, %d, %d for %d",
 				blockCount, blockIndex,
 				(*chatTask)[0].Data.BlockCount, (*chatTask)[0].Data.BlockIndex))
 
@@ -2481,13 +2484,49 @@ func (service *GT06Service) ProcessRspChat() bool {
 
 func (service *GT06Service) PushChatNum() bool {
 	if service.reqCtx.GetChatDataFunc != nil {
-		chatData := service.reqCtx.GetChatDataFunc(service.imei, -1)
-		if len(chatData) > 0 {
-			//通知终端有聊天信息
-			logging.Log("PushChatNum CMD_AP11")
-			resp := &ResponseItem{CMD_AP11,  service.makeReplyMsg(false,
-				service.makeFileNumReplyMsg(ChatContentVoice, len(chatData)), makeId())}
-			service.rspList = append(service.rspList, resp)
+		//chatData := service.reqCtx.GetChatDataFunc(service.imei, -1)
+		AppSendChatListLock.Lock()
+		chatList, ok := AppSendChatList[service.imei]
+		AppSendChatListLock.Unlock()
+		if ok {
+			length := len(*chatList)
+			if length > 0 {
+				//check the phone is valid
+				bFound := false
+
+				for i := 0; i < len(*chatList); i++ {
+					bFound = false
+					Mapimei2PhoneLock.Lock()
+					for index, _ := range Mapimei2Phone[service.imei] {
+						if Mapimei2Phone[service.imei][index] == (*chatList)[i].Info.Sender {
+							bFound = true
+							break
+						}
+					}
+					Mapimei2PhoneLock.Unlock()
+
+					if !bFound {
+						length--
+						temp := (*chatList)[0:i]
+						temp2 := (*chatList)[i+1:]
+						*chatList = temp
+						for index, _ := range temp2 {
+							*chatList = append(*chatList, temp2[index])
+						}
+						i--
+						//delete the file
+						logging.Log(fmt.Sprintf("os.Remove the file :%s,length = %d", (*chatList)[i].Info.FilePath, length))
+						os.Remove((*chatList)[i].Info.FilePath)
+					}
+				}
+			}
+			if length > 0 {
+				//通知终端有聊天信息
+				logging.Log(fmt.Sprintf("PushChatNum CMD_AP11:length:%d",length))
+				resp := &ResponseItem{CMD_AP11, service.makeReplyMsg(false,
+					service.makeFileNumReplyMsg(ChatContentVoice, length), makeId())}
+				service.rspList = append(service.rspList, resp)
+			}
 		}
 	}
 
@@ -2511,10 +2550,40 @@ func (service *GT06Service) PushNewPhotoNum() bool {
 	AppNewPhotoListLock.Unlock()
 
 	if newAvatars > 0 {
-		logging.Log("PushNewPhotoNum CMD_AP11")
-		resp := &ResponseItem{CMD_AP11,  service.makeReplyMsg(false,
-			service.makeFileNumReplyMsg(ChatContentPhoto, newAvatars), makeId())}
-		service.rspList = append(service.rspList, resp)
+		//check the phone is valid
+		bFound := false
+
+		for i := 0;i < len(*newPhotoList);i++ {
+			bFound = false
+			Mapimei2PhoneLock.Lock()
+			for index, _ := range Mapimei2Phone[service.imei] {
+				if Mapimei2Phone[service.imei][index] == (*newPhotoList)[i].Info.Member.Phone {
+					bFound = true
+					break
+				}
+			}
+			Mapimei2PhoneLock.Unlock()
+
+			if !bFound {
+				newAvatars--
+				temp := (*newPhotoList)[0:i]
+				temp2 := (*newPhotoList)[i + 1:]
+				*newPhotoList = temp
+				for index,_ := range temp2 {
+					*newPhotoList = append(*newPhotoList,temp2[index])
+				}
+				i--
+				//delete the file
+				logging.Log(fmt.Sprintf("os.Remove the photo file :%s,length = %d",(*newPhotoList)[i].Info.FilePath,newAvatars))
+				os.Remove((*newPhotoList)[i].Info.FilePath)
+			}
+		}
+		if newAvatars > 0 {
+			logging.Log(fmt.Sprintf("PushNewPhotoNum CMD_AP11,length:%d",newAvatars))
+			resp := &ResponseItem{CMD_AP11, service.makeReplyMsg(false,
+				service.makeFileNumReplyMsg(ChatContentPhoto, newAvatars), makeId())}
+			service.rspList = append(service.rspList, resp)
+		}
 	}
 
 	return true

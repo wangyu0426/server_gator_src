@@ -206,7 +206,31 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 						(*DevicePushCache[msg.Header.Header.Imei])[1] = msg
 					}
 				}else{
-					*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], msg)
+					if msg.Header.Header.Type == proto.TYPE_CMD_AP11 {
+						bFound := false
+						index := 0
+						for index,_ = range *DevicePushCache[msg.Header.Header.Imei] {
+							if (*DevicePushCache[msg.Header.Header.Imei])[index].Header.Header.Type == proto.TYPE_CMD_AP11 {
+								bFound = true
+								break
+							}
+						}
+
+						if !bFound {
+							*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], msg)
+						}else {
+							//replace
+							if (*DevicePushCache[msg.Header.Header.Imei])[index].Header.Header.Count < msg.Header.Header.Count {
+								logging.Log(fmt.Sprintf("replace:%d,%d",
+									(*DevicePushCache[msg.Header.Header.Imei])[index].Header.Header.Count,
+									msg.Header.Header.Count))
+								(*DevicePushCache[msg.Header.Header.Imei])[index] = msg
+							}
+						}
+
+					} else {
+						*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], msg)
+					}
 				}
 
 				//}else{

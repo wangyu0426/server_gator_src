@@ -17,6 +17,7 @@ import (
 	"strings"
 	"encoding/base64"
 	"math/rand"
+	"github.com/garyburd/redigo/redis"
 )
 
 const (
@@ -428,9 +429,13 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 }
 
 func login(connid uint64, username, password string, isRegister bool) bool {
-	urlRequest := "https://watch.gatorcn.com/web/index.php?r=app/auth/"
+	/*urlRequest := "https://watch.gatorcn.com/web/index.php?r=app/auth/"
 	if svrctx.Get().IsDebugLocal {
 		urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
+	}*/
+	urlRequest := "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+	if svrctx.Get().IsDebugLocal {
+		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
 	}
 	reqType := "login"
 	if isRegister {
@@ -494,7 +499,7 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 					proto.ConnidLogin[connid] = 0
 
 					imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
-					logging.Log("device: " + fmt.Sprint(imei))
+
 					locations = append(locations, svrctx.GetDeviceData(imei, svrctx.Get().PGPool))
 
 					deviceInfoResult := proto.DeviceInfoResult{}
@@ -592,11 +597,14 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 
 //忘记密码，通过服务器重设秘密
 func resetPassword(connid uint64, username string) bool {
-	urlRequest := "https://watch.gatorcn.com/web/index.php?r=app/auth/"
+	/*urlRequest := "https://watch.gatorcn.com/web/index.php?r=app/auth/"
 	if svrctx.Get().IsDebugLocal {
 		urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
+	}*/
+	urlRequest := "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+	if svrctx.Get().IsDebugLocal {
+		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
 	}
-
 	reqType := "reset"
 	urlRequest += reqType
 
@@ -626,9 +634,14 @@ func resetPassword(connid uint64, username string) bool {
 
 //有旧密码，重设新密码
 func modifyPassword(connid uint64, username, accessToken, oldPasswd, newPasswd  string) bool {
-	requesetURL := "https://watch.gatorcn.com/web/index.php?r=app/service/modpwd&access-token=" + accessToken
+	/*requesetURL := "https://watch.gatorcn.com/web/index.php?r=app/service/modpwd&access-token=" + accessToken
 	if svrctx.Get().IsDebugLocal {
 		requesetURL = "https://watch.gatorcn.com/web/index.php?r=app/service/modpwd&access-token=" + accessToken
+	}*/
+
+	requesetURL := "http://120.25.214.188/tracker/web/index.php?r=app/service/modpwd&access-token=" + accessToken
+	if svrctx.Get().IsDebugLocal {
+		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/modpwd&access-token=" + accessToken
 	}
 
 	logging.Log("url: " + requesetURL)
@@ -655,9 +668,14 @@ func modifyPassword(connid uint64, username, accessToken, oldPasswd, newPasswd  
 
 
 func handleFeedback(connid uint64, username, accessToken, feedback string) bool {
-	requesetURL := "https://watch.gatorcn.com/web/index.php?r=app/service/feedback&access-token=" + accessToken
+	/*requesetURL := "https://watch.gatorcn.com/web/index.php?r=app/service/feedback&access-token=" + accessToken
 	if svrctx.Get().IsDebugLocal {
 		requesetURL = "https://watch.gatorcn.com/web/index.php?r=app/service/feedback&access-token=" + accessToken
+	}*/
+
+	requesetURL := "http://120.25.214.188/tracker/web/index.php?r=app/service/feedback&access-token=" + accessToken
+	if svrctx.Get().IsDebugLocal {
+		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/feedback&access-token=" + accessToken
 	}
 
 	logging.Log("url: " + requesetURL)
@@ -1028,7 +1046,7 @@ func addDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 				}
 				proto.DeviceInfoListLock.Unlock()
 				if isFound {
-					phoneNumbers = proto.MakeFamilyPhoneNumbers(&family)
+					phoneNumbers = proto.MakeFamilyPhoneNumbersEx(&family)
 					if isAdmin {
 						//如果是管理员，则更新手表对应的字段数据，非管理员仅更新关注列表和对应的亲情号
 						strSqlUpdateDeviceInfo = fmt.Sprintf("update watchinfo set OwnerName='%s', CountryCode='%s', " +
@@ -1186,6 +1204,21 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 			Data: string(resultData), ConnID: connid})
 		return  false
 	}
+
+	//通过devices IMEI删除通知数据(报警和微聊),不要推送至手机端,chenqw,20180105
+	var conn redis.Conn
+	conn = redisPool.Get()
+	if conn == nil {
+		return false
+	}
+	defer conn.Close()
+	_,err = conn.Do("del",fmt.Sprintf("ntfy:%d", imei))
+	if err != nil {
+		logging.Log("deleteDeviceByUser:" + err.Error())
+		return false
+	}
+	//end chenqw
+
 	resultData, _ := json.Marshal(&result)
 	appServerChan <- (&proto.AppMsgData{Cmd: proto.DeleteDeviceAckCmdName, Imei: imei,
 		UserName: params.UserName, AccessToken:params.AccessToken,
@@ -1218,7 +1251,7 @@ func AddDeviceManagerLoop()  {
 	}
 }
 
-func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsString []bool)  bool {
+func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsString []bool)  (bool,[]proto.SettingParam) {
 	phoneNumbers := ""
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
@@ -1237,7 +1270,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 						proto.DeviceInfoListLock.Unlock()
 						logging.Log(fmt.Sprintf("[%d] bad data for fence setting %d, err(%s) for %s",
 							imei, setting.Index, err.Error(), setting.NewValue))
-						return false
+						return false,nil
 					}
 				}
 				settings[index].FieldName += proto.Num2Str(uint64(setting.Index),10)
@@ -1289,23 +1322,56 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 					for i := 0; i < len(deviceInfo.Family); i++ {
 						if i + 1 == setting.Index {
 							proto.Mapimei2PhoneLock.Lock()
-							for index,_ := range proto.Mapimei2Phone[imei]{
-								if proto.Mapimei2Phone[imei][index] == deviceInfo.Family[i + 1].Phone {
-									temp := proto.Mapimei2Phone[imei][0:index + 1]
-									temp2 := proto.Mapimei2Phone[imei][index + 1 :]
-									proto.Mapimei2Phone[imei] = temp
-									copy(proto.Mapimei2Phone[imei],temp2)
+							for index := 0;index < len(proto.Mapimei2Phone[imei]);index++{
+								if proto.Mapimei2Phone[imei][index] == deviceInfo.Family[i].Phone {
+									if index + 1 < len(proto.Mapimei2Phone[imei]) {
+										temp := proto.Mapimei2Phone[imei][0:index]
+										temp2 := proto.Mapimei2Phone[imei][index+1:]
+										proto.Mapimei2Phone[imei] = temp
+										//copy(proto.Mapimei2Phone[imei], temp2)
+										for j := 0;j < len(temp2);j++{
+											temp = append(temp,temp2[j])
+										}
+										proto.Mapimei2Phone[imei] = temp
+									}else {
+										temp := proto.Mapimei2Phone[imei][0:index]
+										proto.Mapimei2Phone[imei] = temp
+									}
 								}
 							}
 							proto.Mapimei2PhoneLock.Unlock()
-							newPhone := proto.ParseSinglePhoneNumberString("",-1)
-							deviceInfo.Family[i] = newPhone
+							//newPhone := proto.ParseSinglePhoneNumberString("",-1)
+							//deviceInfo.Family[i] = newPhone
 						}
 					}
+
+					newContacts := [proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember{}
+					count := 0
+					for i := 0;i < len(deviceInfo.Family);i++ {
+						//前面3个phone不用往前移,
+						if setting.Index > 3 {
+							if i + 1 != setting.Index {
+								newContacts[count] = deviceInfo.Family[i]
+								count++
+							}
+						} else {
+							if i + 1 == setting.Index {
+								newPhone := proto.ParseSinglePhoneNumberString("",-1)
+								deviceInfo.Family[i] = newPhone
+							}
+						}
+					}
+
+					if setting.Index > 3 {
+						deviceInfo.Family = newContacts
+					}
+
 				}else{
+					logging.Log(fmt.Sprintf("enter add new phone......"))
+					var newPhone proto.FamilyMember
 					for i := 0; i < len(deviceInfo.Family); i++ {
 						//curPhone := proto.ParseSinglePhoneNumberString(setting.CurValue, setting.Index)
-						newPhone := proto.ParseSinglePhoneNumberString(setting.NewValue, setting.Index - 1)
+						newPhone = proto.ParseSinglePhoneNumberString(setting.NewValue, setting.Index - 1)
 						//fullPhoneNnumber := "00" + deviceInfo.Family[i].CountryCode + deviceInfo.Family[i].Phone
 						/*if len(curPhone.Phone) == 0 { //之前没有号码，直接寻找一个空位就可以了
 							if len(deviceInfo.Family[i].Phone) == 0 {
@@ -1326,14 +1392,26 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 						bkAvatar := deviceInfo.Family[i].Avatar
 						deviceInfo.Family[setting.Index - 1] = newPhone
 						deviceInfo.Family[setting.Index - 1].Avatar = bkAvatar
-
-						proto.Mapimei2PhoneLock.Lock()
-						proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],newPhone.Phone)
-						proto.Mapimei2PhoneLock.Unlock()
 					}
+
+					proto.Mapimei2PhoneLock.Lock()
+					if len(proto.Mapimei2Phone[imei]) == 0 {
+						logging.Log(fmt.Sprintf("add new phone :%s", newPhone.Phone))
+						proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei], newPhone.Phone)
+					}else {
+						for i := 0; i < len(proto.Mapimei2Phone[imei]); i++ {
+							if strings.Contains(proto.Mapimei2Phone[imei][i], newPhone.Phone) {
+								logging.Log(fmt.Sprintf("add new phone 2 :%s", newPhone.Phone))
+								continue
+								logging.Log(fmt.Sprintf("add new phone 1 :%s", newPhone.Phone))
+								proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei], newPhone.Phone)
+							}
+						}
+					}
+					proto.Mapimei2PhoneLock.Unlock()
 				}
 
-				phoneNumbers = proto.MakeFamilyPhoneNumbers(&deviceInfo.Family)
+				phoneNumbers = proto.MakeFamilyPhoneNumbersEx(&deviceInfo.Family)
 				settings[index].NewValue = phoneNumbers
 
 			case proto.ContactAvatarsFieldName:
@@ -1357,7 +1435,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 							proto.DeviceInfoListLock.Unlock()
 							logging.Log(fmt.Sprintf("[%d] bad data for watch alarm setting %d, err(%s) for %s",
 								imei, setting.Index, err.Error(), setting.NewValue))
-							return false
+							return false, nil
 						}
 					}
 
@@ -1365,7 +1443,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 				}else{
 					proto.DeviceInfoListLock.Unlock()
 					logging.Log(fmt.Sprintf("[%d] bad index %d for delete watch alarm", imei, setting.Index))
-					return false
+					return false,nil
 				}
 			case proto.HideSelfFieldName:
 				deviceInfo.HideTimerOn = (proto.Str2Num(setting.NewValue, 10)) == 1
@@ -1387,16 +1465,21 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 					proto.DeviceInfoListLock.Unlock()
 					logging.Log(fmt.Sprintf("[%d] bad data for hide timer setting %d, err(%s) for %s",
 						imei, setting.Index, err.Error(), setting.NewValue))
-					return false
+					return false,nil
 				}
 			default:
 			}
 		}
+
+
 	}
 	proto.DeviceInfoListLock.Unlock()
 
 	//更新数据库
-	return UpdateDeviceSettingInDB(imei, settings, valulesIsString)
+
+	ret := UpdateDeviceSettingInDB(imei, settings, valulesIsString)
+	fmt.Printf("UpdateDeviceSettingInDB:" + settings[0].NewValue + "\n")
+	return ret,settings
 }
 
 func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, isAddDevice bool,
@@ -1487,8 +1570,9 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 	}
 
 	ret := true
+	var settings []proto.SettingParam
 	if isAddDevice == false {
-		ret = SaveDeviceSettings(imei, params.Settings, valulesIsString)
+		ret,settings = SaveDeviceSettings(imei, params.Settings, valulesIsString)
 	}
 
 	result := proto.HttpAPIResult{
@@ -1556,12 +1640,15 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 				}
 
 				deviceInfoResult.FamilyNumber = familyNumber
+				phoneNumbers := proto.MakeFamilyPhoneNumbersEx(&deviceInfo.Family)
+				deviceInfoResult.PhoneNumbers = phoneNumbers
 				resultJson, _ := json.Marshal(&deviceInfoResult)
 				result.Data = string([]byte(resultJson))
 			}
 			proto.DeviceInfoListLock.Unlock()
 		}else{
-			settingResult := proto.DeviceSettingResult{Settings: params.Settings}
+			fmt.Printf("Settings:" + settings[0].NewValue)
+			settingResult := proto.DeviceSettingResult{Settings: settings}
 			settingResultJson, _ := json.Marshal(settingResult)
 			result.Data = string([]byte(settingResultJson))
 		}
@@ -1797,9 +1884,14 @@ func parseUint8Array(data interface{}) string {
 }
 
 func checkOwnedDevices(AccessToken string)  []string {
-	url := "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
+	/*url := "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
 	if svrctx.Get().IsDebugLocal {
 		url = "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
+	}*/
+
+	url := "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + AccessToken
+	if svrctx.Get().IsDebugLocal {
+		url = "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + AccessToken
 	}
 
 	//logging.Log("url: " + url)

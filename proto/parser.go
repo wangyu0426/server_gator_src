@@ -141,6 +141,10 @@ const (
 	CMD_GT3_AP28_SET_AIRPLANE_MODE			//AP28 -- set airplane mode
 )
 
+const (
+	TYPE_CMD_AP11 = iota + 1
+)
+
 
 var gt3reply_commands = []string{
 	"AP00",
@@ -281,6 +285,9 @@ type MsgHeader struct {
 	Imei  uint64 /*设备的IMEI*/
 
 	DevVersion string
+
+	Count int   //cmd AP11
+	Type int
 
 }
 
@@ -1306,6 +1313,29 @@ func MakeFamilyPhoneNumbers(family *[MAX_FAMILY_MEMBER_NUM]FamilyMember) string 
 	return phoneNumbers
 }
 
+func MakeFamilyPhoneNumbersEx(family *[MAX_FAMILY_MEMBER_NUM]FamilyMember) string {
+	phoneNumbers := ""
+	for i := 0; i < len(family); i++ {
+		if  i > 0 {
+			phoneNumbers += ","
+		}
+		if family[i].Phone == "" {
+			phoneNumbers += "|0|"
+			continue
+		}
+		if family[i].Name == "" {
+			family[i].Name = "0"
+		}
+		if family[i].Username == "" {
+			family[i].Username = "0"
+		}
+		phoneNumbers += fmt.Sprintf("%s|%d|%s|%d|%s",  family[i].Phone, family[i].Type, family[i].Name,
+		family[i].IsAdmin,family[i].Username)
+	}
+
+	return phoneNumbers
+}
+
 func MakeDeviceInfoResult(deviceInfo *DeviceInfo) DeviceInfoResult {
 	result := DeviceInfoResult{}
 	result.IMEI = Num2Str(deviceInfo.Imei, 10)
@@ -1570,7 +1600,7 @@ func ParseSinglePhoneNumberString(phone string, i int)  FamilyMember{
 	}
 
 	member.Index = i
- 	if len(fields) >= 5 {
+ 	if len(fields) >= 4 {
 		member.IsAdmin = int(Str2Num(fields[3], 10))
 		member.Username = fields[4]
 	}
