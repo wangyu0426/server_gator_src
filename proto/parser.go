@@ -515,7 +515,7 @@ type DeviceAddParams struct {
 	TimeZone  string 	`json:"timezone"`
 
 	//chenqw
-	AccountType int `json:"account_type"`
+	AccountType int `json:"accountType"`
 }
 
 type SettingParam struct {
@@ -712,7 +712,7 @@ type FamilyMember struct {
 	Type int `json:"type"`
 	Index int `json:"index"`
 
-	IsAdmin int `json:"is_admin"`
+	IsAdmin int `json:"is_admin"`		//0:管理员,1:非管理员
 	Username string `json:"username"`
 }
 
@@ -815,7 +815,7 @@ type DeviceInfoResult struct {
 	HideVoiceMonitor bool
 	ApnSms string
 
-	AccountType int
+	AccountType int		//0:管理员,1:非管理员
 }
 
 type WIFIInfo  struct  {
@@ -891,6 +891,7 @@ var DevConnidenc = map[uint64]bool{}
 //dev's max logining count when login with wrong password
 var LoginTimeOut = map[uint64]int64{}
 var ConnidLogin = map[uint64]int{}
+var ConnidUserName = map[string]string{}
 func init()  {
 	//Gt3Test()
 	//os.Exit(0)
@@ -1343,7 +1344,7 @@ func MakeDeviceInfoResult(deviceInfo *DeviceInfo) DeviceInfoResult {
 	result.Company = deviceInfo.Company
 	result.SimID = deviceInfo.SimID
 	result.OwnerName = deviceInfo.OwnerName
-	result.PhoneNumbers = MakeFamilyPhoneNumbers(&deviceInfo.Family)
+	result.PhoneNumbers = MakeFamilyPhoneNumbersEx(&deviceInfo.Family)
 
 	for i, m := range deviceInfo.Family {
 		result.ContactAvatar[i] = m.Avatar
@@ -1455,6 +1456,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		deviceInfo.Imei = Str2Num(parseUint8Array(IMEI), 10)
 		deviceInfo.OwnerName = parseUint8Array(OwnerName)
 		ParseFamilyMembers(parseUint8Array(PhoneNumbers), &deviceInfo.Family)
+		//fmt.Printf("ContactAvatar:##%s\n",ContactAvatar)
 		ParseContactAvatars(parseUint8Array(ContactAvatar), &deviceInfo.Family)
 		deviceInfo.TimeZone  = ParseTimeZone(parseUint8Array(TimeZone))
 		deviceInfo.CountryCode = parseUint8Array(CountryCode)
@@ -1610,9 +1612,12 @@ func ParseSinglePhoneNumberString(phone string, i int)  FamilyMember{
 
 func ParseContactAvatars(contactAvatars string, familyMemberList *[MAX_FAMILY_MEMBER_NUM]FamilyMember)  {
 	avatars := ContactAvatars{}
+	if contactAvatars == ""{
+		return
+	}
 	err := json.Unmarshal([]byte(contactAvatars), &avatars)
 	if err != nil {
-		//fmt.Println("parse contact avatars failed, ", err.Error())
+		logging.Log(fmt.Sprintf("parse contact avatars failed,contactAvatars = %s,err = %s ",contactAvatars,err.Error()))
 		return
 	}
 

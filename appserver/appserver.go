@@ -251,7 +251,7 @@ func AppConnManagerLoop() {
 					logging.Log("parse json data for locate now ack failed, " + err.Error() + ", " + msg.Data)
 					break
 				}
-
+				logging.Log(fmt.Sprintf("AppRequestTcpConnParams IMEI :%s,phone:%s",params.Params.Imei,params.Params.Phone))
 				conn := getAppConnByConnID(params.Params.UserName, params.ConnID)
 				if conn != nil  {
 					result := proto.HttpAPIResult{ErrCode: 1, Data: proto.DeviceLocateNowSms}
@@ -285,14 +285,57 @@ func AppConnManagerLoop() {
 				imeiAppUsers, _ = AppDeviceTable[msg.Imei]
 			}
 
+			var param proto.HeartbeatResult
+			if msg.Cmd == proto.HearbeatAckCmdName {
+				err := json.Unmarshal([]byte(msg.Data),&param)
+				if err != nil {
+					logging.Log("parse json data for HearbeatAck failed, " + err.Error() + ", " + msg.Data)
+					break
+				}
+
+			}
+
 			if len(imeiAppUsers) >  0 {
 				for username, _ := range imeiAppUsers {
+					logging.Log(fmt.Sprintf("imeiAppUsers %s len = %d",username,len(imeiAppUsers)))
 					userConnTable := getAppConnsByUserName(username)
 					if userConnTable != nil {
 						for _, c := range userConnTable {
 							if c != nil  && c.responseChan != nil {
-								c.responseChan <- msg
+								if msg.Cmd == proto.HearbeatAckCmdName {
+									proto.DeviceInfoListLock.Lock()
+									deviceInfo, ok := (*proto.DeviceInfoList)[msg.Imei]
+									proto.DeviceInfoListLock.Unlock()
+									for k, _ := range param.Minichat {
+										if ok{
+											for j,_ := range deviceInfo.Family {
+												if proto.ConnidUserName[username] == "" ||
+													deviceInfo.Family[j].Phone == "" ||
+													len(deviceInfo.Family[j].Username) <= 1 {
+													continue
+												}
+												logging.Log(fmt.Sprintf("Receiver %s Phone = %s username %s 2 %s",
+													param.Minichat[k].Receiver,deviceInfo.Family[j].Phone,proto.ConnidUserName[username],
+													deviceInfo.Family[j].Username))
+												if param.Minichat[k].Receiver == deviceInfo.Family[j].Phone && param.Minichat[k].Receiver != "0"{
+													if proto.ConnidUserName[username] == deviceInfo.Family[j].Username{
+														logging.Log("responseChan")
+														c.responseChan <- msg
+														continue
+													}
+												}
+												if param.Minichat[k].Receiver == "0"{
+													c.responseChan <- msg
+												}
+											}
+										}
+									}
+								}else {
+									logging.Log("other cmd")
+									c.responseChan <- msg
+								}
 							}
+
 						}
 					}
 				}
@@ -369,7 +412,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	//}
 
 	imeiUint64 := proto.Str2Num(imei, 10)
-	logging.Log(fmt.Sprintf("msgId:%s",r.FormValue("msgId")))
+	logging.Log(fmt.Sprintf("msgId:%s index=%s",r.FormValue("msgId"),r.FormValue("index")))
 	if r.FormValue("msgId") != "" {
 		//is add,  is null when modify
 		proto.Mapimei2Phone[imeiUint64] = append(proto.Mapimei2Phone[imeiUint64],phone)
@@ -379,6 +422,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 
 	proto.Mapimei2PhoneLock.Lock()
 	for index,_ := range proto.Mapimei2Phone[imeiUint64] {
+		fmt.Printf("Mapimei2Phone:%s\n",proto.Mapimei2Phone[imeiUint64][index])
 		if proto.Mapimei2Phone[imeiUint64][index] == phone {
 			bFound = true;
 			break
@@ -869,7 +913,7 @@ func JSON2PHP(w http.ResponseWriter, ret int,  data interface{}) {
 	////unescapedString := bytes.Replace([]byte(buf), andHex, and, -1)
 	//
 	encodedString := buf //strings.Replace(buf, "\\", "\\\\", -1)
-	fmt.Println("JSON2PHP" + encodedString)
+	//fmt.Println("JSON2PHP" + encodedString)
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET,OPTIONS,DELETE,PUT")
 	w.Header().Set("Access-Control-Allow-Headers", "x-requested-with,content-type")

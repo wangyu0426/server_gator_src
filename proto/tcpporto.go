@@ -1894,7 +1894,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		//通知APP有新的微聊信息。。。
 		newChatInfo.Content = fmt.Sprintf("%swatch/%d/%d.aac", service.reqCtx.DeviceMinichatBaseUrl,
 			service.imei, fileId)
-		logging.Log("newChatInfo.Content")
+		logging.Log(fmt.Sprintf("newChatInfo.Content:%s",newChatInfo.Content))
 		AddChatForApp(newChatInfo)
 		service.NotifyAppWithNewMinichat(newChatInfo)
 	}
@@ -2506,6 +2506,10 @@ func (service *GT06Service) PushChatNum() bool {
 					Mapimei2PhoneLock.Unlock()
 
 					if !bFound {
+						//delete the file
+						logging.Log(fmt.Sprintf("os.Remove the file :%s,length = %d", (*chatList)[i].Info.FilePath, length))
+						os.Remove((*chatList)[i].Info.FilePath)
+
 						length--
 						temp := (*chatList)[0:i]
 						temp2 := (*chatList)[i+1:]
@@ -2514,9 +2518,6 @@ func (service *GT06Service) PushChatNum() bool {
 							*chatList = append(*chatList, temp2[index])
 						}
 						i--
-						//delete the file
-						logging.Log(fmt.Sprintf("os.Remove the file :%s,length = %d", (*chatList)[i].Info.FilePath, length))
-						os.Remove((*chatList)[i].Info.FilePath)
 					}
 				}
 			}
@@ -2565,6 +2566,10 @@ func (service *GT06Service) PushNewPhotoNum() bool {
 			Mapimei2PhoneLock.Unlock()
 
 			if !bFound {
+				//delete the file
+				logging.Log(fmt.Sprintf("os.Remove the photo file :%s,length = %d",(*newPhotoList)[i].Info.FilePath,newAvatars))
+				os.Remove((*newPhotoList)[i].Info.FilePath)
+
 				newAvatars--
 				temp := (*newPhotoList)[0:i]
 				temp2 := (*newPhotoList)[i + 1:]
@@ -2573,9 +2578,6 @@ func (service *GT06Service) PushNewPhotoNum() bool {
 					*newPhotoList = append(*newPhotoList,temp2[index])
 				}
 				i--
-				//delete the file
-				logging.Log(fmt.Sprintf("os.Remove the photo file :%s,length = %d",(*newPhotoList)[i].Info.FilePath,newAvatars))
-				os.Remove((*newPhotoList)[i].Info.FilePath)
 			}
 		}
 		if newAvatars > 0 {
@@ -3840,6 +3842,19 @@ func gcj_To_Gps84(lat, lon float64, mgLat, mgLon *float64) {
 }
 
 func AddChatForApp(chat ChatInfo){
+	AppChatListLock.Lock()
+	chatMap, ok := AppChatList[chat.Imei]
+	if ok  &&  chatMap != nil {
+		AppChatList[chat.Imei][chat.FileID] = chat
+	}else{
+		AppChatList[chat.Imei] = map[uint64]ChatInfo{}
+		AppChatList[chat.Imei][chat.FileID] = chat
+	}
+
+	AppChatListLock.Unlock()
+}
+
+func AddChatForAppEx(chat ChatInfo){
 	AppChatListLock.Lock()
 	chatMap, ok := AppChatList[chat.Imei]
 	if ok  &&  chatMap != nil {
