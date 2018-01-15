@@ -1581,8 +1581,9 @@ func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan
 
 	fmt.Println("NotifyAppWithNewMinichat heartbeat-ack: ", MakeStructToJson(result))
 
-	result.Minichat = append(result.Minichat, GetChatListForApp(imei, "")...)
-
+	//result.Minichat = append(result.Minichat, GetChatListForApp(imei, "")...)
+	//只把当前要通知的微聊发送出去
+	result.Minichat = append(result.Minichat,chat)
 	appNotifyChan  <- &AppMsgData{Cmd: HearbeatAckCmdName,
 		Imei: imei,
 		Data: MakeStructToJson(result), ConnID: 0}

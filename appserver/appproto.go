@@ -402,7 +402,9 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 						logging.Log(fmt.Sprintf("handleHeartBeat %s Phone = %s username %s 2 %s",
 							result.Minichat[k].Receiver,deviceInfo.Family[j].Phone,proto.ConnidUserName[params.UserName],
 							deviceInfo.Family[j].Username))
-						if result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && result.Minichat[k].Receiver != "0"{
+						if (result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && result.Minichat[k].Receiver != "0") ||
+						//Receiver为空表示是从手机APP端发送至手表
+							len(result.Minichat[k].Receiver) == 0 {
 							if proto.ConnidUserName[params.UserName] == deviceInfo.Family[j].Username{
 								logging.Log("handleHeartBeat responseChan")
 								tmpMinichat = append(tmpMinichat,result.Minichat[k])
@@ -444,7 +446,8 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 						logging.Log(fmt.Sprintf("handleHeartBeat %s Phone = %s username %s 2 %s",
 							result.Minichat[k].Receiver,deviceInfo.Family[j].Phone,proto.ConnidUserName[params.UserName],
 							deviceInfo.Family[j].Username))
-						if result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && result.Minichat[k].Receiver != "0"{
+						if (result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && result.Minichat[k].Receiver != "0") ||
+							len(result.Minichat[k].Receiver) == 0 {
 							if proto.ConnidUserName[params.UserName] == deviceInfo.Family[j].Username{
 								logging.Log("handleHeartBeat responseChan")
 								tmpMinichat = append(tmpMinichat,result.Minichat[k])
@@ -956,6 +959,10 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 	if ok && deviceInfo != nil {
+
+		//refresh.刷新时也要保存
+		proto.ConnidUserName[params.UserName] = params.UserName
+
 		found = true
 		deviceInfoResult = proto.MakeDeviceInfoResult(deviceInfo)
 		if len(deviceInfo.Avatar) == 0 || (strings.Contains(deviceInfo.Avatar, ".jpg") == false &&
@@ -1421,7 +1428,15 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 		if bCheckAdmin {
 			newContacts := [proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember{}
 			count := 0
-			for i := 0; i < len(deviceInfo.Family); i++ {
+			for i := 0; i < 3; i++ {
+				if deviceInfo.Family[i].Phone != "" {
+					newContacts[count] = deviceInfo.Family[i]
+					count++
+				}
+			}
+			//白名单位置只能从第四个位置开始
+			count = 3
+			for i := 3; i < len(deviceInfo.Family); i++ {
 				if deviceInfo.Family[i].Phone != "" {
 					newContacts[count] = deviceInfo.Family[i]
 					count++
@@ -1466,24 +1481,9 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 	ContactAvatar := makeContactAvatars(&deviceInfo.Family)
 
 	proto.Mapimei2PhoneLock.Lock()
+	proto.Mapimei2Phone[imei] = []string{}
 	for i = 0;i < len(deviceInfo.Family);i++ {
-		for index := 0; index < len(proto.Mapimei2Phone[imei]); index++ {
-			if proto.Mapimei2Phone[imei][index] == deviceInfo.Family[i].Phone {
-				if index+1 < len(proto.Mapimei2Phone[imei]) {
-					temp := proto.Mapimei2Phone[imei][0:index]
-					temp2 := proto.Mapimei2Phone[imei][index+1:]
-					proto.Mapimei2Phone[imei] = temp
-					//copy(proto.Mapimei2Phone[imei], temp2)
-					for j := 0; j < len(temp2); j++ {
-						temp = append(temp, temp2[j])
-					}
-					proto.Mapimei2Phone[imei] = temp
-				} else {
-					temp := proto.Mapimei2Phone[imei][0:index]
-					proto.Mapimei2Phone[imei] = temp
-				}
-			}
-		}
+		proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[i].Phone)
 	}
 	proto.Mapimei2PhoneLock.Unlock()
 
@@ -1634,25 +1634,6 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 					//要设置成只有管理员才可以删除，非管理员可以修改
 					for i := 0; i < len(deviceInfo.Family); i++ {
 						if i + 1 == setting.Index {
-							proto.Mapimei2PhoneLock.Lock()
-							for index := 0;index < len(proto.Mapimei2Phone[imei]);index++{
-								if proto.Mapimei2Phone[imei][index] == deviceInfo.Family[i].Phone {
-									if index + 1 < len(proto.Mapimei2Phone[imei]) {
-										temp := proto.Mapimei2Phone[imei][0:index]
-										temp2 := proto.Mapimei2Phone[imei][index+1:]
-										proto.Mapimei2Phone[imei] = temp
-										//copy(proto.Mapimei2Phone[imei], temp2)
-										for j := 0;j < len(temp2);j++{
-											temp = append(temp,temp2[j])
-										}
-										proto.Mapimei2Phone[imei] = temp
-									}else {
-										temp := proto.Mapimei2Phone[imei][0:index]
-										proto.Mapimei2Phone[imei] = temp
-									}
-								}
-							}
-							proto.Mapimei2PhoneLock.Unlock()
 							//newPhone := proto.ParseSinglePhoneNumberString("",-1)
 							//deviceInfo.Family[i] = newPhone
 							if len(deviceInfo.Family[i].Username) > 1{
@@ -1711,6 +1692,31 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 					for i := 0; i < len(deviceInfo.Family); i++ {
 						deviceInfo.Family[i].Index = i + 1
 					}
+
+					proto.Mapimei2PhoneLock.Lock()
+					/*for index := 0;index < len(proto.Mapimei2Phone[imei]);index++{
+						if proto.Mapimei2Phone[imei][index] == deviceInfo.Family[i].Phone {
+							if index + 1 < len(proto.Mapimei2Phone[imei]) {
+								temp := proto.Mapimei2Phone[imei][0:index]
+								temp2 := proto.Mapimei2Phone[imei][index+1:]
+								proto.Mapimei2Phone[imei] = temp
+								//copy(proto.Mapimei2Phone[imei], temp2)
+								for j := 0;j < len(temp2);j++{
+									temp = append(temp,temp2[j])
+								}
+								proto.Mapimei2Phone[imei] = temp
+							}else {
+								temp := proto.Mapimei2Phone[imei][0:index]
+								proto.Mapimei2Phone[imei] = temp
+							}
+						}
+					}*/
+					proto.Mapimei2Phone[imei] = []string{}
+					for i := 0;i < len(deviceInfo.Family);i++ {
+						proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[i].Phone)
+					}
+
+					proto.Mapimei2PhoneLock.Unlock()
 
 				}else{
 					//只有管理员才可以添加,delete亲情号码
@@ -1950,9 +1956,9 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 	}
 
 	ret := true
-	var settings []proto.SettingParam
+	//var settings []proto.SettingParam
 	if isAddDevice == false {
-		ret,settings = SaveDeviceSettings(imei, params.Settings, valulesIsString)
+		ret,_ = SaveDeviceSettings(imei, params.Settings, valulesIsString)
 	}
 
 	result := proto.HttpAPIResult{
@@ -2035,8 +2041,8 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 			}
 			proto.DeviceInfoListLock.Unlock()
 		}else{
-			fmt.Printf("Settings:" + settings[0].NewValue)
-			settingResult := proto.DeviceSettingResult{Settings: settings}
+			fmt.Printf("Settings:" + params.Settings[0].NewValue)
+			settingResult := proto.DeviceSettingResult{Settings: params.Settings}
 			settingResultJson, _ := json.Marshal(settingResult)
 			result.Data = string([]byte(settingResultJson))
 		}
