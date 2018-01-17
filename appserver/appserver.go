@@ -416,7 +416,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	imeiUint64 := proto.Str2Num(imei, 10)
 	logging.Log(fmt.Sprintf("msgId:%s index=%s",r.FormValue("msgId"),r.FormValue("index")))
 	if r.FormValue("msgId") != "" {
-		//is add,  is null when modify
+		//msgId添加不为空，修改为空
 		proto.Mapimei2Phone[imeiUint64] = append(proto.Mapimei2Phone[imeiUint64],phone)
 	}
 	//check the phone is valid
@@ -1495,7 +1495,7 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//logging.Log("GetNotifications Params: " + proto.MakeStructToJson(&params))
+	logging.Log("GetNotifications Params: " + proto.MakeStructToJson(&params))
 
 	if params.AccessToken == "" || len(params.Devices) == 0 || len(params.LastUpdates) == 0 || (len(params.Devices)  != len(params.LastUpdates)){
 		result.ErrCode = -1
@@ -1534,17 +1534,41 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+
+			bOk := false
 			arr := reply.([]interface{})
 			for _, item := range arr {
 				alarmContent := parseUint8Array(item)
 				if alarmContent != "" {
 					alarmItem := proto.AlarmItem{}
 					err := json.Unmarshal([]byte(alarmContent), &alarmItem)
-					if err != nil {
-						logging.Log(fmt.Sprintf("parse json string failed for ntfy:%d, err: %s", imei, err.Error()))
-					}else{
-						if alarmItem.Time >  params.LastUpdates[i] {
-							deviceAlarms.Alarms = append(deviceAlarms.Alarms, alarmItem)
+
+					if len(alarmItem.FamilyPhone) > 1 {
+						proto.DeviceInfoListLock.Lock()
+						deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+						if ok{
+							for k,_ := range deviceInfo.Family{
+								//单独推送,
+								if deviceInfo.Family[k].Phone == alarmItem.FamilyPhone && len(deviceInfo.Family[k].Username) > 1{
+									if proto.AccessTokenMap[params.AccessToken] == deviceInfo.Family[k].Username{
+										bOk = true
+									}
+								}
+							}
+						}
+						proto.DeviceInfoListLock.Unlock()
+
+					} else {
+						bOk = true
+					}
+
+					if bOk {
+						if err != nil {
+							logging.Log(fmt.Sprintf("parse json string failed for ntfy:%d, err: %s", imei, err.Error()))
+						} else {
+							if alarmItem.Time > params.LastUpdates[i] {
+								deviceAlarms.Alarms = append(deviceAlarms.Alarms, alarmItem)
+							}
 						}
 					}
 				}
@@ -1573,7 +1597,7 @@ func ResetDeviceIPPort(w http.ResponseWriter, r *http.Request) {
 		result.ErrCode = -1
 		result.ErrMsg = "parse json params failed"
 		status = 200
-		JSON(w, status, &result)
+		JSON2PHP(w, status, &result)
 		return
 	}
 
@@ -1583,7 +1607,7 @@ func ResetDeviceIPPort(w http.ResponseWriter, r *http.Request) {
 		result.ErrCode = -1
 		result.ErrMsg = "params cannot be empy"
 		status = 200
-		JSON(w, status, &result)
+		JSON2PHP(w, status, &result)
 		return
 	}
 
@@ -1592,7 +1616,7 @@ func ResetDeviceIPPort(w http.ResponseWriter, r *http.Request) {
 		result.ErrCode = -1
 		result.ErrMsg = "company name or access token invalid"
 		status = 200
-		JSON(w, status, &result)
+		JSON2PHP(w, status, &result)
 		return
 	}
 
@@ -1601,7 +1625,7 @@ func ResetDeviceIPPort(w http.ResponseWriter, r *http.Request) {
 		result.ErrCode = -1
 		result.ErrMsg = "resetIPPort invalid"
 		status = 200
-		JSON(w, status, &result)
+		JSON2PHP(w, status, &result)
 		return
 	}
 
@@ -1625,7 +1649,7 @@ func ResetDeviceIPPort(w http.ResponseWriter, r *http.Request) {
 		result.ErrCode = -1
 		result.ErrMsg = errmsg
 		status = 200
-		JSON(w, status, &result)
+		JSON2PHP(w, status, &result)
 		return
 	}
 
@@ -1640,11 +1664,11 @@ func ResetDeviceIPPort(w http.ResponseWriter, r *http.Request) {
 		result.ErrCode = -1
 		result.ErrMsg = errmsg
 		status = 200
-		JSON(w, status, &result)
+		JSON2PHP(w, status, &result)
 		return
 	}
 
-	JSON(w, status, &result)
+	JSON2PHP(w, status, &result)
 }
 
 func IsCompanyAccessTokenValid(companyName, accessToken string)  bool {

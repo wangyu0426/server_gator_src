@@ -259,7 +259,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 								//0， 不需要手表回复确认，直接发送完并删除
 								//对于AP11,需要加30s延迟，不能连续发送太快
 								if cachedMsg.Header.Header.Cmd == proto.CMD_AP11 {
-									if (int64(cachedMsg.Header.Header.ID) - int64(c.lastPushFileNumTime)) / int64(time.Second) >= 30 {
+									if (int64(cachedMsg.Header.Header.ID) - int64(c.lastPushFileNumTime)) / int64(time.Second) >= 15 {
 										c.responseChan <- cachedMsg
 										c.lastPushFileNumTime = int64(cachedMsg.Header.Header.ID)
 									}

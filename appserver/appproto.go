@@ -536,6 +536,8 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	logging.Log("devices: " + fmt.Sprint(devices))
 	if status != nil && accessToken != nil {
 		proto.ConnidUserName[username] = username
+		proto.AccessTokenMap[fmt.Sprint(accessToken)] = username
+
 		AddAccessToken(accessToken.(string))
 		if isRegister == false {
 			if devices != nil {
@@ -583,6 +585,10 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 								deviceInfoResult.Name = deviceInfo.Family[k].Name
 								deviceInfoResult.FamilyNumber = deviceInfo.Family[k].Phone
 								deviceInfoResult.AccountType = deviceInfo.Family[k].IsAdmin
+								var tag proto.TagUserName
+								tag.Username = username
+								tag.Phone = deviceInfo.Family[k].Phone
+								proto.ConnidtagUserName[username] = tag
 								break
 							}
 						}
@@ -962,6 +968,7 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 
 		//refresh.刷新时也要保存
 		proto.ConnidUserName[params.UserName] = params.UserName
+		proto.AccessTokenMap[params.AccessToken] = params.UserName
 
 		found = true
 		deviceInfoResult = proto.MakeDeviceInfoResult(deviceInfo)
@@ -1020,9 +1027,16 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 	if ok {
 		for i := 0; i< len(deviceInfo.Family);i++{
 			if deviceInfo.Family[i].Username == params.UserName {
-				phone = devinfo.Family[0].Phone
+				//客户端每次发送语音时都会调用refresh-device，要把正确的familynumber传过去
+				phone = devinfo.Family[i].Phone
 				deviceInfoResult.FamilyNumber = phone
 				deviceInfoResult.AccountType = deviceInfo.Family[i].IsAdmin
+
+				var tag proto.TagUserName
+				tag.Username = params.UserName
+				tag.Phone = deviceInfo.Family[i].Phone
+				proto.ConnidtagUserName[params.UserName] = tag
+				break
 			}
 		}
 	}
@@ -1738,6 +1752,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 								if deviceInfo.Family[i].Username == "undefined"{
 									deviceInfo.Family[i].Username = "0"
 								}
+
 								break
 							}
 						}else{ //之前有号码，那么这里是修改号码，需要匹配之前的号码
@@ -1753,6 +1768,38 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 								if deviceInfo.Family[i].Username == "undefined"{
 									deviceInfo.Family[i].Username = "0"
 								}
+
+								//chenqw,20180116,更新下发图片和语音发送对应的亲情号码
+								proto.AppNewPhotoPendingListLock.Lock()
+								photoList, ok := proto.AppNewPhotoPendingList[imei]
+								if ok{
+									for photoidx,_ := range *photoList{
+										logging.Log(fmt.Sprintf("AppNewPhotoPendingList[%d],%s",
+											imei,(*proto.AppNewPhotoPendingList[imei])[photoidx].Info.Member.Phone))
+										if (*photoList)[photoidx].Info.Member.Phone == curPhone.Phone{
+											(*photoList)[photoidx].Info.Member.Phone = newPhone.Phone
+										}
+										logging.Log(fmt.Sprintf("AppNewPhotoPendingList[%d],%s",
+											imei,(*proto.AppNewPhotoPendingList[imei])[photoidx].Info.Member.Phone))
+									}
+								}
+								proto.AppNewPhotoPendingListLock.Unlock()
+
+								proto.AppSendChatListLock.Lock()
+								chatList,ok := proto.AppSendChatList[imei]
+								if ok{
+									for chatidx,_ := range *chatList{
+										logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
+											imei,(*proto.AppSendChatList[imei])[chatidx].Info.Sender))
+										if (*chatList)[chatidx].Info.Sender == curPhone.Phone {
+											(*chatList)[chatidx].Info.Sender = newPhone.Phone
+										}
+										logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
+											imei,(*proto.AppSendChatList[imei])[chatidx].Info.Sender))
+									}
+								}
+								proto.AppSendChatListLock.Unlock()
+
 								break
 							}
 						}
@@ -1774,6 +1821,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 						if !bFoundphone {
 							if setting.Index <= len(proto.Mapimei2Phone[imei]) {
 								logging.Log(fmt.Sprintf("addDeviceByUser add new phone 4 :%s", newPhone.Phone))
+								proto.Mapimei2Phone[imei][setting.Index - 1] = ""
 								proto.Mapimei2Phone[imei][setting.Index - 1] = newPhone.Phone
 							}else {
 								logging.Log(fmt.Sprintf("addDeviceByUser add new phone 1 :%s", newPhone.Phone))

@@ -62,6 +62,38 @@ func PushNotificationToApp(apiBaseURL string, imei uint64, familyNumber,  ownerN
 	requestAPNS(urlRequest, imei, reader)
 }
 
+func PushNotificationToAppEx(apiBaseURL string, imei uint64, ownerName string, chat ChatInfo,
+	alarmType uint8, zoneName string)  {
+	DeviceInfoListLock.Lock()
+	deviceInfo, ok := (*DeviceInfoList)[imei]
+	if ok{
+		//说明此时是增加的亲情号码发送的，还没注册登录
+		//增加单独推送功能
+		for i,_ := range deviceInfo.Family{
+			if deviceInfo.Family[i].Phone == "" ||
+				len(deviceInfo.Family[i].Username) <= 1 {
+				continue
+			}
+
+			if (chat.Receiver == deviceInfo.Family[i].Phone &&
+				chat.Receiver != "0" &&
+				ConnidUserName[deviceInfo.Family[i].Username] == deviceInfo.Family[i].Username &&
+				ConnidtagUserName[deviceInfo.Family[i].Username].Phone == chat.Receiver ) ||
+				len(chat.Receiver) == 0 ||
+				chat.Receiver == "0"{
+
+				urlRequest := apiBaseURL + "/push"
+				pushInfo := pushJSON{imei, chat.Receiver, ownerName, chat.DateTime, alarmType, zoneName}
+				logging.Log(fmt.Sprintf("%d push notificationex: %s:%s", imei, MakeStructToJson(&pushInfo),chat.Receiver))
+				reader := strings.NewReader(MakeStructToJson(&pushInfo))
+				requestAPNS(urlRequest, imei, reader)
+				break
+			}
+		}
+	}
+	DeviceInfoListLock.Unlock()
+}
+
 func requestAPNS(apiURL string,  imei uint64, bodyParams  io.Reader)  bool {
 	resp, err := http.Post(apiURL, "application/json",  bodyParams)
 	if err != nil {

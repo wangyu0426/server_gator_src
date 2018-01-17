@@ -331,6 +331,7 @@ func PushChatNum(imei uint64) bool {
 			msg.Header.Header.Count = len(chatData)
 			msg.Header.Header.Type = proto.TYPE_CMD_AP11
 			serverCtx.TcpServerChan <- msg
+			logging.Log(fmt.Sprintf("DM_GT06 AP11:%d",len(chatData)))
 		}else if model == proto.DM_GTI3  || model == proto.DM_GT03 {
 			msg := proto.MakeReplyMsg(imei, false,
 				proto.MakeFileNumReplyMsg(imei, proto.ChatContentVoice, len(chatData), false),

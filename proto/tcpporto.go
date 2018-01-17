@@ -626,6 +626,10 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			logging.Log("ProcessLocateInfo Error")
 			return false
 		}
+
+		//chenqw,20180116,手表上传定位数据时，也去取设置图片数据
+		ResolvePendingPhotoDataEx(service.imei)
+
 	}else if service.cmd == DRT_DEVICE_LOGIN {
 		//BP31, 设备登录服务器消息
 		resp := &ResponseItem{CMD_AP31,  service.makeReplyMsg(false, service.makeDeviceLoginReplyMsg(), makeId())}
@@ -798,9 +802,9 @@ func (service *GT06Service)DoResponse() []*MsgData  {
 		//ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
 	}
 
-	//if service.needSendChatNum {
-	//	service.PushChatNum()
-	//}
+	if service.needSendChatNum {
+		service.PushChatNum()
+	}
 
 	if service.needSendPhoto {
 		logging.Log(fmt.Sprint("ProcessRspFetchFile 5, ", service.needSendPhoto,
@@ -1600,7 +1604,7 @@ func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan
 
 		DeviceInfoListLock.Unlock()
 
-		PushNotificationToApp(apiBaseURL, imei, "",  ownerName, chat.DateTime, ALARM_NEW_MINICHAT, "")
+		PushNotificationToAppEx(apiBaseURL, imei, ownerName, chat, ALARM_NEW_MINICHAT, "")
 	}
 
 	return true
@@ -3972,4 +3976,19 @@ func ResolvePendingPhotoData(imei, msgId uint64) {
 
 		AddPhotoData(imei, resolvedItem.Info)
 	}
+}
+
+func ResolvePendingPhotoDataEx(imei uint64) {
+	logging.Log("AddPendingPhotoData:6")
+	tempList:= []*PhotoSettingTask{}
+	AppNewPhotoPendingListLock.Lock()
+	photoList, ok := AppNewPhotoPendingList[imei]
+	if ok && photoList != nil {
+		for _, photo := range *photoList{
+			AddPhotoData(imei, photo.Info)
+		}
+	}
+	//clear
+	AppNewPhotoPendingList[imei] = &tempList
+	AppNewPhotoPendingListLock.Unlock()
 }

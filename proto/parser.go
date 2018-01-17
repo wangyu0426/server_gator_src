@@ -381,6 +381,7 @@ type HttpFetchNotificationParams struct {
 type AlarmItem struct {
 	Time uint64	`json:"time"`
 	Alarm string 	`json:"alarm"`
+	FamilyPhone string `json:"familynumber"`
 }
 
 type DeviceAlarms struct {
@@ -891,7 +892,13 @@ var DevConnidenc = map[uint64]bool{}
 //dev's max logining count when login with wrong password
 var LoginTimeOut = map[uint64]int64{}
 var ConnidLogin = map[uint64]int{}
+type TagUserName struct{
+	Username string
+	Phone	string
+}
 var ConnidUserName = map[string]string{}
+var ConnidtagUserName = map[string]TagUserName{}
+var AccessTokenMap = map[string]string{}
 func init()  {
 	//Gt3Test()
 	//os.Exit(0)
