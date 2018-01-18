@@ -1494,12 +1494,14 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 
 		tmpSystemNo2ImeiMap[deviceInfo.Imei % 100000000000] = deviceInfo.Imei
 
+		Mapimei2PhoneLock.Lock()
 		for i := 0;i < len(deviceInfo.Family);i++ {
 			if deviceInfo.Family[i].Phone == ""{
 				continue
 			}
 			Mapimei2Phone[deviceInfo.Imei] = append(Mapimei2Phone[deviceInfo.Imei], deviceInfo.Family[i].Phone)
 		}
+		Mapimei2PhoneLock.Unlock()
 	}
 
 	fmt.Println("deviceinfo list len: ", len(*tmpDeviceInfoList))

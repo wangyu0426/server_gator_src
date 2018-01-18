@@ -519,7 +519,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 				service.rspList = append(service.rspList, resp)
 			}else if service.cmd == DRT_DELETE_PHONE_PHOTO_ACK {
 				//chenqw,20171218,handle success flag -1
-				if Str2SignedNum(string(msg.Data[16:18]),10) == -1 {
+				/*if Str2SignedNum(string(msg.Data[16:18]),10) == -1 {
 					msg := &MsgData{}
 					msg.Header.Header.Imei = service.imei
 					msg.Header.Header.ID = NewMsgID()
@@ -535,11 +535,11 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 						resp := &ResponseItem{CMD_AP06, msg}
 						service.rspList = append(service.rspList, resp)
 						logging.Log(fmt.Sprintf("BP25 AP06body:%s",body))
-					}
-				} else {
+					}*/
+				//} else {
 					resp := &ResponseItem{CMD_ACK,  service.makeAckParsedMsg(msgIdForAck)}
 					service.rspList = append(service.rspList, resp)
-				}
+				//}
 			} else{
 				//回复失败，通知APP失败
 				resp := &ResponseItem{CMD_ACK,  service.makeAckParsedMsg(msgIdForAck)}

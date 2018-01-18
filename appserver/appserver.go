@@ -354,12 +354,13 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-
+	phone := ""
 	imei := r.FormValue("imei")
 	username := r.FormValue("username")
 	fieldname := r.FormValue("fieldname")
 	accessToken := r.FormValue("accessToken")
-	phone := r.FormValue("phone")
+
+	//phone := r.FormValue("phone")
 	logging.Log(fmt.Sprintf( "HandleUploadFile imei %s username %s fieldname %s accessToken %s phone %s",
 		imei,username,fieldname,accessToken,phone))
 	if imei[:6] != "GTS01:" || username[:6] != "GTS01:" || accessToken[:6] != "GTS01:" {
@@ -369,9 +370,9 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	imei,err := proto.AppserDecrypt(imei[6:])
 	username,err = proto.AppserDecrypt(username[6:])
 	accessToken,err = proto.AppserDecrypt(accessToken[6:])
-	if phone != "" {
-		phone, err = proto.AppserDecrypt(phone[6:])
-	}
+	//if phone != "" {
+	//	phone, err = proto.AppserDecrypt(phone[6:])
+	//}
 	if err != nil {
 		logging.Log("HandleUploadFile minichat:AppserDecrypt failed!")
 		return
@@ -412,9 +413,43 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	//	ctx.JSON(500, result)
 	//	return
 	//}
-
+	logging.Log(fmt.Sprintf("msgId:%s index=%s,phone = %s",r.FormValue("msgId"),r.FormValue("index"),phone))
 	imeiUint64 := proto.Str2Num(imei, 10)
-	logging.Log(fmt.Sprintf("msgId:%s index=%s",r.FormValue("msgId"),r.FormValue("index")))
+
+	proto.DeviceInfoListLock.Lock()
+	deviceInfo, ok := (*proto.DeviceInfoList)[imeiUint64]
+	if uploadType != "minichat" {
+		index := r.FormValue("index")
+		Index := proto.Str2Num(index, 10)
+		//refresh.刷新时也要保存
+		if ok && deviceInfo != nil {
+			phone = deviceInfo.Family[Index-1].Phone
+			if username != "" {
+				proto.ConnidUserName[username] = username
+				proto.AccessTokenMap[accessToken] = username
+				var tag proto.TagUserName
+				tag.Username = username
+				tag.Phone = deviceInfo.Family[Index-1].Phone
+				proto.ConnidtagUserName[username] = tag
+			}
+		}
+	} else {
+		if ok && deviceInfo != nil {
+			for i,_ := range deviceInfo.Family{
+				if deviceInfo.Family[i].Username == username{
+					phone = deviceInfo.Family[i].Phone
+					break
+				}
+			}
+		}
+
+	}
+
+	if phone == ""{
+		phone = deviceInfo.Family[0].Phone
+	}
+	proto.DeviceInfoListLock.Unlock()
+
 	if r.FormValue("msgId") != "" {
 		//msgId添加不为空，修改为空
 		proto.Mapimei2Phone[imeiUint64] = append(proto.Mapimei2Phone[imeiUint64],phone)

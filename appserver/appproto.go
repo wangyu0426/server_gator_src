@@ -446,16 +446,15 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 						logging.Log(fmt.Sprintf("handleHeartBeat %s Phone = %s username %s 2 %s",
 							result.Minichat[k].Receiver,deviceInfo.Family[j].Phone,proto.ConnidUserName[params.UserName],
 							deviceInfo.Family[j].Username))
-						if (result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && result.Minichat[k].Receiver != "0") ||
-							len(result.Minichat[k].Receiver) == 0 {
+						if (result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && result.Minichat[k].Receiver != "0"){
 							if proto.ConnidUserName[params.UserName] == deviceInfo.Family[j].Username{
 								logging.Log("handleHeartBeat responseChan")
 								tmpMinichat = append(tmpMinichat,result.Minichat[k])
 								break
 							}
 						}
-						//Receiver == "0"表示群发消息至关注该手表的人
-						if result.Minichat[k].Receiver == "0"{
+						//Receiver == "0"表示群发消息至关注该手表的人;len(Receiver) == 0表示仅仅手机端发送和接收
+						if result.Minichat[k].Receiver == "0" || len(result.Minichat[k].Receiver) == 0{
 							tmpMinichat = append(tmpMinichat,result.Minichat[k])
 							break
 						}
@@ -1679,6 +1678,16 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 									return false, nil
 								}
 							}
+
+							//chenqw,20180118,删除该号码对应的图片
+							msg := proto.MsgData{}
+							msg.Header.Header.Imei = imei
+							msg.Header.Header.ID = proto.NewMsgID()
+							msg.Header.Header.Status = 0
+							body := fmt.Sprintf("%015dAP25,%s,%016X)", imei,
+								deviceInfo.Family[i].Phone,   msg.Header.Header.ID)
+							msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+							svrctx.Get().TcpServerChan <- &msg
 						}
 					}
 
@@ -1687,6 +1696,10 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 					for i := 0;i < len(deviceInfo.Family);i++ {
 						//前面3个phone不用往前移,
 						if setting.Index > 3 {
+							if i + 1 == setting.Index {
+								newPhone := proto.ParseSinglePhoneNumberString("",-1)
+								deviceInfo.Family[i] = newPhone
+							}
 							if i + 1 != setting.Index {
 								newContacts[count] = deviceInfo.Family[i]
 								count++
@@ -1742,9 +1755,9 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 						//fullPhoneNnumber := "00" + deviceInfo.Family[i].CountryCode + deviceInfo.Family[i].Phone
 						if len(curPhone.Phone) == 0 { //之前没有号码，直接寻找一个空位就可以了
 							if len(deviceInfo.Family[i].Phone) == 0 && i + 1 == setting.Index {
-								bkAvatar := deviceInfo.Family[i].Avatar
+								//bkAvatar := deviceInfo.Family[i].Avatar
 								deviceInfo.Family[i] = newPhone
-								deviceInfo.Family[i].Avatar = bkAvatar
+								//deviceInfo.Family[i].Avatar = bkAvatar
 								//非管理员不保存username
 								//if deviceInfo.Family[i].IsAdmin == 1{
 								//	deviceInfo.Family[i].Username = "0"
@@ -1791,7 +1804,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 									for chatidx,_ := range *chatList{
 										logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
 											imei,(*proto.AppSendChatList[imei])[chatidx].Info.Sender))
-										if (*chatList)[chatidx].Info.Sender == curPhone.Phone {
+										if (*chatList)[chatidx].Info.Sender != newPhone.Phone {
 											(*chatList)[chatidx].Info.Sender = newPhone.Phone
 										}
 										logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
@@ -2076,7 +2089,7 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 				deviceInfoResult.FamilyNumber = familyNumber
 				//phoneNumbers := proto.MakeFamilyPhoneNumbersEx(&deviceInfo.Family)
 				//deviceInfoResult.PhoneNumbers = phoneNumbers
-				logging.Log(fmt.Sprintf("params.Settings len = %d",len(params.Settings)))
+				//logging.Log(fmt.Sprintf("params.Settings len = %d",len(params.Settings)))
 				if len(params.Settings) > 1 {
 					//ROOT
 					deviceInfoResult.AccountType = 0
@@ -2086,6 +2099,7 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 				}
 				resultJson, _ := json.Marshal(&deviceInfoResult)
 				result.Data = string([]byte(resultJson))
+				logging.Log(fmt.Sprintf("deviceInfoResult Settings:" + string(resultJson)))
 			}
 			proto.DeviceInfoListLock.Unlock()
 		}else{
@@ -2125,6 +2139,30 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 				logging.Log(fmt.Sprintf("[%d] update %s into db failed, %s", imei, FieldNames, err.Error()))
 				return false
 			}
+		}else if setting.FieldName == "PhoneNumbers" {
+			//chenqw,20180118,删除亲情号码时，要把对应的图片删掉
+			if len(concatValues) == 0 {
+				concatValues += fmt.Sprintf(" %s=%s ", setting.FieldName, newValue)
+			}else{
+				concatValues += fmt.Sprintf(", %s=%s ", setting.FieldName, newValue)
+			}
+			proto.DeviceInfoListLock.Lock()
+			deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+			newContactAvatar := makeContactAvatars(&deviceInfo.Family)
+			proto.DeviceInfoListLock.Unlock()
+			if ok && deviceInfo != nil{
+				strSQL = fmt.Sprintf("UPDATE watchinfo SET ContactAvatar = '{\"ContactAvatars\": %s}' where IMEI='%d'",
+					newContactAvatar, imei)
+				logging.Log("SQL: " + strSQL)
+				_,err := svrctx.Get().MySQLPool.Exec(strSQL)
+				if err != nil {
+					logging.Log(fmt.Sprintf("[%d] UPDATE watchinfo SET ContactAvatar db failed, %s", imei, err.Error()))
+					return  false
+				}
+
+			}
+
+
 		}else{
 			if len(concatValues) == 0 {
 				concatValues += fmt.Sprintf(" %s=%s ", setting.FieldName, newValue)
