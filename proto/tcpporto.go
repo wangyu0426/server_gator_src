@@ -179,6 +179,8 @@ type PhotoSettingInfo struct {
 	Flags  int
 	CreateTime  uint64  //服务器生成时间
 	FilePath string
+
+	Index int	//phone
 }
 
 type DataBlock struct {
@@ -1080,8 +1082,10 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 					deviceInfo, ok := (*DeviceInfoList)[imei]
 					if ok && deviceInfo != nil {
 						body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
-							makeDeviceFamilyPhoneNumbers(&deviceInfo.Family,  true),   msgId)
-						msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+							makeDeviceFamilyPhoneNumbers(&deviceInfo.Family, true), msgId)
+						msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+						logging.Log(fmt.Sprintf("---body:%s",body))
+
 					}
 					DeviceInfoListLock.Unlock()
 
@@ -3959,6 +3963,7 @@ func ResolvePendingPhotoData(imei, msgId uint64) {
 	photoList, ok := AppNewPhotoPendingList[imei]
 	if ok && photoList != nil {
 		for _, photo := range *photoList{
+			logging.Log(fmt.Sprintf("photoList msgid:%d---d",photo.Info.MsgId,msgId))
 			if photo.Info.MsgId == msgId{
 				resolvedItem = photo
 				isFound = true

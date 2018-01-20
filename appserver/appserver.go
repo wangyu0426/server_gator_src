@@ -152,13 +152,14 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 	http.Handle("/",  &MyFileServer{})
 	//cong fuwuqi huoqu zuixin app banben
+	http.Handle("/wsapi", websocket.Handler(OnClientConnected))
 	http.HandleFunc("/api/gator3-version", GetAppVersionOnline)
 	//android notify
 	http.HandleFunc("/api/notifications", GetNotifications)
 	//reconnect to a new server port
 	http.HandleFunc("/api/reset-device-ipport", ResetDeviceIPPort)
 	http.HandleFunc(svrctx.Get().HttpUploadURL, HandleUploadFile)
-	http.Handle("/wsapi", websocket.Handler(OnClientConnected))
+
 
 	//for php get device data
 	http.HandleFunc("/api/get-device-by-imei",GetDeviceByimei)
@@ -352,7 +353,6 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		ErrMsg: "",
 		Imei: "0",
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	phone := ""
 	imei := r.FormValue("imei")
@@ -361,8 +361,8 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	accessToken := r.FormValue("accessToken")
 
 	//phone := r.FormValue("phone")
-	logging.Log(fmt.Sprintf( "HandleUploadFile imei %s username %s fieldname %s accessToken %s phone %s",
-		imei,username,fieldname,accessToken,phone))
+	logging.Log(fmt.Sprintf( "HandleUploadFile imei %s username %s fieldname %s msgId %s phone %s",
+		imei,username,fieldname,r.FormValue("msgId"),phone))
 	if imei[:6] != "GTS01:" || username[:6] != "GTS01:" || accessToken[:6] != "GTS01:" {
 		logging.Log("HandleUploadFile:not encrypted!")
 		return
@@ -413,42 +413,47 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	//	ctx.JSON(500, result)
 	//	return
 	//}
-	logging.Log(fmt.Sprintf("msgId:%s index=%s,phone = %s",r.FormValue("msgId"),r.FormValue("index"),phone))
-	imeiUint64 := proto.Str2Num(imei, 10)
 
+	imeiUint64 := proto.Str2Num(imei, 10)
+	logging.Log(fmt.Sprintf("msgId:%s index=%s,phone = %s",r.FormValue("msgId"),r.FormValue("index"),phone))
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imeiUint64]
-	if uploadType != "minichat" {
-		index := r.FormValue("index")
-		Index := proto.Str2Num(index, 10)
-		//refresh.刷新时也要保存
-		if ok && deviceInfo != nil {
-			phone = deviceInfo.Family[Index-1].Phone
-			if username != "" {
-				proto.ConnidUserName[username] = username
-				proto.AccessTokenMap[accessToken] = username
-				var tag proto.TagUserName
-				tag.Username = username
-				tag.Phone = deviceInfo.Family[Index-1].Phone
-				proto.ConnidtagUserName[username] = tag
-			}
-		}
-	} else {
-		if ok && deviceInfo != nil {
-			for i,_ := range deviceInfo.Family{
-				if deviceInfo.Family[i].Username == username{
-					phone = deviceInfo.Family[i].Phone
-					break
+
+	if r.FormValue("index") != "" {
+		if uploadType != "minichat" {
+			index := r.FormValue("index")
+			Index := proto.Str2Num(index, 10)
+			//refresh.刷新时也要保存
+			if ok && deviceInfo != nil {
+				phone = deviceInfo.Family[Index-1].Phone
+				if username != "" {
+					proto.ConnidUserName[username] = username
+					proto.AccessTokenMap[accessToken] = username
+					var tag proto.TagUserName
+					tag.Username = username
+					tag.Phone = deviceInfo.Family[Index-1].Phone
+					proto.ConnidtagUserName[username] = tag
 				}
 			}
-		}
+		} else {
+			if ok && deviceInfo != nil {
+				for i, _ := range deviceInfo.Family {
+					if deviceInfo.Family[i].Username == username {
+						phone = deviceInfo.Family[i].Phone
+						break
+					}
+				}
+			}
 
+		}
 	}
 
 	if phone == ""{
 		phone = deviceInfo.Family[0].Phone
 	}
 	proto.DeviceInfoListLock.Unlock()
+
+
 
 	if r.FormValue("msgId") != "" {
 		//msgId添加不为空，修改为空
@@ -512,6 +517,8 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 				photoInfo.ContentType = proto.ChatContentPhoto
 				photoInfo.Content = fileName//proto.MakeTimestampIdString()
 				photoInfo.MsgId = proto.Str2Num(r.FormValue("msgId"), 10)
+
+				photoInfo.Index = int(proto.Str2Num(r.FormValue("index"),10))
 
 				photoInfo.FilePath = svrctx.Get().HttpStaticDir + uploadTypeDir + imei + "/" + fileName
 				if !bFound {
