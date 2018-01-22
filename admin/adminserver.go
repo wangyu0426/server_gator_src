@@ -285,7 +285,7 @@ func AdminServerLoop(exitServerFunc func())  {
 			if fieldName == proto.ModelFieldName {
 				newModel := proto.ParseDeviceModel(newValue)
 				if newModel >= 0 {
-					if newModel == proto.DM_GT06 {
+					if newModel == proto.DM_GT06 || newModel == proto.DM_GT02 {
 						ok2 := proto.LoadDeviceInfoFromDB(svrctx.Get().MySQLPool)
 						if ok2 {
 							result = "ok"

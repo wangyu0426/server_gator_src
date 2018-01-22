@@ -74,7 +74,7 @@ func (myfs*MyFileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type Getdeviceinfoimei struct {
-	Model 		string		`json:"model"`
+	Model 		int		`json:"model"`
 	Recid string			`json:"recid"`
 	Avatar string			`json:"Avatar"`
 	SimID	string			`json:"SimID"`
@@ -87,7 +87,7 @@ type Getdeviceinfoimei struct {
 	Fence2	string			`json:"Fence2"`
 	CountryCode	string		`json:"CountryCode"`
 	Features	[]byte	`json:"features"`
-	IsAdmin	bool			`json:"isAdmin"`
+	IsAdmin	int			`json:"isAdmin"`
 	Added	bool			`json:"added"`
 }
 
@@ -1771,12 +1771,12 @@ func GetDeviceByimei(w http.ResponseWriter, r *http.Request) {
 		result.PhoneNumbers += deviceInfo.Family[i].Phone
 		result.PhoneNumbers += ","
 	}
-	result.OwnerName = "caref1dai"
+	result.OwnerName = deviceInfo.OwnerName
 	result.SimID = deviceInfo.SimID
 	result.CountryCode = deviceInfo.CountryCode
 	result.TimeZone = proto.Num2Str(uint64(deviceInfo.TimeZone),10)
 	result.LocateInterval = proto.Num2Str(uint64(deviceInfo.LocateInterval),10)
-	result.Model = "WH01"
+	/*result.Model = "WH01"
 	result.Recid = "7282d071-4087-11e5-9bb1-002590c4e092"
 	result.Fence1 = "{\"Radius\":\"200\",\"Name\":\"office\",\"Center\":\"22.583372549212,113.91363854324001\"}"
 	result.Fence2 = "{\"Radius\":200,\"Name\":\"xingdong\",\"Center\":\"22.583885219827,113.91483074585\"}"
@@ -1784,7 +1784,12 @@ func GetDeviceByimei(w http.ResponseWriter, r *http.Request) {
 	result.Features = make([]byte,20)
 	result.IsAdmin = false
 	result.TimeZone = "+08:00"
-	result.Avatar = "http://service.gatorcn.com/tracker/web/static/images/child.png"
+	result.Avatar = "http://service.gatorcn.com/tracker/web/static/images/child.png"*/
+	result.Model = deviceInfo.Model
+	result.Added = true
+	result.IsAdmin = deviceInfo.IsAdmin
+	result.Avatar = deviceInfo.Avatar
+
 	//logging.Log("http GetDeviceByimei from : " + imei + accesstoken)
 	JSON2PHP(w,status,&result)
 }

@@ -559,11 +559,11 @@ const (
 	DM_GT03
 	DM_GTI3
 	DM_GT06
-
+	DM_GT02
 	DM_MAX
 )
 
-var ModelNameList = []string{ "WH01", "GT03","GTI3", "GT06"}
+var ModelNameList = []string{ "WH01", "GT03","GTI3", "GT06","GT02"}
 
 const (
 	ALARM_INZONE = 1

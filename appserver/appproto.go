@@ -1040,6 +1040,7 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 		}
 	}
 	if ok && phone == ""{
+		//如果familynumber为空,则把管理员号码发送过去
 		phone = devinfo.Family[0].Phone
 		deviceInfoResult.FamilyNumber = phone
 	}
@@ -1400,8 +1401,20 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 					logging.Log(fmt.Sprintf("delete falmily number photo:%s",deviceInfo.Family[i].Phone))
 					bIsAdminCancel = true
 				}
+
+				//chenqw,20180118,删除该号码对应的图片,兼容老版本
+				msg := proto.MsgData{}
+				msg.Header.Header.Imei = imei
+				msg.Header.Header.ID = proto.NewMsgID()
+				msg.Header.Header.Status = 0
+				body := fmt.Sprintf("%015dAP25,%s,%016X)", imei,
+					deviceInfo.Family[i].Phone,   msg.Header.Header.ID)
+				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+				svrctx.Get().TcpServerChan <- &msg
+
 				newPhone := proto.ParseSinglePhoneNumberString("",-1)
 				deviceInfo.Family[i] = newPhone
+
 				break
 			}
 		}
@@ -1814,7 +1827,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 							for chatidx, _ := range *chatList {
 								logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
 									imei, (*proto.AppSendChatList[imei])[chatidx].Info.Sender))
-								if (*chatList)[chatidx].Info.Sender != newPhone.Phone {
+								if (*chatList)[chatidx].Info.SenderUser == newPhone.Username && (*chatList)[chatidx].Info.Sender != newPhone.Phone {
 									(*chatList)[chatidx].Info.Sender = newPhone.Phone
 								}
 								logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
