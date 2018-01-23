@@ -508,6 +508,8 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 
 	var itf interface{}
 	err = json.Unmarshal(body, &itf)
+	re,_ := json.Marshal(itf)
+	fmt.Printf("\n" + string(re) + "\n")
 	if err != nil {
 		logging.Log("parse  " + reqType + " response as json failed, " + err.Error())
 		return false
@@ -532,7 +534,7 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 
 	logging.Log("status: " + fmt.Sprint(status))
 	logging.Log("accessToken: " + fmt.Sprint(accessToken))
-	logging.Log("devices: " + fmt.Sprint(devices))
+	//logging.Log("devices: " + fmt.Sprint(devices))
 	if status != nil && accessToken != nil {
 		proto.ConnidUserName[username] = username
 		proto.AccessTokenMap[fmt.Sprint(accessToken)] = username
@@ -579,7 +581,7 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 						k := 0
 						//default not root manager
 						deviceInfoResult.AccountType = 1
-						for k,_ = range deviceInfo.Family {
+						for k = 0; k < len(deviceInfo.Family);k++ {
 							if username == deviceInfo.Family[k].Username{
 								deviceInfoResult.Name = deviceInfo.Family[k].Name
 								deviceInfoResult.FamilyNumber = deviceInfo.Family[k].Phone
@@ -596,7 +598,8 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 						//deviceInfoResult.PhoneNumbers = proto.SplitPhone(deviceInfoResult.PhoneNumbers)
 						logging.Log(fmt.Sprintf("the deviceInfoResult.PhoneNumbers is :%s",deviceInfoResult.PhoneNumbers))
 						//
-						if k != len(deviceInfo.Family) - 1 {
+						if k != len(deviceInfo.Family) {
+							logging.Log(fmt.Sprintf("len devices = %d i = %d,k = %d",len(loginData["devices"].([]interface{})),i,k))
 							loginData["devices"].([]interface{})[i] = deviceInfoResult
 							fmt.Println("deviceinfoResult: ", proto.MakeStructToJson(&deviceInfoResult))
 						} else {
@@ -1391,37 +1394,64 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 	var i int
-	bIsAdminCancel := false
+	bIsAdminCancel := 0
 	i = 0
 	if ok {
-		for i = 0;i < len(deviceInfo.Family);i++{
-			//兼容以前老的，username="0"
-			if params.UserName == deviceInfo.Family[i].Username || params.UserName == "0" || params.UserName == ""{
-				if deviceInfo.Family[i].IsAdmin == 0{
-					logging.Log(fmt.Sprintf("delete falmily number photo:%s",deviceInfo.Family[i].Phone))
-					bIsAdminCancel = true
+		if params.AccountType == 0{
+			inDex := 0
+			for i = 0;i < len(deviceInfo.Family);i++{
+				//兼容以前老的，username="0"
+				if params.UserName == deviceInfo.Family[i].Username || params.MySimID == deviceInfo.Family[i].Phone{
+					//chenqw,20180118,删除该号码对应的图片,兼容老版本
+					msg := proto.MsgData{}
+					msg.Header.Header.Imei = imei
+					msg.Header.Header.ID = proto.NewMsgID()
+					msg.Header.Header.Status = 0
+					body := fmt.Sprintf("%015dAP25,%s,%016X)", imei,
+						deviceInfo.Family[i].Phone,   msg.Header.Header.ID)
+					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+					svrctx.Get().TcpServerChan <- &msg
+
+					newPhone := proto.ParseSinglePhoneNumberString("",-1)
+					deviceInfo.Family[i] = newPhone
+
+					bIsAdminCancel |= 0x01
 				}
 
-				//chenqw,20180118,删除该号码对应的图片,兼容老版本
-				msg := proto.MsgData{}
-				msg.Header.Header.Imei = imei
-				msg.Header.Header.ID = proto.NewMsgID()
-				msg.Header.Header.Status = 0
-				body := fmt.Sprintf("%015dAP25,%s,%016X)", imei,
-					deviceInfo.Family[i].Phone,   msg.Header.Header.ID)
-				msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-				svrctx.Get().TcpServerChan <- &msg
+				if len(deviceInfo.Family[i].Username) > 1 && deviceInfo.Family[i].IsAdmin != 0 && (bIsAdminCancel & 0x02 == 0){
+					logging.Log(fmt.Sprintf("bIsAdminCancel: i = %d",i))
+					inDex = i
+					bIsAdminCancel |= 0x02
+					deviceInfo.Family[inDex].IsAdmin = 0
+				}
 
-				newPhone := proto.ParseSinglePhoneNumberString("",-1)
-				deviceInfo.Family[i] = newPhone
+				if bIsAdminCancel == 0x03 {
+					break
+				}
+			}
+		}else {
+			for i = 0;i < len(deviceInfo.Family);i++{
+				if params.UserName == deviceInfo.Family[i].Username || params.MySimID == deviceInfo.Family[i].Phone{
+					//chenqw,20180118,删除该号码对应的图片,兼容老版本
+					msg := proto.MsgData{}
+					msg.Header.Header.Imei = imei
+					msg.Header.Header.ID = proto.NewMsgID()
+					msg.Header.Header.Status = 0
+					body := fmt.Sprintf("%015dAP25,%s,%016X)", imei,
+						deviceInfo.Family[i].Phone,   msg.Header.Header.ID)
+					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
+					svrctx.Get().TcpServerChan <- &msg
 
-				break
+					newPhone := proto.ParseSinglePhoneNumberString("",-1)
+					deviceInfo.Family[i] = newPhone
+				}
 			}
 		}
 
+
 		//管理员取消关注手表，判断phonenumbers里的username 是不是非0,
 		// 如果都是0下次不管哪个账号关注这个手表就是管理员,如果非0就把na个非0的设置成管理员
-		bCheckAdmin := false
+		/*bCheckAdmin := false
 		inDex := 0
 		if bIsAdminCancel {
 			for i := 0; i < len(deviceInfo.Family); i++ {
@@ -1438,20 +1468,22 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 			if bCheckAdmin{
 				//IsAdmin = 0 means root manager
 				//把管理员移到首位
+				//modify:不用移到首位
 				logging.Log(fmt.Sprintf("bCheckAdmin:%d,%s i = %d",deviceInfo.Family[inDex].IsAdmin,deviceInfo.Family[i].Username,inDex))
 				deviceInfo.Family[inDex].IsAdmin = 0
-				tmp := deviceInfo.Family[0]
+				/*tmp := deviceInfo.Family[0]
 				deviceInfo.Family[0] = deviceInfo.Family[inDex]
 				deviceInfo.Family[inDex] = tmp
-				logging.Log(fmt.Sprintf("###bCheckAdmin:%d,%s",deviceInfo.Family[0].IsAdmin,deviceInfo.Family[0].Username))
-			}
+				logging.Log(fmt.Sprintf("###bCheckAdmin:%d,%s",deviceInfo.Family[0].IsAdmin,deviceInfo.Family[0].Username))*/
+		//	}
 
-		}else {
+		//}else {
 			//deviceInfo.Family[0].IsAdmin = 0
-		}
+		//}
 
 		//管理员取消关注但添加了几个亲情号码的情况,并且还有其他用户关注
-		if bCheckAdmin {
+		//不需要移动
+		/*if bCheckAdmin {
 			newContacts := [proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember{}
 			count := 0
 			for i := 0; i < 3; i++ {
@@ -1469,39 +1501,41 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 				}
 			}
 			deviceInfo.Family = newContacts
-		}
+		}*/
 
-		msg := proto.MsgData{}
-		msg.Header.Header.Imei = imei
-		msg.Header.Header.ID = proto.NewMsgID()
-		msg.Header.Header.Status = 0
-		phoneNumbers := ""
-		bAll := false
-		for kk := 0; kk < len(deviceInfo.Family); kk++ {
-			phone := deviceInfo.Family[kk].Phone
-			if phone == ""{
-				phone = "0"
-			}else {
-				bAll = true
-			}
-			phoneNumbers += fmt.Sprintf("#%s#%s#%d", phone, deviceInfo.Family[kk].Name, deviceInfo.Family[kk].Type)
-		}
-		if bAll {
-			body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
-				phoneNumbers, msg.Header.Header.ID)
-			msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
-			/*body := fmt.Sprintf("%015dAP25,%s,%016X)", imei,
-			deviceInfo.Family[i].Phone,   msg.Header.Header.ID)
-		msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)*/
-			svrctx.Get().TcpServerChan <- &msg
-		}else {
-			body := fmt.Sprintf("%015dAP07,%016X)", imei,msg.Header.Header.ID)
-			msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
-
-			svrctx.Get().TcpServerChan <- &msg
-		}
 	}
 	proto.DeviceInfoListLock.Unlock()
+
+	//把发送AP06消息提前,解决管理员取消关注后第二个管理员手表端图片被删除问题
+	msg := proto.MsgData{}
+	msg.Header.Header.Imei = imei
+	msg.Header.Header.ID = proto.NewMsgID()
+	msg.Header.Header.Status = 0
+	phoneNumbers := ""
+	bAll := false
+	for kk := 0; kk < len(deviceInfo.Family); kk++ {
+		phone := deviceInfo.Family[kk].Phone
+		if phone == ""{
+			phone = "0"
+		}else {
+			bAll = true
+		}
+		phoneNumbers += fmt.Sprintf("#%s#%s#%d", phone, deviceInfo.Family[kk].Name, deviceInfo.Family[kk].Type)
+	}
+	if bAll {
+		body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
+			phoneNumbers, msg.Header.Header.ID)
+		msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+		/*body := fmt.Sprintf("%015dAP25,%s,%016X)", imei,
+		deviceInfo.Family[i].Phone,   msg.Header.Header.ID)
+	msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)*/
+		svrctx.Get().TcpServerChan <- &msg
+	}else {
+		body := fmt.Sprintf("%015dAP07,%016X)", imei,msg.Header.Header.ID)
+		msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+
+		svrctx.Get().TcpServerChan <- &msg
+	}
 
 	newPhone := proto.MakeFamilyPhoneNumbersEx(&deviceInfo.Family)
 	ContactAvatar := makeContactAvatars(&deviceInfo.Family)
@@ -1509,6 +1543,9 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 	proto.Mapimei2PhoneLock.Lock()
 	proto.Mapimei2Phone[imei] = []string{}
 	for i = 0;i < len(deviceInfo.Family);i++ {
+		if deviceInfo.Family[i].Phone == ""{
+			continue
+		}
 		proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[i].Phone)
 	}
 	proto.Mapimei2PhoneLock.Unlock()
@@ -1738,6 +1775,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 						if i + 1 == setting.Index {
 							newPhone := proto.ParseSinglePhoneNumberString("",-1)
 							deviceInfo.Family[i] = newPhone
+							break
 						}
 					}
 					//删除后,重新把Family[i].Index排序
@@ -1776,6 +1814,9 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 					}*/
 					proto.Mapimei2Phone[imei] = []string{}
 					for i := 0;i < len(deviceInfo.Family);i++ {
+						if deviceInfo.Family[i].Phone == ""{
+							continue
+						}
 						proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[i].Phone)
 					}
 
@@ -2020,7 +2061,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 
 
 					proto.Mapimei2PhoneLock.Lock()
-					if len(proto.Mapimei2Phone[imei]) == 0 {
+					/*if len(proto.Mapimei2Phone[imei]) == 0 {
 						logging.Log(fmt.Sprintf("add new phone :%s", newPhone.Phone))
 						proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei], newPhone.Phone)
 					}else {
@@ -2042,7 +2083,16 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 								proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei], newPhone.Phone)
 							}
 						}
+					}*/
+
+					proto.Mapimei2Phone[imei] = []string{}
+					for i := 0;i < len(deviceInfo.Family);i++ {
+						if deviceInfo.Family[i].Phone == ""{
+							continue
+						}
+						proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[i].Phone)
 					}
+
 					proto.Mapimei2PhoneLock.Unlock()
 
 					for i,_ :=range proto.Mapimei2Phone[imei]{
