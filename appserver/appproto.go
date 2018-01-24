@@ -603,16 +603,18 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 							loginData["devices"].([]interface{})[i] = deviceInfoResult
 							fmt.Println("deviceinfoResult: ", proto.MakeStructToJson(&deviceInfoResult))
 						} else {
-							tmp := loginData["devices"].([]interface{})[:i]
-							tmp2 := loginData["devices"].([]interface{})[i+1:]
+							//tmp := loginData["devices"].([]interface{})[:i]
+							//tmp2 := loginData["devices"].([]interface{})[i+1:]
 
-							for index,_ := range tmp2{
-								tmp = append(tmp,tmp2[index])
-							}
+							//for index,_ := range tmp2{
+							//	tmp = append(tmp,tmp2[index])
+							//}
 							//for index,_ := range tmp{
-								loginData["devices"] = tmp
+							//	loginData["devices"] = tmp
 							//}
 
+							NewdeviceInfoResult := proto.DeviceInfoResult{}
+							loginData["devices"].([]interface{})[i] = NewdeviceInfoResult
 							fmt.Println("loginData devices: %d\n",len(loginData["devices"].([]interface{})))
 						}
 					}
@@ -1513,6 +1515,8 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 	msg.Header.Header.Status = 0
 	phoneNumbers := ""
 	bAll := false
+	proto.Mapimei2PhoneLock.Lock()
+	proto.Mapimei2Phone[imei] = []string{}
 	for kk := 0; kk < len(deviceInfo.Family); kk++ {
 		phone := deviceInfo.Family[kk].Phone
 		if phone == ""{
@@ -1521,7 +1525,14 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 			bAll = true
 		}
 		phoneNumbers += fmt.Sprintf("#%s#%s#%d", phone, deviceInfo.Family[kk].Name, deviceInfo.Family[kk].Type)
+
+		if deviceInfo.Family[i].Phone == ""{
+			continue
+		}
+		proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[i].Phone)
 	}
+	proto.Mapimei2PhoneLock.Unlock()
+
 	if bAll {
 		body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
 			phoneNumbers, msg.Header.Header.ID)
@@ -1539,16 +1550,6 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 
 	newPhone := proto.MakeFamilyPhoneNumbersEx(&deviceInfo.Family)
 	ContactAvatar := makeContactAvatars(&deviceInfo.Family)
-
-	proto.Mapimei2PhoneLock.Lock()
-	proto.Mapimei2Phone[imei] = []string{}
-	for i = 0;i < len(deviceInfo.Family);i++ {
-		if deviceInfo.Family[i].Phone == ""{
-			continue
-		}
-		proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[i].Phone)
-	}
-	proto.Mapimei2PhoneLock.Unlock()
 
 	logging.Log(fmt.Sprintf("newPhone Number: %s",newPhone))
 	strSQL := fmt.Sprintf("UPDATE watchinfo SET PhoneNumbers = '%s' where IMEI='%d'", newPhone, imei)
@@ -1679,24 +1680,14 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 			case proto.PhoneNumbersFieldName:
 				logging.Log(fmt.Sprintf("setting.CurValue :%s,setting.NewValue:%s,setting.Index:%d",
 					setting.CurValue,setting.NewValue,setting.Index))
-				proto.BDeleteFlag = false
-				if setting.Index == 0 {
-					break
-				}
+				//if setting.Index == 0 {
+				//	break
+				//}
 				if setting.NewValue == "delete"{
-					/*newContacts := [proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember{}
-					count := 0
-					for i := 0; i < len(deviceInfo.Family); i++ {
-						if i + 1 != setting.Index {
-							newContacts[count] = deviceInfo.Family[i]
-							count++
-						}
-					}
-
-					deviceInfo.Family = newContacts*/
-
 					//chenqw,要把用户名对应的userID传过来,否则不好删除vehiclesinuser,下次添加手表时会出错
 					//要设置成只有管理员才可以删除，非管理员可以修改
+					proto.Mapimei2PhoneLock.Lock()
+					proto.Mapimei2Phone[imei] = []string{}
 					for i := 0; i < len(deviceInfo.Family); i++ {
 						if i + 1 == setting.Index {
 							//newPhone := proto.ParseSinglePhoneNumberString("",-1)
@@ -1743,8 +1734,18 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 								deviceInfo.Family[i].Phone,   msg.Header.Header.ID)
 							msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
 							svrctx.Get().TcpServerChan <- &msg
+
+							newPhone := proto.ParseSinglePhoneNumberString("",-1)
+							deviceInfo.Family[setting.Index - 1] = newPhone
 						}
+
+						deviceInfo.Family[i].Index = i + 1
+						if deviceInfo.Family[i].Phone == ""{
+							continue
+						}
+						proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[i].Phone)
 					}
+					proto.Mapimei2PhoneLock.Unlock()
 
 					/*newContacts := [proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember{}
 					count := 0
@@ -1770,58 +1771,6 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 					if setting.Index > 3 {
 						deviceInfo.Family = newContacts
 					}*/
-
-					for i := 0;i < len(deviceInfo.Family);i++ {
-						if i + 1 == setting.Index {
-							newPhone := proto.ParseSinglePhoneNumberString("",-1)
-							deviceInfo.Family[i] = newPhone
-							break
-						}
-					}
-					//删除后,重新把Family[i].Index排序
-					for i := 0; i < len(deviceInfo.Family); i++ {
-						deviceInfo.Family[i].Index = i + 1
-					}
-
-					/*count = 0
-					newContacts = [proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember{}
-					for i := 0;i < len(deviceInfo.Family);i++ {
-						if deviceInfo.Family[i].Phone == ""{
-							continue
-						}
-						newContacts[count] = deviceInfo.Family[i]
-						count++
-					}
-					proto.DeletePhone = newContacts*/
-
-					proto.Mapimei2PhoneLock.Lock()
-					/*for index := 0;index < len(proto.Mapimei2Phone[imei]);index++{
-						if proto.Mapimei2Phone[imei][index] == deviceInfo.Family[i].Phone {
-							if index + 1 < len(proto.Mapimei2Phone[imei]) {
-								temp := proto.Mapimei2Phone[imei][0:index]
-								temp2 := proto.Mapimei2Phone[imei][index+1:]
-								proto.Mapimei2Phone[imei] = temp
-								//copy(proto.Mapimei2Phone[imei], temp2)
-								for j := 0;j < len(temp2);j++{
-									temp = append(temp,temp2[j])
-								}
-								proto.Mapimei2Phone[imei] = temp
-							}else {
-								temp := proto.Mapimei2Phone[imei][0:index]
-								proto.Mapimei2Phone[imei] = temp
-							}
-						}
-					}*/
-					proto.Mapimei2Phone[imei] = []string{}
-					for i := 0;i < len(deviceInfo.Family);i++ {
-						if deviceInfo.Family[i].Phone == ""{
-							continue
-						}
-						proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[i].Phone)
-					}
-
-					proto.Mapimei2PhoneLock.Unlock()
-
 				}else{
 					//只有管理员才可以添加,delete亲情号码
 					logging.Log(fmt.Sprintf("enter add new phone......"))
@@ -1833,14 +1782,25 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 						for i := 3; i < len(deviceInfo.Family); i++ {
 							//bkAvatar := deviceInfo.Family[i].Avatar
 							if len(deviceInfo.Family[i].Phone) == 0 {
-								logging.Log(fmt.Sprintf(" rrrrrrr add new phone......"))
+								logging.Log(fmt.Sprintf(" 0xff add new phone......"))
 								deviceInfo.Family[i] = newPhone
 								deviceInfo.Family[i].Index = i + 1
 								settings[0].Index = i + 1
 								break
 							}
 						}
-					}else{
+					}else if setting.Index == 0{
+						//setting.Index  == 0表示前面3个新增号码
+						for i := 0; i < 3; i++ {
+							if len(deviceInfo.Family[i].Phone) == 0 {
+								logging.Log(fmt.Sprintf(" 0x00 add new phone......"))
+								deviceInfo.Family[i] = newPhone
+								deviceInfo.Family[i].Index = i + 1
+								settings[0].Index = i + 1
+								break
+							}
+						}
+					} else{
 						bkAvatar := deviceInfo.Family[setting.Index - 1].Avatar
 						deviceInfo.Family[setting.Index - 1] = newPhone
 						deviceInfo.Family[setting.Index - 1].Avatar = bkAvatar

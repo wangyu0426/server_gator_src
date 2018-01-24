@@ -871,8 +871,6 @@ var EPOInfoList []*EPOInfo
 var EpoInfoListLock = sync.Mutex{}
 
 var DeviceInfoList = &map[uint64]*DeviceInfo{}
-var DeletePhone = [MAX_FAMILY_MEMBER_NUM]FamilyMember{}
-var BDeleteFlag bool
 var DeviceInfoListLock =  sync.Mutex{}
 
 var SystemNo2ImeiMap = map[uint64]uint64{}
