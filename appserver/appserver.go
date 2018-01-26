@@ -306,7 +306,7 @@ func AppConnManagerLoop() {
 								if msg.Cmd == proto.HearbeatAckCmdName {
 									proto.DeviceInfoListLock.Lock()
 									deviceInfo, ok := (*proto.DeviceInfoList)[msg.Imei]
-									proto.DeviceInfoListLock.Unlock()
+
 									for k, _ := range param.Minichat {
 										if ok{
 											for j,_ := range deviceInfo.Family {
@@ -333,6 +333,7 @@ func AppConnManagerLoop() {
 											}
 										}
 									}
+									proto.DeviceInfoListLock.Unlock()
 								}else {
 									logging.Log("other cmd")
 									c.responseChan <- msg
@@ -360,6 +361,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	fieldname := r.FormValue("fieldname")
 	accessToken := r.FormValue("accessToken")
 
+	//设置图片时不传index,由我来查找phone
 	//phone := r.FormValue("phone")
 	logging.Log(fmt.Sprintf( "HandleUploadFile imei %s username %s fieldname %s msgId %s phone %s",
 		imei,username,fieldname,r.FormValue("msgId"),phone))
@@ -423,6 +425,13 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		if uploadType != "minichat" {
 			index := r.FormValue("index")
 			Index := proto.Str2Num(index, 10)
+			//chenqw,20180125,防止程序崩溃
+			if Index <= 0 {
+				result.ErrCode = 500
+				result.ErrMsg = "invalid index"
+				JSON(w, 500, &result)
+				return
+			}
 			//refresh.刷新时也要保存
 			if ok && deviceInfo != nil {
 				phone = deviceInfo.Family[Index-1].Phone
@@ -435,16 +444,17 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 					proto.ConnidtagUserName[username] = tag
 				}
 			}
-		} else {
-			if ok && deviceInfo != nil {
-				for i, _ := range deviceInfo.Family {
-					if deviceInfo.Family[i].Username == username {
-						phone = deviceInfo.Family[i].Phone
-						break
-					}
+		}
+	}
+
+	if uploadType == "minichat"{
+		if ok && deviceInfo != nil {
+			for i, _ := range deviceInfo.Family {
+				if deviceInfo.Family[i].Username == username {
+					phone = deviceInfo.Family[i].Phone
+					break
 				}
 			}
-
 		}
 	}
 

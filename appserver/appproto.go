@@ -1403,7 +1403,8 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 			inDex := 0
 			for i = 0;i < len(deviceInfo.Family);i++{
 				//兼容以前老的，username="0"
-				if params.UserName == deviceInfo.Family[i].Username || params.MySimID == deviceInfo.Family[i].Phone{
+				if (params.UserName == deviceInfo.Family[i].Username || params.MySimID == deviceInfo.Family[i].Phone) &&
+					deviceInfo.Family[i].Phone != ""{
 					//chenqw,20180118,删除该号码对应的图片,兼容老版本
 					msg := proto.MsgData{}
 					msg.Header.Header.Imei = imei
@@ -1433,7 +1434,8 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 			}
 		}else {
 			for i = 0;i < len(deviceInfo.Family);i++{
-				if params.UserName == deviceInfo.Family[i].Username || params.MySimID == deviceInfo.Family[i].Phone{
+				if (params.UserName == deviceInfo.Family[i].Username || params.MySimID == deviceInfo.Family[i].Phone) &&
+					deviceInfo.Family[i].Phone != ""{
 					//chenqw,20180118,删除该号码对应的图片,兼容老版本
 					msg := proto.MsgData{}
 					msg.Header.Header.Imei = imei
@@ -1446,6 +1448,7 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 
 					newPhone := proto.ParseSinglePhoneNumberString("",-1)
 					deviceInfo.Family[i] = newPhone
+					break
 				}
 			}
 		}
@@ -1526,10 +1529,10 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 		}
 		phoneNumbers += fmt.Sprintf("#%s#%s#%d", phone, deviceInfo.Family[kk].Name, deviceInfo.Family[kk].Type)
 
-		if deviceInfo.Family[i].Phone == ""{
+		if deviceInfo.Family[kk].Phone == ""{
 			continue
 		}
-		proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[i].Phone)
+		proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[kk].Phone)
 	}
 	proto.Mapimei2PhoneLock.Unlock()
 
@@ -1686,7 +1689,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 				if setting.NewValue == "delete"{
 					//chenqw,要把用户名对应的userID传过来,否则不好删除vehiclesinuser,下次添加手表时会出错
 					//要设置成只有管理员才可以删除，非管理员可以修改
-					proto.Mapimei2PhoneLock.Lock()
+					//proto.Mapimei2PhoneLock.Lock()
 					proto.Mapimei2Phone[imei] = []string{}
 					for i := 0; i < len(deviceInfo.Family); i++ {
 						if i + 1 == setting.Index {
@@ -1745,7 +1748,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 						}
 						proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[i].Phone)
 					}
-					proto.Mapimei2PhoneLock.Unlock()
+					//proto.Mapimei2PhoneLock.Unlock()
 
 					/*newContacts := [proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember{}
 					count := 0
@@ -1828,6 +1831,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 							for chatidx, _ := range *chatList {
 								logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
 									imei, (*proto.AppSendChatList[imei])[chatidx].Info.Sender))
+								//是当前用户登录并且号码已修改了
 								if (*chatList)[chatidx].Info.SenderUser == newPhone.Username && (*chatList)[chatidx].Info.Sender != newPhone.Phone {
 									(*chatList)[chatidx].Info.Sender = newPhone.Phone
 								}
