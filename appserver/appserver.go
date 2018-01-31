@@ -74,7 +74,7 @@ func (myfs*MyFileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type Getdeviceinfoimei struct {
-	Model 		int		`json:"model"`
+	Model 		string		`json:"model"`
 	Recid string			`json:"recid"`
 	Avatar string			`json:"Avatar"`
 	SimID	string			`json:"SimID"`
@@ -87,7 +87,7 @@ type Getdeviceinfoimei struct {
 	Fence2	string			`json:"Fence2"`
 	CountryCode	string		`json:"CountryCode"`
 	Features	[]byte	`json:"features"`
-	IsAdmin	int			`json:"isAdmin"`
+	IsAdmin	bool			`json:"isAdmin"`
 	Added	bool			`json:"added"`
 }
 
@@ -321,7 +321,9 @@ func AppConnManagerLoop() {
 												if (param.Minichat[k].Receiver == deviceInfo.Family[j].Phone && param.Minichat[k].Receiver != "0") ||
 												//表示从手机APP端传送过来的，手表端群发Receiver = "0"
 													len(param.Minichat[k].Receiver) == 0 {
-													if proto.ConnidUserName[username] == deviceInfo.Family[j].Username{
+													if proto.ConnidUserName[username] == deviceInfo.Family[j].Username ||
+														//旧的模式没有username,兼容之
+														(proto.ConnidUserName[username] == username && len(deviceInfo.Family[j].Username) < 2){
 														logging.Log("responseChan")
 														c.responseChan <- msg
 														continue
@@ -1355,15 +1357,15 @@ func AddAccessToken(accessToken string)  {
 }
 
 func ValidAccessTokenFromService(AccessToken string)  (bool, []string) {
-	/*url := "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
+	url := "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
 	if svrctx.Get().IsDebugLocal {
 		url = "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
-	}*/
+	}
 
-	url := "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + AccessToken
+	/*url := "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + AccessToken
 	if svrctx.Get().IsDebugLocal {
 		url = "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + AccessToken
-	}
+	}*/
 
 	logging.Log("url: " + url)
 	resp, err := http.Get(url)
@@ -1547,7 +1549,7 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logging.Log("GetNotifications Params: " + proto.MakeStructToJson(&params))
+	//logging.Log("GetNotifications Params: " + proto.MakeStructToJson(&params))
 
 	if params.AccessToken == "" || len(params.Devices) == 0 || len(params.LastUpdates) == 0 || (len(params.Devices)  != len(params.LastUpdates)){
 		result.ErrCode = -1
@@ -1741,6 +1743,7 @@ func GetDeviceByimei(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}*/
+	r.ParseForm()
 	imei := r.FormValue("IMEI")
 	accesstoken := r.FormValue("access-token")
 	if imei == "" {
@@ -1795,12 +1798,12 @@ func GetDeviceByimei(w http.ResponseWriter, r *http.Request) {
 	result.IsAdmin = false
 	result.TimeZone = "+08:00"
 	result.Avatar = "http://service.gatorcn.com/tracker/web/static/images/child.png"*/
-	result.Model = deviceInfo.Model
-	result.Added = true
-	result.IsAdmin = deviceInfo.IsAdmin
+	result.Model = proto.ModelNameList[deviceInfo.Model]
+	result.Added = false
+	result.IsAdmin = deviceInfo.IsAdmin == 0
 	result.Avatar = deviceInfo.Avatar
 
-	//logging.Log("http GetDeviceByimei from : " + imei + accesstoken)
+	logging.Log("http GetDeviceByimei from : " + proto.MakeStructToJson(result))
 	JSON2PHP(w,status,&result)
 }
 

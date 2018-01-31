@@ -1616,6 +1616,7 @@ func ParseSinglePhoneNumberString(phone string, i int)  FamilyMember{
 		member.IsAdmin = int(Str2Num(fields[3], 10))
 		member.Username = fields[4]
 	}
+
 	return member
 }
 
