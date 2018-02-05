@@ -807,9 +807,11 @@ func getDeviceVerifyCode(connid uint64, params *proto.DeviceBaseParams) bool {
 	//isAdmin, _,_,_ := queryIsAdmin(params.Imei, params.UserName)
 
 	isAdmin := false
+	bFoundAdmin := false
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 	if ok {
+		//新的管理员判断方式,新的模式下如果是管理员则肯定在新的模式下判断出来,
 		for ii,_ := range deviceInfo.Family{
 			if len(deviceInfo.Family[ii].Phone) == 0{
 				continue
@@ -818,12 +820,27 @@ func getDeviceVerifyCode(connid uint64, params *proto.DeviceBaseParams) bool {
 			if deviceInfo.Family[ii].Username == params.UserName {
 				if deviceInfo.Family[ii].IsAdmin == 0 {
 					isAdmin = true
-					break
+					goto LABEL
 				}
 			}
 		}
-	}
 
+		//兼容旧的判断管理员模式,因为旧的模式username为0,旧的成员都是管理员
+		for k,_ := range deviceInfo.Family {
+			//新的管理员在旧的判断管理员模式判断
+			if len(deviceInfo.Family[k].Username) > 1 &&
+				deviceInfo.Family[k].Username == params.UserName &&
+				deviceInfo.Family[k].IsAdmin != 0 {
+				bFoundAdmin = true
+				break
+			}
+		}
+		//如果username都是0则都是管理员
+		if !bFoundAdmin{
+			isAdmin = true
+		}
+	}
+LABEL:
 	if isAdmin {
 		deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 		if ok && deviceInfo != nil {
@@ -922,7 +939,7 @@ func  getDeviceInfoByImei(connid uint64, params *proto.DeviceAddParams) bool {
 		if err != nil {
 			return false
 		}*/
-		isAdmin := true
+		isAdmin := true		//true表示是管理员
 		for i,_ := range deviceInfo.Family{
 			if deviceInfo.Family[i].Phone != ""{
 				if deviceInfo.Family[i].IsAdmin == 0 {

@@ -469,7 +469,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	DeviceInfoListLock.Unlock()
 
 	service.GetWatchDataInfo(service.imei)
-	logging.Log(fmt.Sprintf("DoRequest msg.Data:%s",msg.Data))
+	logging.Log(fmt.Sprintf("DoRequest msg.cmd:%d,msg.Data:%s",msg.Header.Header.Cmd,msg.Data))
 	if service.cmd == DRT_SET_IP_PORT_ACK  ||       // 同BP01，手表设置服务器IP端口的ACK
 		service.cmd == DRT_SET_APN_ACK     ||        // 同BP02，手表设置APN的ACK
 		service.cmd == DRT_SYNC_TIME_ACK  ||   // 同BP03，手表请求对时ACK
