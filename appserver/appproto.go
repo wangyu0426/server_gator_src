@@ -358,6 +358,7 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 		return true
 	}
 
+	logging.Log(fmt.Sprintf("handleHeartBeat params:UserName:%s,SelectedDevice:%s",params.UserName,params.SelectedDevice))
 	for i, imei := range params.Devices {
 		if InStringArray(imei, imeiList) == false {
 			continue
@@ -399,12 +400,13 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 							len(deviceInfo.Family[j].Username) <= 1 {
 							continue
 						}
+
 						logging.Log(fmt.Sprintf("handleHeartBeat %s Phone = %s username %s 2 %s",
 							result.Minichat[k].Receiver,deviceInfo.Family[j].Phone,proto.ConnidUserName[params.UserName],
 							deviceInfo.Family[j].Username))
-						if (result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && result.Minichat[k].Receiver != "0") ||
-						//Receiver为空表示是从手机APP端发送至手表
-							len(result.Minichat[k].Receiver) == 0 {
+
+						if result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(result.Minichat[k].Receiver) > 1{
+						//Receiver为空表示是从手机APP端发送至手表 {
 							if proto.ConnidUserName[params.UserName] == deviceInfo.Family[j].Username ||
 								(proto.ConnidUserName[params.UserName] == params.UserName && len(deviceInfo.Family[j].Username) < 2){
 								logging.Log("handleHeartBeat responseChan")
@@ -412,7 +414,8 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 								break
 							}
 						}
-						if result.Minichat[k].Receiver == "0"{
+
+						if result.Minichat[k].Receiver == "0" || len(result.Minichat[k].Receiver) == 0 {
 							tmpMinichat = append(tmpMinichat,result.Minichat[k])
 							break
 						}
@@ -447,7 +450,7 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 						logging.Log(fmt.Sprintf("handleHeartBeat %s Phone = %s username %s 2 %s",
 							result.Minichat[k].Receiver,deviceInfo.Family[j].Phone,proto.ConnidUserName[params.UserName],
 							deviceInfo.Family[j].Username))
-						if (result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && result.Minichat[k].Receiver != "0"){
+						if (result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(result.Minichat[k].Receiver) > 1){
 							//旧的模式没有username,兼容之
 							if proto.ConnidUserName[params.UserName] == deviceInfo.Family[j].Username ||
 								(proto.ConnidUserName[params.UserName] == params.UserName && len(deviceInfo.Family[j].Username) < 2){
