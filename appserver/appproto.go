@@ -396,8 +396,7 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 			for k, _ := range result.Minichat {
 				if ok{
 					for j,_ := range deviceInfo.Family {
-						if deviceInfo.Family[j].Phone == "" ||
-							len(deviceInfo.Family[j].Username) <= 1 {
+						if deviceInfo.Family[j].Phone == "" {
 							continue
 						}
 
@@ -405,7 +404,8 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 							result.Minichat[k].Receiver,deviceInfo.Family[j].Phone,proto.ConnidUserName[params.UserName],
 							deviceInfo.Family[j].Username))
 
-						if result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(result.Minichat[k].Receiver) > 1{
+						if result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(result.Minichat[k].Receiver) > 1 ||
+							len(result.Minichat[k].Receiver) == 0 {
 						//Receiver为空表示是从手机APP端发送至手表 {
 							if proto.ConnidUserName[params.UserName] == deviceInfo.Family[j].Username ||
 								(proto.ConnidUserName[params.UserName] == params.UserName && len(deviceInfo.Family[j].Username) < 2){
@@ -415,8 +415,9 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 							}
 						}
 
-						if result.Minichat[k].Receiver == "0" || len(result.Minichat[k].Receiver) == 0 {
+						if result.Minichat[k].Receiver == "0" {
 							tmpMinichat = append(tmpMinichat,result.Minichat[k])
+							logging.Log("handleHeartBeat responseChan 000")
 							break
 						}
 					}
@@ -443,14 +444,14 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 			for k, _ := range result.Minichat {
 				if ok{
 					for j,_ := range deviceInfo.Family {
-						if deviceInfo.Family[j].Phone == "" ||
-							len(deviceInfo.Family[j].Username) <= 1 {
+						if deviceInfo.Family[j].Phone == "" {
 							continue
 						}
 						logging.Log(fmt.Sprintf("handleHeartBeat %s Phone = %s username %s 2 %s",
 							result.Minichat[k].Receiver,deviceInfo.Family[j].Phone,proto.ConnidUserName[params.UserName],
 							deviceInfo.Family[j].Username))
-						if (result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(result.Minichat[k].Receiver) > 1){
+						if (result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(result.Minichat[k].Receiver) > 1)  ||
+							len(result.Minichat[k].Receiver) == 0{
 							//旧的模式没有username,兼容之
 							if proto.ConnidUserName[params.UserName] == deviceInfo.Family[j].Username ||
 								(proto.ConnidUserName[params.UserName] == params.UserName && len(deviceInfo.Family[j].Username) < 2){
@@ -460,7 +461,7 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 							}
 						}
 						//Receiver == "0"表示群发消息至关注该手表的人;len(Receiver) == 0表示仅仅手机端发送和接收
-						if result.Minichat[k].Receiver == "0" || len(result.Minichat[k].Receiver) == 0{
+						if result.Minichat[k].Receiver == "0"{
 							tmpMinichat = append(tmpMinichat,result.Minichat[k])
 							break
 						}

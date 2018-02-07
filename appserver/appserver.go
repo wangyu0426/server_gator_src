@@ -317,7 +317,8 @@ func AppConnManagerLoop() {
 												logging.Log(fmt.Sprintf("Receiver %s Phone = %s username %s 2 %s",
 													param.Minichat[k].Receiver,deviceInfo.Family[j].Phone,proto.ConnidUserName[username],
 													deviceInfo.Family[j].Username))
-												if (param.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(param.Minichat[k].Receiver) > 1) {
+												if (param.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(param.Minichat[k].Receiver) > 1) ||
+													len(param.Minichat[k].Receiver) == 0{
 												//表示从手机APP端传送过来的，手表端群发Receiver = "0"
 													if proto.ConnidUserName[username] == deviceInfo.Family[j].Username ||
 														//旧的模式没有username,兼容之
@@ -327,7 +328,8 @@ func AppConnManagerLoop() {
 														continue
 													}
 												}
-												if param.Minichat[k].Receiver == "0" || len(param.Minichat[k].Receiver) == 0{
+												if param.Minichat[k].Receiver == "0"{
+													logging.Log("response handleHeartBeat responseChan 000")
 													c.responseChan <- msg
 												}
 											}
