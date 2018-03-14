@@ -7,10 +7,18 @@ import (
 	"fmt"
 	"../logging"
 	"bytes"
+	"crypto/md5"
+	"crypto/sha1"
+	"encoding/hex"
+	"io"
+	"crypto/sha256"
 )
 
 //(357593060571943BP00,GT03.V18.20171019,7,46001)
 //GT004802/iAwAUB3pGjkYw44lYotx/Ny+BskWacSFetg+NFGkUfW/zasg+susRsDKD5QZmw=
+/*
+20180308,chenqw:增加md5和sha1加密算法实现
+*/
 
 const (
 	base64Table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
@@ -196,4 +204,26 @@ func CommonDesDecrypt(data string) (Dst string,err error) {
 	aesDecrypter := cipher.NewCFBDecrypter(aesBlockDecrypter, key_iv)
 	aesDecrypter.XORKeyStream(decrypted, src)
 	return string(decrypted), nil
+}
+
+func Md5Encrypt(data string) (string,error) {
+	w := md5.New()
+	io.WriteString(w,data)
+	md5str2 := fmt.Sprintf("%x", w.Sum(nil))
+
+	return md5str2,nil
+}
+
+func SHA1Digest(data string) (string,error) {
+	sha1 := sha1.New()
+	sha1.Write([]byte(data))
+
+	return hex.EncodeToString(sha1.Sum([]byte(""))),nil
+}
+
+func SHA256Digest(data string) (string ,error) {
+	sha256 := sha256.New()
+	sha256.Write([]byte(data))
+
+	return hex.EncodeToString(sha256.Sum([]byte(""))),nil
 }

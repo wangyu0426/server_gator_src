@@ -358,7 +358,11 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 		return true
 	}
 
-	logging.Log(fmt.Sprintf("handleHeartBeat params:UserName:%s,SelectedDevice:%s",params.UserName,params.SelectedDevice))
+	logging.Log(fmt.Sprintf("handleHeartBeat params:UserName:%s,SelectedDevice:%s,familynumber:%s",
+		params.UserName,params.SelectedDevice,params.FamilyNumber))
+	//chenqw,20180226,解决程序退出时APP发送的微聊不显示问题
+	//proto.ConnidUserName[params.FamilyNumber] = params.UserName
+
 	for i, imei := range params.Devices {
 		if InStringArray(imei, imeiList) == false {
 			continue
@@ -390,37 +394,27 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 			result.Locations = append(result.Locations, svrctx.GetDeviceData(imeiUint64, svrctx.Get().PGPool))
 			result.Minichat = append(result.Minichat, proto.GetChatListForApp(imeiUint64, params.UserName)...)
 
-			proto.DeviceInfoListLock.Lock()
-			deviceInfo, ok := (*proto.DeviceInfoList)[imeiUint64]
-			proto.DeviceInfoListLock.Unlock()
 			for k, _ := range result.Minichat {
-				if ok{
-					for j,_ := range deviceInfo.Family {
-						if deviceInfo.Family[j].Phone == "" {
-							continue
-						}
-
-						logging.Log(fmt.Sprintf("handleHeartBeat %s Phone = %s username %s 2 %s",
-							result.Minichat[k].Receiver,deviceInfo.Family[j].Phone,proto.ConnidUserName[params.UserName],
-							deviceInfo.Family[j].Username))
-
-						if result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(result.Minichat[k].Receiver) > 1 ||
-							len(result.Minichat[k].Receiver) == 0 {
-						//Receiver为空表示是从手机APP端发送至手表 {
-							if proto.ConnidUserName[params.UserName] == deviceInfo.Family[j].Username ||
-								(proto.ConnidUserName[params.UserName] == params.UserName && len(deviceInfo.Family[j].Username) < 2){
-								logging.Log("handleHeartBeat responseChan")
-								tmpMinichat = append(tmpMinichat,result.Minichat[k])
-								break
-							}
-						}
-
-						if result.Minichat[k].Receiver == "0" {
-							tmpMinichat = append(tmpMinichat,result.Minichat[k])
-							logging.Log("handleHeartBeat responseChan 000")
-							break
-						}
+				/*if result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(result.Minichat[k].Receiver) > 1 ||
+					len(result.Minichat[k].Receiver) == 0 {
+				//Receiver为空表示是从手机APP端发送至手表 {
+					if proto.ConnidUserName[params.UserName] == deviceInfo.Family[j].Username {
+						logging.Log("handleHeartBeat responseChan")
+						tmpMinichat = append(tmpMinichat,result.Minichat[k])
+						break
 					}
+				}*/
+				if (result.Minichat[k].Receiver == params.FamilyNumber && len(result.Minichat[k].Receiver) > 1) ||
+					len(result.Minichat[k].Receiver) == 0{
+					tmpMinichat = append(tmpMinichat,result.Minichat[k])
+					logging.Log("handleHeartBeat responseChan")
+					continue
+				}
+
+				if result.Minichat[k].Receiver == "0" {
+					tmpMinichat = append(tmpMinichat,result.Minichat[k])
+					logging.Log("handleHeartBeat responseChan 000")
+					break
 				}
 			}
 
@@ -438,34 +432,28 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 				result.Alarms = append(result.Alarms, (*alarms)...)
 			}
 
-			proto.DeviceInfoListLock.Lock()
-			deviceInfo, ok := (*proto.DeviceInfoList)[imeiUint64]
-			proto.DeviceInfoListLock.Unlock()
 			for k, _ := range result.Minichat {
-				if ok{
-					for j,_ := range deviceInfo.Family {
-						if deviceInfo.Family[j].Phone == "" {
-							continue
-						}
-						logging.Log(fmt.Sprintf("handleHeartBeat %s Phone = %s username %s 2 %s",
-							result.Minichat[k].Receiver,deviceInfo.Family[j].Phone,proto.ConnidUserName[params.UserName],
-							deviceInfo.Family[j].Username))
-						if (result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(result.Minichat[k].Receiver) > 1)  ||
-							len(result.Minichat[k].Receiver) == 0{
-							//旧的模式没有username,兼容之
-							if proto.ConnidUserName[params.UserName] == deviceInfo.Family[j].Username ||
-								(proto.ConnidUserName[params.UserName] == params.UserName && len(deviceInfo.Family[j].Username) < 2){
-								logging.Log("handleHeartBeat responseChan")
-								tmpMinichat = append(tmpMinichat,result.Minichat[k])
-								break
-							}
-						}
-						//Receiver == "0"表示群发消息至关注该手表的人;len(Receiver) == 0表示仅仅手机端发送和接收
-						if result.Minichat[k].Receiver == "0"{
-							tmpMinichat = append(tmpMinichat,result.Minichat[k])
-							break
-						}
+				/*if (result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(result.Minichat[k].Receiver) > 1)  ||
+					len(result.Minichat[k].Receiver) == 0{
+					//旧的模式没有username,兼容之
+					if proto.ConnidUserName[params.UserName] == deviceInfo.Family[j].Username {
+						logging.Log("handleHeartBeat responseChan")
+						tmpMinichat = append(tmpMinichat,result.Minichat[k])
+						//break
+						continue
 					}
+				}*/
+				if (result.Minichat[k].Receiver == params.FamilyNumber && len(result.Minichat[k].Receiver) > 1) ||
+					len(result.Minichat[k].Receiver) == 0{
+					tmpMinichat = append(tmpMinichat,result.Minichat[k])
+					logging.Log("handleHeartBeat responseChan")
+					continue
+				}
+				//Receiver == "0"表示群发消息至关注该手表的人;len(Receiver) == 0表示仅仅手机端发送和接收
+				if result.Minichat[k].Receiver == "0"{
+					tmpMinichat = append(tmpMinichat,result.Minichat[k])
+					//break
+					continue
 				}
 			}
 
@@ -484,14 +472,18 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 }
 
 func login(connid uint64, username, password string, isRegister bool) bool {
-	urlRequest := "https://watch.gatorcn.com/web/index.php?r=app/auth/"
-	if svrctx.Get().IsDebugLocal {
+	var urlRequest string
+	if !svrctx.Get().IsUseAliYun {
 		urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
-	}
-	/*urlRequest := "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+		if svrctx.Get().IsDebugLocal {
+			urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
+		}
+	}else {
+		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
 	if svrctx.Get().IsDebugLocal {
 		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
-	}*/
+	}
+	}
 	reqType := "login"
 	if isRegister {
 		reqType = "register"
@@ -543,7 +535,7 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	logging.Log("accessToken: " + fmt.Sprint(accessToken))
 	//logging.Log("devices: " + fmt.Sprint(devices))
 	if status != nil && accessToken != nil {
-		proto.ConnidUserName[username] = username
+		//proto.ConnidUserName[username] = username
 		proto.AccessTokenMap[fmt.Sprint(accessToken)] = username
 
 		AddAccessToken(accessToken.(string))
@@ -682,14 +674,18 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 
 //忘记密码，通过服务器重设秘密
 func resetPassword(connid uint64, username string) bool {
-	urlRequest := "https://watch.gatorcn.com/web/index.php?r=app/auth/"
-	if svrctx.Get().IsDebugLocal {
+	var urlRequest string
+	if !svrctx.Get().IsUseAliYun {
 		urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
-	}
-	/*urlRequest := "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+		if svrctx.Get().IsDebugLocal {
+			urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
+		}
+	}else {
+		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
 	if svrctx.Get().IsDebugLocal {
 		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
-	}*/
+	}
+	}
 	reqType := "reset"
 	urlRequest += reqType
 
@@ -719,15 +715,18 @@ func resetPassword(connid uint64, username string) bool {
 
 //有旧密码，重设新密码
 func modifyPassword(connid uint64, username, accessToken, oldPasswd, newPasswd  string) bool {
-	requesetURL := "https://watch.gatorcn.com/web/index.php?r=app/service/modpwd&access-token=" + accessToken
-	if svrctx.Get().IsDebugLocal {
+	var requesetURL string
+	if !svrctx.Get().IsUseAliYun {
 		requesetURL = "https://watch.gatorcn.com/web/index.php?r=app/service/modpwd&access-token=" + accessToken
-	}
-
-	/*requesetURL := "http://120.25.214.188/tracker/web/index.php?r=app/service/modpwd&access-token=" + accessToken
+		if svrctx.Get().IsDebugLocal {
+			requesetURL = "https://watch.gatorcn.com/web/index.php?r=app/service/modpwd&access-token=" + accessToken
+		}
+	}else {
+		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/modpwd&access-token=" + accessToken
 	if svrctx.Get().IsDebugLocal {
 		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/modpwd&access-token=" + accessToken
-	}*/
+	}
+	}
 
 	logging.Log("url: " + requesetURL)
 	resp, err := http.PostForm(requesetURL, url.Values{"oldpwd": {oldPasswd}, "newpwd": {newPasswd}})
@@ -753,16 +752,18 @@ func modifyPassword(connid uint64, username, accessToken, oldPasswd, newPasswd  
 
 
 func handleFeedback(connid uint64, username, accessToken, feedback string) bool {
-	requesetURL := "https://watch.gatorcn.com/web/index.php?r=app/service/feedback&access-token=" + accessToken
-	if svrctx.Get().IsDebugLocal {
+	var requesetURL string
+	if !svrctx.Get().IsUseAliYun {
 		requesetURL = "https://watch.gatorcn.com/web/index.php?r=app/service/feedback&access-token=" + accessToken
-	}
-
-	/*requesetURL := "http://120.25.214.188/tracker/web/index.php?r=app/service/feedback&access-token=" + accessToken
+		if svrctx.Get().IsDebugLocal {
+			requesetURL = "https://watch.gatorcn.com/web/index.php?r=app/service/feedback&access-token=" + accessToken
+		}
+	}else {
+		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/feedback&access-token=" + accessToken
 	if svrctx.Get().IsDebugLocal {
 		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/feedback&access-token=" + accessToken
-	}*/
-
+	}
+	}
 	logging.Log("url: " + requesetURL)
 	resp, err := http.PostForm(requesetURL, url.Values{"feedback": {feedback}})
 	if err != nil {
@@ -985,7 +986,7 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 	if ok && deviceInfo != nil {
 
 		//refresh.刷新时也要保存
-		proto.ConnidUserName[params.UserName] = params.UserName
+		//proto.ConnidUserName[params.UserName] = params.UserName
 		proto.AccessTokenMap[params.AccessToken] = params.UserName
 
 		found = true
@@ -1832,6 +1833,22 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 						deviceInfo.Family[setting.Index - 1] = newPhone
 						deviceInfo.Family[setting.Index - 1].Avatar = bkAvatar
 
+						phone2users,ok1 := proto.ConnidUserName[imei]
+						if ok1 {
+							user, okname := phone2users[deviceInfo.Family[setting.Index-1].Phone]
+							if okname && user != "" {
+								delete(proto.ConnidUserName[imei], deviceInfo.Family[setting.Index-1].Phone)
+								if len(proto.ConnidUserName[imei]) == 0{
+									delete(proto.ConnidUserName,imei)
+								}
+								_,ok2 := proto.ConnidUserName[imei]
+								if !ok2 {
+									proto.ConnidUserName[imei] = map[string]string{}
+								}
+								proto.ConnidUserName[imei][deviceInfo.Family[setting.Index-1].Phone] = user
+							}
+						}
+
 						//chenqw,20180116,更新下发图片和语音发送对应的亲情号码
 						proto.AppNewPhotoPendingListLock.Lock()
 						photoList, ok := proto.AppNewPhotoPendingList[imei]
@@ -2605,16 +2622,18 @@ func parseUint8Array(data interface{}) string {
 }
 
 func checkOwnedDevices(AccessToken string)  []string {
-	url := "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
-	if svrctx.Get().IsDebugLocal {
+	var url string
+	if !svrctx.Get().IsUseAliYun {
 		url = "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
-	}
-
-	/*url := "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + AccessToken
-	if svrctx.Get().IsDebugLocal {
+		if svrctx.Get().IsDebugLocal {
+			url = "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
+		}
+	}else {
 		url = "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + AccessToken
-	}*/
-
+		if svrctx.Get().IsDebugLocal {
+			url = "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + AccessToken
+		}
+	}
 	//logging.Log("url: " + url)
 	resp, err := http.Get(url)
 	if err != nil {

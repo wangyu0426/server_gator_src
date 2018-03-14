@@ -76,8 +76,7 @@ func PushNotificationToAppEx(apiBaseURL string, imei uint64, ownerName string, c
 			}
 
 			if (chat.Receiver == deviceInfo.Family[i].Phone &&
-				chat.Receiver != "0" &&
-				ConnidUserName[deviceInfo.Family[i].Username] == deviceInfo.Family[i].Username ) ||
+				chat.Receiver != "0") ||
 				len(chat.Receiver) == 0 ||
 				chat.Receiver == "0"{
 

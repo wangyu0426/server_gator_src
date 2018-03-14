@@ -32,12 +32,12 @@ type GT03Service struct {
 	needSendPhoto bool
 	reqPhotoInfoNum int
 	getSameWifi bool
-	wifiInfoList [MAX_WIFI_NUM]WIFIInfo
+	wifiInfoList [MAX_WIFI_NUM + 1]WIFIInfo
 	wiFiNum uint16
 	wifiZoneIndex int16
 	hasSetHomeWifi bool
 	lbsNum uint16
-	lbsInfoList [MAX_LBS_NUM]LBSINFO
+	lbsInfoList [MAX_LBS_NUM + 1]LBSINFO
 	accracy uint32
 	MCC int32
 	MNC int32
@@ -1497,7 +1497,7 @@ func  (service *GT03Service) ParseWifiInfo(pszMsgBuf []byte, shBufLen *uint32)  
 	}
 
 	service.wiFiNum = 0
-	service.wifiInfoList = [MAX_WIFI_NUM]WIFIInfo{}
+	service.wifiInfoList = [MAX_WIFI_NUM + 1]WIFIInfo{}
 
 	shWifiNum := pszMsgBuf[bufOffset] - '0'
 	bufOffset += 2
@@ -1599,7 +1599,7 @@ func  (service *GT03Service) ParseLBSInfo(pszMsgBuf []byte, shBufLen *uint32)  b
 	bufOffset := 0
 	service.lbsNum = 0
 	*shBufLen = 0
-	service.lbsInfoList = [MAX_LBS_NUM]LBSINFO{}
+	service.lbsInfoList = [MAX_LBS_NUM + 1]LBSINFO{}
 
 	shLBSNum := pszMsgBuf[bufOffset] - '0'
 	if shLBSNum > MAX_LBS_NUM {

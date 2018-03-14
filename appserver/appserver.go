@@ -303,42 +303,21 @@ func AppConnManagerLoop() {
 					if userConnTable != nil {
 						for _, c := range userConnTable {
 							if c != nil  && c.responseChan != nil {
-								if msg.Cmd == proto.HearbeatAckCmdName {
-									proto.DeviceInfoListLock.Lock()
-									deviceInfo, ok := (*proto.DeviceInfoList)[msg.Imei]
-
-									for k, _ := range param.Minichat {
-										if ok{
-											for j,_ := range deviceInfo.Family {
-												if proto.ConnidUserName[username] == "" ||
-													deviceInfo.Family[j].Phone == ""  {
-													continue
-												}
-												logging.Log(fmt.Sprintf("Receiver %s Phone = %s username %s 2 %s",
-													param.Minichat[k].Receiver,deviceInfo.Family[j].Phone,proto.ConnidUserName[username],
-													deviceInfo.Family[j].Username))
-												if (param.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(param.Minichat[k].Receiver) > 1) ||
-													len(param.Minichat[k].Receiver) == 0{
-												//表示从手机APP端传送过来的，手表端群发Receiver = "0"
-													if proto.ConnidUserName[username] == deviceInfo.Family[j].Username ||
-														//旧的模式没有username,兼容之
-														(proto.ConnidUserName[username] == username && len(deviceInfo.Family[j].Username) < 2){
-														logging.Log("responseChan")
-														c.responseChan <- msg
-														continue
-													}
-												}
-												if param.Minichat[k].Receiver == "0"{
-													logging.Log("response handleHeartBeat responseChan 000")
-													c.responseChan <- msg
-												}
+								for _,chat := range param.Minichat{
+									if len(chat.Receiver) > 1 && chat.SenderType != 1{
+										//对于手机端发送的微聊，修改set-device 命令对应的键值对
+										phone2name,ok := proto.ConnidUserName[msg.Imei]
+										if ok {
+											if phone2name[chat.Receiver] == c.user.Name {
+												logging.Log(fmt.Sprintf("receiver from watch:%s", c.user.Name))
+												c.responseChan <- msg
+												break
 											}
 										}
+									}else {
+										c.responseChan <- msg
+										break
 									}
-									proto.DeviceInfoListLock.Unlock()
-								}else {
-									logging.Log("other cmd")
-									c.responseChan <- msg
 								}
 							}
 
@@ -438,7 +417,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 			if ok && deviceInfo != nil {
 				phone = deviceInfo.Family[Index-1].Phone
 				if username != "" {
-					proto.ConnidUserName[username] = username
+					//proto.ConnidUserName[username] = username
 					proto.AccessTokenMap[accessToken] = username
 					var tag proto.TagUserName
 					tag.Username = username
@@ -1127,6 +1106,12 @@ func GetAppVersionOnline(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
+	//20180309,chenqw
+	if len(body) <= 0 {
+		logging.Log("get app verion from online store response = 0," + reqUrl)
+		JSON2(w,500,&result)
+		return
+	}
 	if err != nil {
 		logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
 		JSON2(w, 500, (&result))
@@ -1283,6 +1268,7 @@ func RemoveAppConn(c *AppConnection) {
 		conn, ok2 := userConnTable[c.ID]
 		if ok2 && conn != nil && c == conn {
 			c.SetClosed()
+			//close chan 会触发一次通信
 			close(c.requestChan)
 			close(c.responseChan)
 			close(c.closeChan)
@@ -1357,15 +1343,18 @@ func AddAccessToken(accessToken string)  {
 }
 
 func ValidAccessTokenFromService(AccessToken string)  (bool, []string) {
-	url := "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
-	if svrctx.Get().IsDebugLocal {
+	var url string
+	if !svrctx.Get().IsUseAliYun {
 		url = "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
-	}
-
-	/*url := "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + AccessToken
+		if svrctx.Get().IsDebugLocal {
+			url = "https://watch.gatorcn.com/web/index.php?r=app/service/devices&access-token=" + AccessToken
+		}
+	}else {
+		url = "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + AccessToken
 	if svrctx.Get().IsDebugLocal {
 		url = "http://120.25.214.188/tracker/web/index.php?r=app/service/devices&access-token=" + AccessToken
-	}*/
+	}
+	}
 
 	logging.Log("url: " + url)
 	resp, err := http.Get(url)

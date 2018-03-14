@@ -80,6 +80,8 @@ type ServerContext struct {
 	AndroidAppURL string
 	IOSAppURL string
 
+	IsUseAliYun bool
+
 	//channel that communicates with phone app
 	AppServerChan chan *proto.AppMsgData  `json:"-"`
 	//app has updated or setted device ,so send msg to device

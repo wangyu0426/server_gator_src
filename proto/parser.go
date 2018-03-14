@@ -344,6 +344,7 @@ type HeartbeatParams struct {
 	Platform  string `json:"platform"`
 	Language string `json:"language"`
 	SelectedDevice string `json:"selectedDevice"`
+	FamilyNumber string `json:"familyNumber"`
 }
 
 type HeartbeatResult struct {
@@ -897,7 +898,7 @@ type TagUserName struct{
 	Username string
 	Phone	string
 }
-var ConnidUserName = map[string]string{}
+var ConnidUserName = map[uint64]map[string]string{}
 var ConnidtagUserName = map[string]TagUserName{}
 var AccessTokenMap = map[string]string{}
 func init()  {
@@ -1447,6 +1448,8 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		LocateInterval interface{}
 	)
 
+	var imeiunit64 uint64
+
 	tmpDeviceInfoList := &map[uint64]*DeviceInfo{}
 	tmpSystemNo2ImeiMap := map[uint64]uint64{}
 
@@ -1461,7 +1464,8 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		if err != nil {
 			fmt.Println("row scan err: ", err.Error())
 		}
-		deviceInfo.Imei = Str2Num(parseUint8Array(IMEI), 10)
+		imeiunit64 = Str2Num(parseUint8Array(IMEI), 10)
+		deviceInfo.Imei = imeiunit64
 		deviceInfo.OwnerName = parseUint8Array(OwnerName)
 		ParseFamilyMembers(parseUint8Array(PhoneNumbers), &deviceInfo.Family)
 		//fmt.Printf("ContactAvatar:##%s\n",ContactAvatar)
@@ -1495,14 +1499,21 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 
 		tmpSystemNo2ImeiMap[deviceInfo.Imei % 100000000000] = deviceInfo.Imei
 
-		Mapimei2PhoneLock.Lock()
 		for i := 0;i < len(deviceInfo.Family);i++ {
 			if deviceInfo.Family[i].Phone == ""{
 				continue
 			}
 			Mapimei2Phone[deviceInfo.Imei] = append(Mapimei2Phone[deviceInfo.Imei], deviceInfo.Family[i].Phone)
+
+			_,ok := ConnidUserName[imeiunit64]
+			if !ok{
+				ConnidUserName[imeiunit64] = map[string]string{}
+			}
+			if deviceInfo.Family[i].Username == ""{
+				continue
+			}
+			ConnidUserName[imeiunit64][deviceInfo.Family[i].Phone] = deviceInfo.Family[i].Username
 		}
-		Mapimei2PhoneLock.Unlock()
 	}
 
 	fmt.Println("deviceinfo list len: ", len(*tmpDeviceInfoList))
