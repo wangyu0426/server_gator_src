@@ -417,7 +417,6 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 			if ok && deviceInfo != nil {
 				phone = deviceInfo.Family[Index-1].Phone
 				if username != "" {
-					//proto.ConnidUserName[username] = username
 					proto.AccessTokenMap[accessToken] = username
 					var tag proto.TagUserName
 					tag.Username = username

@@ -193,6 +193,7 @@ func PanicTrace(kb int) []byte {
 	//stack = bytes.TrimRight(stack, "/n")
 	//stack := make([]byte, kb * 1024)
 
+	//打印出当前栈信息
 	stack := make([]byte, kb * 1024)
 	runtime.Stack(stack, true)
 	return stack

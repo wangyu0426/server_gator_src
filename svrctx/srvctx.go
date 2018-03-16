@@ -166,7 +166,7 @@ func init()  {
 		serverCtx.HttpServerName = serverCtx.LocalDebugHttpServerName
 	}
 
-	fmt.Println("serverCtx.HttpServerName: ", serverCtx.HttpServerName, serverCtx.RedirectApiCompanyList)
+	logging.Log(fmt.Sprintf("serverCtx.HttpServerName: %s--%s--%t", serverCtx.HttpServerName, serverCtx.RedirectApiCompanyList,serverCtx.IsUseAliYun))
 
 	//创建postgresql连接池
 	var err error

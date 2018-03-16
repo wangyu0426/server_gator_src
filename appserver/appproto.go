@@ -360,8 +360,6 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 
 	logging.Log(fmt.Sprintf("handleHeartBeat params:UserName:%s,SelectedDevice:%s,familynumber:%s",
 		params.UserName,params.SelectedDevice,params.FamilyNumber))
-	//chenqw,20180226,解决程序退出时APP发送的微聊不显示问题
-	//proto.ConnidUserName[params.FamilyNumber] = params.UserName
 
 	for i, imei := range params.Devices {
 		if InStringArray(imei, imeiList) == false {
@@ -379,6 +377,15 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 				proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, params.FamilyNumbers[i],
 					params.UUID, params.DeviceToken, params.Platform, params.Language)
 			}
+		}
+
+		_,ok1 := proto.ConnidUserName[imeiUint64]
+		if !ok1{
+			proto.ConnidUserName[imeiUint64] = map[string]string{}
+		}
+		_,ok2 := proto.ConnidUserName[imeiUint64][params.FamilyNumber]
+		if !ok2 {
+			proto.ConnidUserName[imeiUint64][params.FamilyNumber] = params.UserName
 		}
 	}
 
@@ -535,7 +542,6 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	logging.Log("accessToken: " + fmt.Sprint(accessToken))
 	//logging.Log("devices: " + fmt.Sprint(devices))
 	if status != nil && accessToken != nil {
-		//proto.ConnidUserName[username] = username
 		proto.AccessTokenMap[fmt.Sprint(accessToken)] = username
 
 		AddAccessToken(accessToken.(string))
