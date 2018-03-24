@@ -627,6 +627,7 @@ func (service *GT03Service) ProcessMicChat() bool {
 	newChatInfo.FileID = uint64(service.chat.DateTime * 10000) + uint64(service.chat.VoiceMilisecs)
 	newChatInfo.Content = Num2Str(fileId, 10)
 	newChatInfo.DateTime = service.chat.DateTime
+	newChatInfo.DateTime = newChatInfo.DateTime / 10000
 	newChatInfo.Receiver = ""
 	newChatInfo.VoiceMilisecs = service.chat.VoiceMilisecs
 

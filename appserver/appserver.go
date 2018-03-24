@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"crypto/tls"
 )
 
 // go get github.com/golang/net
@@ -160,9 +161,12 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	http.HandleFunc("/api/reset-device-ipport", ResetDeviceIPPort)
 	http.HandleFunc(svrctx.Get().HttpUploadURL, HandleUploadFile)
 
-
+	/*router := mux.NewRouter()
+	router.HandleFunc("/api/notifications",GetNotifications).Methods("GET","POST")
+	router.HandleFunc("/api/gator3-version", GetAppVersionOnline).Methods("GET","POST")
 	//for php get device data
-	http.HandleFunc("/api/get-device-by-imei",GetDeviceByimei)
+
+	router.HandleFunc("/api/get-device-by-imei",GetDeviceByimei).Methods("GET","POST")*/
 
 
 	if serverCtx.UseHttps {
@@ -176,6 +180,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.key",nil)
 		logging.Log("http.ListenAndServeTLS return error: " + err.Error())
 	}else{
+		//go http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort),router)
 		err := http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), nil)
 		logging.Log("http.ListenAndServe return error: " + err.Error())
 	}
@@ -711,6 +716,7 @@ func AppConnReadLoop(c *AppConnection) {
 				logging.Log("AppConnReadLoop,parse recved json data failed, " + err.Error())
 				return
 			}*/
+			logging.Log("not GTS01 data,")
 			return
 		}
 
@@ -1355,8 +1361,16 @@ func ValidAccessTokenFromService(AccessToken string)  (bool, []string) {
 	}
 	}
 
+
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+
+
 	logging.Log("url: " + url)
-	resp, err := http.Get(url)
+	//resp, err := http.Get(url)
+	resp, err := client.Get(url)
 	if err != nil {
 		logging.Log("get user devices failed, " + err.Error())
 		return false, nil

@@ -169,7 +169,6 @@ type ChatInfo struct {
 	FilePath string
 }
 
-
 type PhotoSettingInfo struct {
 	Sender string
 	Member FamilyMember
@@ -505,14 +504,14 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			if lastAckOK == 1 {
 				//回复成功，通知app成功
 				if service.cmd == DRT_SET_PHONE_NUMBERS_ACK{
-					MapDeviceVerLock.Lock()
+					/*MapDeviceVerLock.Lock()
 					DeviceVer,ok := MapDeviceVer[service.imei]
 					if ok{
 						logging.Log(fmt.Sprintf("  DeviceVer.isCmdForAP06Ack:%d:%d",DeviceVer.isCmdForAP06Ack,service.imei))
 						DeviceVer.isCmdForAP06Ack = true
 						MapDeviceVer[service.imei] = DeviceVer
 					}
-					MapDeviceVerLock.Unlock()
+					MapDeviceVerLock.Unlock()*/
 
 					logging.Log("AddPendingPhotoData:3" + fmt.Sprintf("  msg.Data:%s",msg.Data))
 					ResolvePendingPhotoData(service.imei, msgIdForAck)
@@ -1419,11 +1418,11 @@ func MakeFileNumReplyMsg(imei uint64, fileType, chatNum int, isGT06 bool) []byte
 			cmd = "AP23"
 		}
 
-		MapDeviceVerLock.Lock()
+		/*MapDeviceVerLock.Lock()
 		var stdev DeviceVer
 		stdev.isCmdForAP06Ack = false
 		MapDeviceVer[imei] = stdev
-		MapDeviceVerLock.Unlock()
+		MapDeviceVerLock.Unlock()*/
 
 		body := fmt.Sprintf("%015dAP11,%s,%02d)", imei, cmd, chatNum)
 		size := fmt.Sprintf("(%04X", 5 + len(body))
@@ -1762,13 +1761,13 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 			}
 		}
 	}
-	MapDeviceVerLock.Lock()
+	//MapDeviceVerLock.Lock()
 	DevVersion := service.devVer
-	var stdev DeviceVer
-	stdev.devVer = DevVersion
-	stdev.isCmdForAP06Ack = false
-	MapDeviceVer[service.imei] = stdev
-	MapDeviceVerLock.Unlock()
+	//var stdev DeviceVer
+	//stdev.devVer = DevVersion
+	//stdev.isCmdForAP06Ack = false
+	//MapDeviceVer[service.imei] = stdev
+	//MapDeviceVerLock.Unlock()
 	if !bFond && ok && DevVersion == "0106" {
 		//send AP06 cmd and AP34 with -1,first AP34 with -1
 		resp := &ResponseItem{CMD_AP34,  service.makeReplyMsg(false, service.makeDeviceChatAckMsg(
@@ -2174,13 +2173,13 @@ func (service *GT06Service) ProcessPushMicChatAck(pszMsg []byte) bool {
 
 	//if last status == -1,it means the phone didn't exist in the watch
 	//chenqw,20171214  compatible with older version 0105
-	MapDeviceVerLock.Lock()
+	//MapDeviceVerLock.Lock()
 	DevVersion := service.devVer
-	var stdev DeviceVer
-	stdev.devVer = DevVersion
-	stdev.isCmdForAP06Ack = false
-	MapDeviceVer[service.imei] = stdev
-	MapDeviceVerLock.Unlock()
+	//var stdev DeviceVer
+	//stdev.devVer = DevVersion
+	//stdev.isCmdForAP06Ack = false
+	//MapDeviceVer[service.imei] = stdev
+	//MapDeviceVerLock.Unlock()
 	if 0 == strings.Compare(DevVersion,"0106") {
 		lastStatus := Str2SignedNum(fields[4], 10)
 		logging.Log(fmt.Sprintf("AP06lastStatus:%d", lastStatus))
@@ -2286,13 +2285,13 @@ func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
 
 	//if last status == -1,it means the phone didn't exist in the watch
 	//chenqw,20171214 compatible with older version 0105
-	MapDeviceVerLock.Lock()
+	//MapDeviceVerLock.Lock()
 	DevVersion := service.devVer
-	var stdev DeviceVer
-	stdev.devVer = DevVersion
-	stdev.isCmdForAP06Ack = false
-	MapDeviceVer[service.imei] = stdev
-	MapDeviceVerLock.Unlock()
+	//var stdev DeviceVer
+	//stdev.devVer = DevVersion
+	//stdev.isCmdForAP06Ack = false
+	//MapDeviceVer[service.imei] = stdev
+	//MapDeviceVerLock.Unlock()
 
 	if DevVersion == "0106" {
 		lastStatus := Str2SignedNum(fields[3], 10)

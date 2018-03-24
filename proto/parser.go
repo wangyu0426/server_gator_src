@@ -354,7 +354,6 @@ type HeartbeatResult struct {
 	Alarms []LocationData`json:"alarms"`
 }
 
-
 type DeviceSettingResult struct {
 	Settings []SettingParam `json:"settings"`
 	MsgId uint64			`json:"msg_id"`
@@ -2046,4 +2045,37 @@ func SplitPhone(phoneNumbers string) string {
 	}
 
 	return newPhoneNumbers
+}
+
+func QuickSort(data []ChatInfo,left,right int) {
+	length := len(data)
+	if length <= 1{
+		return
+	}
+
+	if left >= right{
+		return
+	}
+
+	tmpLow := left
+	key := data[left]
+	tmpHigh := right
+	for{
+		//查找小于等于key的元素，该元素的位置一定是tmpLow到tmpHigh之间，因为data[tmpLow]及左边元素小于等于key，不会越界
+		for data[tmpHigh].DateTime >= key.DateTime && tmpHigh > tmpLow {
+			tmpHigh--
+		}
+		for data[tmpLow].DateTime <= key.DateTime  && tmpHigh > tmpLow {
+			tmpLow++
+		}
+		if tmpHigh <= tmpLow{
+			break
+		}
+		data[tmpLow],data[tmpHigh] = data[tmpHigh],data[tmpLow]
+	}
+	data[left] = data[tmpLow]
+	data[tmpLow] = key
+
+	QuickSort(data,left,tmpLow - 1)
+	QuickSort(data,tmpLow + 1,right)
 }

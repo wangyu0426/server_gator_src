@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"math/rand"
 	"github.com/garyburd/redigo/redis"
+	"crypto/tls"
 )
 
 const (
@@ -355,6 +356,7 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 
 func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatParams) bool {
 	if params.AccessToken == ""{
+		logging.Log("no AccessToken," + params.UserName)
 		return true
 	}
 
@@ -468,6 +470,7 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 	}
 
 	result.Minichat = tmpMinichat
+	proto.QuickSort(result.Minichat,0,len(result.Minichat) - 1)
 	fmt.Println("heartbeat-ack: ", proto.MakeStructToJson(result))
 
 	appServerChan <- (&proto.AppMsgData{Cmd: proto.HearbeatAckCmdName,
@@ -498,7 +501,13 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 
 	urlRequest += reqType
 
-	resp, err := http.PostForm(urlRequest, url.Values{"username": {username}, "password": {password}})
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+
+
+	resp, err := client.PostForm(urlRequest, url.Values{"username": {username}, "password": {password}})
 	if err != nil {
 		logging.Log("app " + reqType + "failed, " + err.Error())
 		return false
@@ -692,11 +701,17 @@ func resetPassword(connid uint64, username string) bool {
 		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
 	}
 	}
+	//reqType := "login"
 	reqType := "reset"
 	urlRequest += reqType
 
 
-	resp, err := http.PostForm(urlRequest, url.Values{"username": {username}})
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+
+	resp, err := client.PostForm(urlRequest, url.Values{"username": {username}})
 	if err != nil {
 		logging.Log("app " + reqType + "failed, " + err.Error())
 		return false
@@ -734,8 +749,15 @@ func modifyPassword(connid uint64, username, accessToken, oldPasswd, newPasswd  
 	}
 	}
 
+
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+
+
 	logging.Log("url: " + requesetURL)
-	resp, err := http.PostForm(requesetURL, url.Values{"oldpwd": {oldPasswd}, "newpwd": {newPasswd}})
+	resp, err := client.PostForm(requesetURL, url.Values{"oldpwd": {oldPasswd}, "newpwd": {newPasswd}})
 	if err != nil {
 		logging.Log(fmt.Sprintf("user %s modify password  failed, ", username, err.Error()))
 		return false
@@ -770,8 +792,14 @@ func handleFeedback(connid uint64, username, accessToken, feedback string) bool 
 		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/feedback&access-token=" + accessToken
 	}
 	}
+
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+
 	logging.Log("url: " + requesetURL)
-	resp, err := http.PostForm(requesetURL, url.Values{"feedback": {feedback}})
+	resp, err := client.PostForm(requesetURL, url.Values{"feedback": {feedback}})
 	if err != nil {
 		logging.Log(fmt.Sprintf("user %s send feedback failed, ", username, err.Error()))
 		return false
@@ -2641,7 +2669,11 @@ func checkOwnedDevices(AccessToken string)  []string {
 		}
 	}
 	//logging.Log("url: " + url)
-	resp, err := http.Get(url)
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+	resp, err := client.Get(url)
 	if err != nil {
 		logging.Log("get user devices failed, " + err.Error())
 		return nil
