@@ -70,8 +70,7 @@ func PushNotificationToAppEx(apiBaseURL string, imei uint64, ownerName string, c
 		//说明此时是增加的亲情号码发送的，还没注册登录
 		//增加单独推送功能
 		for i,_ := range deviceInfo.Family{
-			if deviceInfo.Family[i].Phone == "" ||
-				len(deviceInfo.Family[i].Username) <= 1 {
+			if deviceInfo.Family[i].Phone == "" {
 				continue
 			}
 

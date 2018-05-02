@@ -19,6 +19,8 @@ import (
 	"net/url"
 	"io/ioutil"
 	"net"
+	"github.com/garyburd/redigo/redis"
+	"crypto/tls"
 )
 
 const (
@@ -383,6 +385,7 @@ type AlarmItem struct {
 	Time uint64	`json:"time"`
 	Alarm string 	`json:"alarm"`
 	FamilyPhone string `json:"familynumber"`
+	Language	string		`json:"language"`
 }
 
 type DeviceAlarms struct {
@@ -888,6 +891,29 @@ var company_DisableLBS = []string {
 	"Gotthard Handels AG",
 }
 
+var MapKey []string = []string{
+	"9786de381ebcbe8d0c45974275640e6b",
+	"8fe374b971a658cb46bf9df0e59afdcf",
+	"e24187cd693e816c081c5bb828052aea",
+	"7e6cbae8c47928cdb8b28aa1f569ce1c",
+	"5dc91ade0405d880a4cb59f1501af9e0",
+	"97e9b859d142415fda12d04fff42badd",
+	"77ef9a541fdd35d8ccee77cf887f614e",
+	"3c5cc5261cd37dce3abb4424b9464298",
+	"4853c307ba687e3956bc3a3f1a9bedde",
+	"4cc73f4799aa79f21b5a78c769c3e937",
+	"5c74f3536bf1438cac51de1f314b9dc4",
+	"6d89f92ea71bee33b1437419b5d912e8",
+	"da27f294d80a1beb463c1e706a41581d",
+	"0d466ca9561c5b756f0e9de365116e3d",
+	"d7b52c7d96a3b53a83595d82fe1e8682",
+	"e95a52fb51021790462c3458c6c80635",
+	"f82459ede41e28c94574b9d1cc5b855f",
+	"33d498ef47a4455888e9a3c854ba3d10",
+	"99664e8ba7cb93c65a6aaf213bb20cf0",
+	"14ac4c6f29b4e4a99aceff95425d3cd1",
+}
+
 //chenqw,20171129,encrypted flag
 var DevConnidenc = map[uint64]bool{}
 //dev's max logining count when login with wrong password
@@ -900,6 +926,30 @@ type TagUserName struct{
 var ConnidUserName = map[uint64]map[string]string{}
 var ConnidtagUserName = map[string]TagUserName{}
 var AccessTokenMap = map[string]string{}
+var MapAccessToLang = map[string]string{}
+
+var (
+	redisPool *redis.Pool
+)
+
+
+func InitRedisPool(redisURI string) {
+	if redisURI == "" {
+		redisURI =  ":6379"
+	}
+	redisPool = &redis.Pool{
+		MaxIdle:   100,
+		MaxActive: 12000,
+		Dial: func() (redis.Conn, error) {
+			c, err := redis.Dial("tcp", redisURI)
+			if err != nil {
+				logging.PanicLogAndExit(fmt.Sprintf("connect to redis(%s) got error: %s", redisURI, err))
+			}
+			return c, nil
+		},
+	}
+}
+
 func init()  {
 	//Gt3Test()
 	//os.Exit(0)
@@ -1018,6 +1068,7 @@ func init()  {
 
 	LoadIPInfosFromFile()
 	LoadEPOFromFile()
+	InitRedisPool(fmt.Sprintf(":6379"))
 	//utcNow := time.Now().UTC()
 	//iCurrentGPSHour := utc_to_gps_hour(utcNow.Year(), int(utcNow.Month()),utcNow.Day(), utcNow.Hour())
 	//segment := (uint32(iCurrentGPSHour) - StartGPSHour) / 6
@@ -1219,7 +1270,11 @@ func LoadEPOFromFile() error {
 func ReloadEPO() error {
 	if true {
 		urlRequest := "http://service.gatorcn.com/tracker/web/download36h.php?action=down36h"
-		resp, err := http.PostForm(urlRequest, url.Values{"username": {"getepo"}, "password": {"n8vZB9belqO4ydnx"}})
+		tr := &http.Transport{
+			TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+		}
+		client := &http.Client{Transport: tr}
+		resp, err := client.PostForm(urlRequest, url.Values{"username": {"getepo"}, "password": {"n8vZB9belqO4ydnx"}})
 		if err != nil {
 			logging.Log("request epo from service.gatorcn.com failed, " + err.Error())
 			return err
@@ -1407,7 +1462,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		" w.HideTimer3, w.DisableWiFi,w.DisableLBS,w.RedirectIPPort,w.LocateInterval, pm.model, c.name, c.host, c.port, c.Redirect, c.APN  from watchinfo w join device d on w.recid=d.recid join productmodel pm  " +
 		" on d.modelid=pm.recid join companies c on d.companyid=c.recid where pm.model != 'WH01' ")
 	if err != nil {
-		fmt.Println("LoadDeviceInfoFromDB failed,", err.Error())
+		logging.Log(fmt.Sprintf("LoadDeviceInfoFromDB failed,", err.Error()))
 		os.Exit(1)
 	}
 

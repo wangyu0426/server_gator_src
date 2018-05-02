@@ -57,7 +57,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				connDel.conn.Close()
 
 				delete(TcpClientTable, connDel.imei)
-				logging.Log(fmt.Sprintf("%d connection deleted from TcpClientTable", connAdd.imei))
+				logging.Log(fmt.Sprintf("%d addConnChan connection deleted from TcpClientTable", connAdd.imei))
 			}else {
 				logging.Log(fmt.Sprintf("%d will delete connection from TcpClientTable, but connection not found", connAdd.imei))
 			}
@@ -258,10 +258,13 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 							if cachedMsg.Header.Header.Status == 0 {
 								//0， 不需要手表回复确认，直接发送完并删除
 								//对于AP11,需要加30s延迟，不能连续发送太快
+								//尽量把AP11命令发送间隔时间缩短
 								if cachedMsg.Header.Header.Cmd == proto.CMD_AP11 {
-									if (int64(cachedMsg.Header.Header.ID) - int64(c.lastPushFileNumTime)) / int64(time.Second) >= 15 {
+									if (int64(cachedMsg.Header.Header.ID) - int64(c.lastPushFileNumTime)) / int64(time.Second) >= 3 {
 										c.responseChan <- cachedMsg
 										c.lastPushFileNumTime = int64(cachedMsg.Header.Header.ID)
+									}else {
+										logging.Log(fmt.Sprintf("[%d] AP11 cmd send too much!",msg.Header.Header.Imei))
 									}
 								}else{
 									c.responseChan <- cachedMsg
@@ -380,7 +383,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 
 		c.lastActiveTime = time.Now().Unix()
 
-		//logging.Log("recv: " + string(headerBuf))
+		//logging.Log(fmt.Sprintf("headerbuf:%s",headerBuf))
 
 		//首先判断是加密协议还是明文协议
 		protoVer := preparseMsgHeader(string(headerBuf))
@@ -414,6 +417,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 			c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
 		}
 		n, err := io.ReadFull(c.conn, dataBuf)
+		//logging.Log(fmt.Sprintf("dataBuf:%s,len(dataBuf):%d,n = %d",dataBuf,len(dataBuf),n))
 		if err == nil && n == len(dataBuf) {
 			full = true
 		}else {
@@ -499,6 +503,11 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		// 包可能接收未完整，但此时可以开始进行业务逻辑处理
 		// 目前所有头部信息都已准备好，业务处理模块只需处理与断点续传相关逻辑
 		// 以及命令的实际逻辑
+		//判断连接是不是已经关闭了
+		if c.IsClosed() == true {
+			logging.Log(fmt.Sprintf("%d the conn is closed",c.imei))
+			break
+		}
 		c.requestChan <- msg
 
 		//业务逻辑只处理完整的请求和不完整的微聊请求，处理完请求以后，

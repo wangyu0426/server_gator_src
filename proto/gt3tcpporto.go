@@ -13,6 +13,9 @@ import (
 	"io/ioutil"
 	"os"
 	"bytes"
+	"net/url"
+	"math/rand"
+	"github.com/garyburd/redigo/redis"
 )
 
 type GT03Service struct {
@@ -569,6 +572,16 @@ func (service *GT03Service) ProcessLocate() bool {
 		}
 	}
 
+	//高德地图判定经纬度是否在大陆
+	if service.cur.Lat <= 53.33 &&
+		service.cur.Lat >= 3.51 &&
+		service.cur.Lng >= 73.33 &&
+		service.cur.Lng <= 135.05{
+
+		addr := service.GetAddress()
+		service.cur.Address = addr
+	}
+
 	ret = service.WatchDataUpdateDB()
 	if ret == false {
 		logging.Log(fmt.Sprintf("Update WatchData into Database failed"))
@@ -601,6 +614,107 @@ func (service *GT03Service) ProcessLocate() bool {
 	return true
 }
 
+func (service *GT03Service) GetAddress() string {
+	var address string
+	var itf interface{}
+	var itfconv interface{}
+	var weburl= "http://restapi.amap.com/v3/geocode/regeo"
+	var index uint64
+	var key,amapPos string
+	var lng string
+	var conn redis.Conn
+	conn = redisPool.Get()
+	if conn == nil {
+		return ""
+	}
+	defer conn.Close()
+	lat := strconv.FormatFloat(service.cur.Lat, 'f', -1, 64)
+	lng = strconv.FormatFloat(service.cur.Lng, 'f', -1, 64)
+	lng += ","
+	lng += lat
+	reply,errall := conn.Do("hget","latlngconv",lng)
+	if errall != nil {
+		logging.Log(fmt.Sprintf("hget latlngconv:%s",errall.Error()))
+		return ""
+	}
+	if reply != nil{
+		newlng := fmt.Sprintf("%s",reply)
+		logging.Log("lng conv:" + newlng)
+		reply,err := conn.Do("hget","imeipos",newlng)
+		if err != nil {
+			logging.Log(fmt.Sprintf("hget imeipos:%s",err.Error()))
+			return ""
+		}
+		if reply != nil{
+			address = fmt.Sprintf("%s",reply)
+		}
+		logging.Log("address conv:" + address)
+	}else {
+		var converturl = "http://restapi.amap.com/v3/assistant/coordinate/convert?"
+		var locations = "locations="
+
+
+		locations += lng
+		converturl += locations
+		converturl += "&coordsys=gps&output=json&key="
+		rand.Seed(time.Now().UnixNano())
+		index = rand.Uint64() % uint64(len(MapKey))
+		key = MapKey[index]
+		converturl += key
+		logging.Log("converturl" + converturl)
+		respconv, err := http.Get(converturl)
+		bodyconv, err := ioutil.ReadAll(respconv.Body)
+		if err != nil {
+			fmt.Println("ioutil.ReadAll errr: " + err.Error())
+			return ""
+		}
+		json.Unmarshal(bodyconv, &itfconv)
+		convdata := itfconv.(map[string]interface{})
+		if convdata == nil {
+			return ""
+		}
+		amapPos = convdata["locations"].(string)
+
+		_, err = conn.Do("hset", "latlngconv", lng,amapPos)
+		if err != nil {
+			logging.Log(fmt.Sprintf("hset latlngconv failed:%s",err.Error()))
+			return ""
+		}
+
+		rand.Seed(time.Now().UnixNano())
+		index = rand.Uint64() % uint64(len(MapKey))
+		key = MapKey[index]
+		resp, err := http.PostForm(weburl, url.Values{"output": {"json"}, "location": {amapPos}, "batch": {"true"},
+			"key":                                              {key}, "radius": {"100000"}, "extensions": {"all"}})
+		defer resp.Body.Close()
+		if err != nil {
+			logging.Log("errr: " + err.Error())
+			return ""
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			logging.Log("ioutil.ReadAll errr: " + err.Error())
+			return ""
+		}
+		json.Unmarshal(body, &itf)
+		mapdata := itf.(map[string]interface{})
+		if mapdata == nil {
+			return ""
+		}
+		for _, data := range mapdata["regeocodes"].([]interface{}) {
+			location := data.(map[string]interface{})
+			address = location["formatted_address"].(string)
+		}
+
+		_,err = conn.Do("hset","imeipos",amapPos,address)
+		if err != nil{
+			logging.Log(fmt.Sprintf("hset imeipos failed:%s",err.Error()))
+			return ""
+		}
+	}
+	return address
+}
+
 func (service *GT03Service)  NotifyAppWithNewLocation() bool  {
 	result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
 	result.Locations = append(result.Locations, service.cur)
@@ -627,10 +741,10 @@ func (service *GT03Service) ProcessMicChat() bool {
 	newChatInfo.FileID = uint64(service.chat.DateTime * 10000) + uint64(service.chat.VoiceMilisecs)
 	newChatInfo.Content = Num2Str(fileId, 10)
 	newChatInfo.DateTime = service.chat.DateTime
-	newChatInfo.DateTime = newChatInfo.DateTime / 10000
+	//newChatInfo.DateTime = newChatInfo.DateTime / 10000
 	newChatInfo.Receiver = ""
 	newChatInfo.VoiceMilisecs = service.chat.VoiceMilisecs
-
+	logging.Log(fmt.Sprintf("gt3 timestamp:%d--%d",fileId,service.chat.DateTime))
 	filePathDir := fmt.Sprintf("%s%d", service.reqCtx.MinichatUploadDir + "watch/", service.imei)
 	os.MkdirAll(filePathDir, 0755)
 	filePath := fmt.Sprintf("%s/%d.amr", filePathDir, fileId)
@@ -865,7 +979,7 @@ func (service *GT03Service) ProcessGPSInfo(pszMsg []byte) bool {
 	iSpeed := int32(fSpeed * 10)
 	bufOffset += 5
 
-	logging.Log(fmt.Sprintf("[%d] fSpeed: %f, iSpeed: %d", service.imei, fSpeed, iSpeed))
+	logging.Log(fmt.Sprintf("[%d] fSpeed: %f, iSpeed: %d, iLongtitude:%d, iLatitude:%d", service.imei, fSpeed, iSpeed,iLongtitude,iLatitude))
 
 	iTimeSec := service.GetIntValue(pszMsg[bufOffset: ], TIME_LEN)
 	bufOffset += TIME_LEN
@@ -1653,6 +1767,10 @@ func  (service *GT03Service) GetLocationByGoogle() bool  {
 		})
 	}
 
+	if service.lbsNum >= MAX_LBS_NUM {
+		service.lbsNum = MAX_LBS_NUM
+	}
+	logging.Log(fmt.Sprintf("lbsNum: %d",service.lbsNum))
 	for  i := 0; i < int(service.lbsNum); i++ {
 		params.CellTowers = append(params.CellTowers, GmapLBS{int(service.lbsInfoList[i].CellID),
 			int(service.lbsInfoList[i].Lac),

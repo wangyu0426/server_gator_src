@@ -27,8 +27,8 @@ func newAppConn(conn *websocket.Conn)  *AppConnection{
 		ID: proto.NewMsgID(),
 		conn: conn,
 		closeChan: make(chan struct{}),
-		requestChan: make(chan []byte, 10240),
-		responseChan: make(chan *proto.AppMsgData, 10240),
+		requestChan: make(chan []byte, MAX_CHAN_NUM),
+		responseChan: make(chan *proto.AppMsgData, MAX_CHAN_NUM),
 	}
 }
 

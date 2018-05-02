@@ -194,8 +194,9 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 
 							//不需要手表回复确认，直接发送完并删除
 							//对于AP15,需要加30s延迟，不能连续发送太快
+							//改为3秒
 							if cachedMsg.Header.Header.Cmd == proto.CMD_GT3_AP15_PUSH_CHAT_COUNT {
-								if (int64(cachedMsg.Header.Header.ID) - int64(c.lastPushFileNumTime)) / int64(time.Second) >= 30 {
+								if (int64(cachedMsg.Header.Header.ID) - int64(c.lastPushFileNumTime)) / int64(time.Second) >= 3 {
 									c.responseChan <- cachedMsg
 									c.lastPushFileNumTime = int64(cachedMsg.Header.Header.ID)
 								}

@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 	"crypto/tls"
+	_"net/http/pprof"
 )
 
 // go get github.com/golang/net
@@ -96,6 +97,7 @@ var (
 	redisPool *redis.Pool
 )
 
+
 func initRedisPool(redisURI string) {
 	if redisURI == "" {
 		redisURI =  ":6379"
@@ -160,7 +162,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 	//reconnect to a new server port
 	http.HandleFunc("/api/reset-device-ipport", ResetDeviceIPPort)
 	http.HandleFunc(svrctx.Get().HttpUploadURL, HandleUploadFile)
-
+	http.HandleFunc("/api/get-device-by-imei",GetDeviceByimei)
 	/*router := mux.NewRouter()
 	router.HandleFunc("/api/notifications",GetNotifications).Methods("GET","POST")
 	router.HandleFunc("/api/gator3-version", GetAppVersionOnline).Methods("GET","POST")
@@ -174,7 +176,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 		mux.Handle("/",  &MyFileServer{})
 		mux.HandleFunc("/api/gator3-version", GetAppVersionOnline)
 
-		go http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), mux)
+		go http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), nil)
 		err := http.ListenAndServeTLS(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSSPort),
 			"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.cer",
 			"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.key",nil)
@@ -248,7 +250,7 @@ func AppConnManagerLoop() {
 				os.Exit(-1)
 			}
 
-			logging.Log("send data to app:" + fmt.Sprint(string(msg.Cmd)))
+			logging.Log(fmt.Sprintf("send data to app:%s--%d", msg.Cmd,msg.Imei))
 
 			if msg.Cmd == proto.DeviceLocateNowAckCmdName {
 				params := proto.AppRequestTcpConnParams{}
@@ -303,7 +305,7 @@ func AppConnManagerLoop() {
 
 			if len(imeiAppUsers) >  0 {
 				for username, _ := range imeiAppUsers {
-					logging.Log(fmt.Sprintf("imeiAppUsers %s len = %d",username,len(imeiAppUsers)))
+					logging.Log(fmt.Sprintf("%d-imeiAppUsers %s len = %d",msg.Imei,username,len(imeiAppUsers)))
 					userConnTable := getAppConnsByUserName(username)
 					if userConnTable != nil {
 						for _, c := range userConnTable {
@@ -312,6 +314,7 @@ func AppConnManagerLoop() {
 									if len(chat.Receiver) > 1 && chat.SenderType != 1{
 										//对于手机端发送的微聊，修改set-device 命令对应的键值对
 										phone2name,ok := proto.ConnidUserName[msg.Imei]
+										logging.Log(fmt.Sprintf("receiver from watch:%s--%s--%s", chat.Receiver,phone2name[chat.Receiver],c.user.Name))
 										if ok {
 											if phone2name[chat.Receiver] == c.user.Name {
 												logging.Log(fmt.Sprintf("receiver from watch:%s", c.user.Name))
@@ -355,16 +358,16 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		logging.Log("HandleUploadFile:not encrypted!")
 		return
 	}
-	imei,err := proto.AppserDecrypt(imei[6:])
-	username,err = proto.AppserDecrypt(username[6:])
-	accessToken,err = proto.AppserDecrypt(accessToken[6:])
+	imei = string(proto.AppserDecrypt(imei[6:]))
+	username = string(proto.AppserDecrypt(username[6:]))
+	accessToken = string(proto.AppserDecrypt(accessToken[6:]))
 	//if phone != "" {
 	//	phone, err = proto.AppserDecrypt(phone[6:])
 	//}
-	if err != nil {
-		logging.Log("HandleUploadFile minichat:AppserDecrypt failed!")
-		return
-	}
+	//if err != nil {
+	//	logging.Log("HandleUploadFile minichat:AppserDecrypt failed!")
+	//	return
+	//}
 
 	valid, imeiList := IsAccessTokenValid(accessToken)
 	logging.Log(fmt.Sprint( "imeiList 0 :", r.FormValue("username"), r.FormValue("accessToken"), imeiList))
@@ -423,10 +426,10 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 				phone = deviceInfo.Family[Index-1].Phone
 				if username != "" {
 					proto.AccessTokenMap[accessToken] = username
-					var tag proto.TagUserName
-					tag.Username = username
-					tag.Phone = deviceInfo.Family[Index-1].Phone
-					proto.ConnidtagUserName[username] = tag
+					//var tag proto.TagUserName
+					//tag.Username = username
+					//tag.Phone = deviceInfo.Family[Index-1].Phone
+					//proto.ConnidtagUserName[username] = tag
 				}
 			}
 		}
@@ -685,7 +688,7 @@ func AppConnReadLoop(c *AppConnection) {
 		//chenqw,20171124
 		//desdata,err :=proto.Gt3AesDecrypt(string(buf[0:n]))
 		//logging.Log("desdata:" + string(desdata))
-		logging.Log("recv from appclient: " + string(buf[0: n]))
+		//logging.Log("recv from appclient: " + string(buf[0: n]))
 		if buf[0] == '"'{
 			buf[n - 1] = 0
 			buf = buf[1:n - 1]
@@ -698,12 +701,12 @@ func AppConnReadLoop(c *AppConnection) {
 			ens := buf[6:len(buf)]
 
 			//logging.Log("ens: " + string(ens))
-			desc,err := proto.AppserDecrypt(string(ens))
+			desc := proto.AppserDecrypt(string(ens))
 			if err != nil {
 				logging.Log("GTS01:AppserDecrypt failed, " + err.Error())
 				return
 			}
-			logging.Log("GTS01:desc data , " + desc)
+			logging.Log("GTS01:desc data , " + string(desc))
 			err =json.Unmarshal([]byte(desc), &itf)
 			if err != nil {
 				logging.Log("GTS01:parse recved json data failed, " + err.Error())
@@ -954,9 +957,12 @@ func JSON2PHP(w http.ResponseWriter, ret int,  data interface{}) {
 	//
 	encodedString := buf //strings.Replace(buf, "\\", "\\\\", -1)
 	//fmt.Println("JSON2PHP" + encodedString)
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, GET,OPTIONS,DELETE,PUT")
-	w.Header().Set("Access-Control-Allow-Headers", "x-requested-with,content-type")
+	w.Header().Add("Access-Control-Allow-Origin", "*")
+	w.Header().Add("Access-Control-Allow-Methods", "POST, GET,OPTIONS,DELETE,PUT")
+	w.Header().Add("Access-Control-Allow-Headers", "Action, Module")
+	w.Header().Add("Access-Control-Allow-Headers","Content-Type")//header的类型
+	w.Header().Add("content-type","application/json")//返回数据格式是json
+
 	w.Write([]byte(encodedString))
 }
 
@@ -1368,7 +1374,7 @@ func ValidAccessTokenFromService(AccessToken string)  (bool, []string) {
 	client := &http.Client{Transport: tr}
 
 
-	logging.Log("url: " + url)
+	//logging.Log("url: " + url)
 	//resp, err := http.Get(url)
 	resp, err := client.Get(url)
 	if err != nil {
@@ -1577,6 +1583,14 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	//redis 分布式锁
+	Clock := svrctx.RedisLock{LockKey: "xxxxx"}
+LABEL_REDIS:
+	err = Clock.Lock(&conn,5)
+	if err != nil {
+		goto LABEL_REDIS
+	}
+	fmt.Println("redis distribute lock success:",params.Devices,params.LastUpdates)
 	for i, imei := range params.Devices {
 		if imei != 0 && InStringArray(proto.Num2Str(imei, 10), imeiList){
 			deviceAlarms := proto.DeviceAlarms{}
@@ -1587,43 +1601,50 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 				result.ErrCode = -1
 				status = 400
 				JSON2PHP(w, status, &result)
+				Clock.Unlock(&conn)
 				return
 			}
 
 
-			bOk := false
 			arr := reply.([]interface{})
 			for _, item := range arr {
+				bOk := false
 				alarmContent := parseUint8Array(item)
 				if alarmContent != "" {
 					alarmItem := proto.AlarmItem{}
 					err := json.Unmarshal([]byte(alarmContent), &alarmItem)
 
-					if len(alarmItem.FamilyPhone) > 1 {
-						proto.DeviceInfoListLock.Lock()
-						deviceInfo, ok := (*proto.DeviceInfoList)[imei]
-						if ok{
-							for k,_ := range deviceInfo.Family{
-								//单独推送,
-								if deviceInfo.Family[k].Phone == alarmItem.FamilyPhone && len(deviceInfo.Family[k].Username) > 1{
-									if proto.AccessTokenMap[params.AccessToken] == deviceInfo.Family[k].Username{
-										bOk = true
-									}
-								}
+
+					proto.DeviceInfoListLock.Lock()
+					deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+					if ok{
+						for k,_ := range deviceInfo.Family{
+							//单独推送,
+							if (deviceInfo.Family[k].Phone == alarmItem.FamilyPhone || alarmItem.FamilyPhone == "" || alarmItem.FamilyPhone == "0") &&
+								(proto.AccessTokenMap[params.AccessToken] == deviceInfo.Family[k].Username) &&
+								(proto.MapAccessToLang[params.AccessToken] == alarmItem.Language){
+
+									bOk = true
 							}
 						}
-						proto.DeviceInfoListLock.Unlock()
-
-					} else {
-						bOk = true
 					}
+					proto.DeviceInfoListLock.Unlock()
+
 
 					if bOk {
 						if err != nil {
 							logging.Log(fmt.Sprintf("parse json string failed for ntfy:%d, err: %s", imei, err.Error()))
 						} else {
 							if alarmItem.Time > params.LastUpdates[i] {
+								logging.Log(fmt.Sprintf("token:%s==%s==%s",proto.MapAccessToLang[params.AccessToken],alarmItem.Language,proto.AccessTokenMap[params.AccessToken]))
 								deviceAlarms.Alarms = append(deviceAlarms.Alarms, alarmItem)
+
+								//发送推送后删除之
+								response,err := conn.Do("LPOP",fmt.Sprintf("ntfy:%d",imei))
+								if err != nil{
+									logging.Log(fmt.Sprintf("LPOP ntfy:%d error %s",imei,err.Error()))
+								}
+								logging.Log(fmt.Sprintf("LPOP ntfy:%d %s",imei,parseUint8Array(response)))
 							}
 						}
 					}
@@ -1633,6 +1654,7 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 			result.Alarms = append(result.Alarms, deviceAlarms)
 		}
 	}
+	Clock.Unlock(&conn)
 
 	JSON2PHP(w, status, &result)
 }

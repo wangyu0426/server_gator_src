@@ -199,11 +199,11 @@ func init()  {
 	serverCtx.MySQLPool, err = sql.Open("mysql", strConn)
 
 	if err != nil {
-		fmt.Println(fmt.Sprintf("connect mysql (%s) failed, %s", strConn, err.Error()))
+		logging.Log(fmt.Sprintf("connect mysql (%s) failed, %s", strConn, err.Error()))
 		os.Exit(1)
 	}
 	serverCtx.MySQLPool.SetMaxOpenConns(serverCtx.DbMysqlConfig.DBPoolMaxConn)
-	fmt.Println(fmt.Sprintf("connect mysql db %s OK", serverCtx.DbMysqlConfig.DBName))
+	logging.Log(fmt.Sprintf("connect mysql db %s OK", serverCtx.DbMysqlConfig.DBName))
 
 	//confString, err2 := json.Marshal(&serverCtx)
 	//if err2 != nil {

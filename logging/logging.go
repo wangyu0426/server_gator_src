@@ -118,6 +118,9 @@ func Close()  {
 	//})
 }
 
+//当显式或隐式的调用panic，会立马停止当前函数的执行，然后开始当前goroutinue的栈展开，
+// 如果有defer函数，会一并被执行。通过在defer函数里调用recover，可以使程序恢复正常的执行。
+// recover函数只有在defer函数里有效，其他地方都返回nil。
 func PanicLogAndExit(errmsg string){
 	err := recover()
 	if err == nil {

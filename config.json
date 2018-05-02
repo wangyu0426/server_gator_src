@@ -47,9 +47,18 @@
     },
 
     "UseGoogleMap":true,
-    "IsDebug":true,
-    "IsDebugLocal":true,
+    "IsDebug":false,
+    "IsDebugLocal":false,
     "LocalDebugHttpServerName": "http://192.168.3.52",
     "AndroidAppURL": "https://play.google.com/store/apps/details?id=com.gator",
-    "IOSAppURL": "https://itunes.apple.com/us/app/gator-3/id1252465815?l=zh&ls=1&mt=8"
+    "IOSAppURL": "https://itunes.apple.com/us/app/gator-3/id1252465815?l=zh&ls=1&mt=8",
+
+
+
+
+
+
+
+
+    "IsUseAliYun":true
 }

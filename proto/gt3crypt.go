@@ -91,7 +91,7 @@ func AppserAesEncrypt(data string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	padData := PKCS7Padding([]byte(data), block.BlockSize())
+	padData := ZeroPadding([]byte(data), block.BlockSize())
 	encrypted := make([]byte, len(padData))
 
 	encrypter := cipher.NewCTR(block, key_iv)
@@ -100,7 +100,7 @@ func AppserAesEncrypt(data string) (string, error) {
 	return string(base64Encode(encrypted)), nil
 }
 
-func AppserDecrypt(encrypted string) (string, error) {
+func AppserDecrypt(encrypted string) ([]byte) {
 	//logging.Log("recv from appclient des: " + encrypted)
 	var err error
 	src, err := base64Decode([]byte(encrypted))
@@ -114,15 +114,15 @@ func AppserDecrypt(encrypted string) (string, error) {
 	var block cipher.Block
 	block, err = aes.NewCipher(key_app)
 	if err != nil {
-		return "", err
+		return nil
 	}
 
 	decrypter := cipher.NewCTR(block, key_iv)
 	decrypter.XORKeyStream(decrypted, []byte(src))
-	decrypted = PKCS7UnPadding(decrypted,block.BlockSize())
+	decrypted = ZeroUnPadding(decrypted)
 	//logging.Log("decrypted: " + string(decrypted))
 
-	return string(decrypted), nil
+	return decrypted
 }
 
 func CBCEncrypt(plantText []byte) (string, error) {
@@ -160,15 +160,28 @@ func CBCDecrypt(ciphertext string) ([]byte, error) {
 	blockModel := cipher.NewCBCDecrypter(block, keyBytes)
 	plantText := make([]byte, 10240)
 	blockModel.CryptBlocks(plantText, []byte(base64dec))
-	plantText = PKCS7UnPadding(plantText, block.BlockSize())
+	plantText = PKCS7UnPadding(plantText)
 	logging.Log("decrypted: " + string(plantText))
 	return plantText, nil
 }
 
-func PKCS7UnPadding(plantText []byte, blockSize int) []byte {
+func PKCS7UnPadding(plantText []byte) []byte {
 	length := len(plantText)
 	unpadding := int(plantText[length-1])
 	return plantText[:(length - unpadding)]
+}
+
+func ZeroPadding(ciphertext []byte, blockSize int) []byte {
+	padding := blockSize - len(ciphertext)%blockSize
+	padtext := bytes.Repeat([]byte{0}, padding)//用0去填充
+	return append(ciphertext, padtext...)
+}
+
+func ZeroUnPadding(origData []byte) []byte{
+	return bytes.TrimFunc(origData,
+		func(r rune )bool{
+			return r == rune(0)
+		})
 }
 
 func CommonAesEncrypt(data []byte) (string,error) {

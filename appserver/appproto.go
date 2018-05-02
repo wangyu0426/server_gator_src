@@ -25,6 +25,8 @@ const (
 	base64Table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 )
 
+const MAX_CHAN_NUM = 16
+
 var coder = base64.NewEncoding(base64Table)
 
 func base64Encode(src []byte) []byte {
@@ -76,12 +78,12 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		proto.DevConnidenc[connid] = true
 		ens := data[6:len(data)]
 		logging.Log("ens: " + string(ens))
-		desc,err := proto.AppserDecrypt(string(ens))
-		if err != nil {
+		desc := proto.AppserDecrypt(string(ens))
+		/*if err != nil {
 			logging.Log("GTS01:AppserDecrypt failed, " + err.Error())
 			return false
-		}
-		err =json.Unmarshal([]byte(desc), &itf)
+		}*/
+		err :=json.Unmarshal([]byte(desc), &itf)
 		if err != nil {
 			logging.Log("GTS01:parse recved json data failed, " + err.Error())
 			return false
@@ -359,10 +361,11 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 		logging.Log("no AccessToken," + params.UserName)
 		return true
 	}
+	logging.Log(fmt.Sprintf("handleHeartBeat params:UserName:%s,SelectedDevice:%s,familynumber:%s,Devices:%s--%s--%s--%s--%s",
+		params.UserName,params.SelectedDevice,params.FamilyNumber,params.Devices,params.UUID,params.DeviceToken, params.Platform, params.Language))
 
-	logging.Log(fmt.Sprintf("handleHeartBeat params:UserName:%s,SelectedDevice:%s,familynumber:%s",
-		params.UserName,params.SelectedDevice,params.FamilyNumber))
-
+	proto.MapAccessToLang[params.AccessToken] = params.Language
+	proto.AccessTokenMap[params.AccessToken] = params.UserName
 	for i, imei := range params.Devices {
 		if InStringArray(imei, imeiList) == false {
 			continue
@@ -370,14 +373,20 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 
 		imeiUint64 := proto.Str2Num(imei, 10)
 		if params.FamilyNumbers == nil || len(params.FamilyNumbers) < (i + 1) {
-			if params.UUID != "" &&  params.DeviceToken != "" {
+			if params.UUID != "" &&  params.DeviceToken != ""{
 				proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, "",
 					params.UUID, params.DeviceToken, params.Platform, params.Language)
+			}else if params.UUID != "" &&  params.AccessToken != "" {
+				proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, "",
+					params.UUID, params.AccessToken, params.Platform, params.Language)
 			}
 		}else{
 			if params.UUID != "" &&  params.DeviceToken != "" {
 				proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, params.FamilyNumbers[i],
 					params.UUID, params.DeviceToken, params.Platform, params.Language)
+			}else if params.UUID != "" &&  params.AccessToken != "" {
+				proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, params.FamilyNumbers[i],
+					params.UUID, params.AccessToken, params.Platform, params.Language)
 			}
 		}
 
@@ -471,7 +480,7 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 
 	result.Minichat = tmpMinichat
 	proto.QuickSort(result.Minichat,0,len(result.Minichat) - 1)
-	fmt.Println("heartbeat-ack: ", proto.MakeStructToJson(result))
+	//logging.Log(fmt.Sprintf("atfer sort...%s:", proto.MakeStructToJson(result)))
 
 	appServerChan <- (&proto.AppMsgData{Cmd: proto.HearbeatAckCmdName,
 		UserName: params.UserName,
@@ -600,10 +609,10 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 								deviceInfoResult.Name = deviceInfo.Family[k].Name
 								deviceInfoResult.FamilyNumber = deviceInfo.Family[k].Phone
 								deviceInfoResult.AccountType = deviceInfo.Family[k].IsAdmin
-								var tag proto.TagUserName
-								tag.Username = username
-								tag.Phone = deviceInfo.Family[k].Phone
-								proto.ConnidtagUserName[username] = tag
+								//var tag proto.TagUserName
+								//tag.Username = username
+								//tag.Phone = deviceInfo.Family[k].Phone
+								//proto.ConnidtagUserName[username] = tag
 								break
 							}
 						}
@@ -1085,10 +1094,10 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 				deviceInfoResult.FamilyNumber = phone
 				deviceInfoResult.AccountType = deviceInfo.Family[i].IsAdmin
 
-				var tag proto.TagUserName
-				tag.Username = params.UserName
-				tag.Phone = deviceInfo.Family[i].Phone
-				proto.ConnidtagUserName[params.UserName] = tag
+				//var tag proto.TagUserName
+				//tag.Username = params.UserName
+				//tag.Phone = deviceInfo.Family[i].Phone
+				//proto.ConnidtagUserName[params.UserName] = tag
 				break
 			}
 		}
@@ -1452,7 +1461,7 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 			inDex := 0
 			for i = 0;i < len(deviceInfo.Family);i++{
 				//兼容以前老的，username="0"
-				logging.Log(fmt.Sprintf("delete phonenumber:%s---%s---",params.MySimID,deviceInfo.Family[i].Phone))
+				logging.Log(fmt.Sprintf("delete phonenumber:%s---%s---%d",params.MySimID,deviceInfo.Family[i].Phone,deviceInfo.Family[i].IsAdmin))
 				if (params.UserName == deviceInfo.Family[i].Username || params.MySimID == deviceInfo.Family[i].Phone) &&
 					deviceInfo.Family[i].Phone != ""{
 					//chenqw,20180118,删除该号码对应的图片,兼容老版本
@@ -1485,7 +1494,10 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 
 			//旧的模式管理员取消关注时,此时新增关注的账号必须成为管理员
 			for kk,_ := range deviceInfo.Family{
-				if len(deviceInfo.Family[kk].Username) <= 1 && deviceInfo.IsAdmin == 0{
+				if len(deviceInfo.Family[kk].Username) <= 1 &&
+					len(deviceInfo.Family[kk].Phone) > 1 &&
+					deviceInfo.Family[kk].IsAdmin == 0{
+
 					deviceInfo.Family[kk].IsAdmin = 1
 				}
 			}
@@ -1650,11 +1662,22 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 		return false
 	}
 	defer conn.Close()
+
+	//redis 分布式锁
+	Clock := svrctx.RedisLock{LockKey: "xxxxx"}
+LABEL_REDIS:
+	err = Clock.Lock(&conn,5)
+	if err != nil{
+		goto LABEL_REDIS
+	}
+	logging.Log("redis distribute lock success 1")
 	_,err = conn.Do("del",fmt.Sprintf("ntfy:%d", imei))
 	if err != nil {
 		logging.Log("deleteDeviceByUser:" + err.Error())
+		Clock.Unlock(&conn)
 		return false
 	}
+	Clock.Unlock(&conn)
 	//end chenqw
 
 	resultData, _ := json.Marshal(&result)
@@ -2522,7 +2545,7 @@ func AppSetDeviceVoiceMonitor(connid uint64, params *proto.DeviceActiveParams) b
 	return true
 }
 
-func AppQueryLocations(connid uint64, params *proto.QueryLocationsParams) bool {
+func  AppQueryLocations(connid uint64, params *proto.QueryLocationsParams) bool {
 	cmdAck := proto.GetLocationsAckCmdName
 	if params.AlarmOnly {
 		cmdAck = proto.GetAlarmsAckCmdName
@@ -2536,12 +2559,120 @@ func AppQueryLocations(connid uint64, params *proto.QueryLocationsParams) bool {
 
 	result := proto.QueryLocationsResult{Imei: params.Imei, BeginTime: params.BeginTime, EndTime: params.EndTime, Locations: *locations}
 
+	//
+	for index,data := range result.Locations{
+		if data.Lat <= 53.33 && data.Lat >= 3.51 && data.Lng <= 135.05 && data.Lng >= 73.33 {
+			addr := GetAddress(data.Lat,data.Lng,imei)
+			result.Locations[index].Address = addr
+		}
+	}
+
 	appServerChan <- (&proto.AppMsgData{Cmd: cmdAck,
 		UserName: params.UserName,
 		AccessToken: params.AccessToken,
 		Data: proto.MakeStructToJson(result), ConnID: connid})
 
 	return true
+}
+
+func GetAddress(Lat,Lng float64,imei  uint64) string {
+	var address string
+	var itf interface{}
+	var itfconv interface{}
+	var weburl= "http://restapi.amap.com/v3/geocode/regeo"
+	var index uint64
+	var key,amapPos string
+	var lng string
+	var conn redis.Conn
+	conn = redisPool.Get()
+	if conn == nil {
+		return ""
+	}
+	defer conn.Close()
+	lat := strconv.FormatFloat(Lat, 'f', -1, 64)
+	lng = strconv.FormatFloat(Lng, 'f', -1, 64)
+	lng += ","
+	lng += lat
+	reply,errall := conn.Do("hget","latlngconv",lng)
+	if errall != nil {
+		logging.Log(fmt.Sprintf("hget latlngconv:%s",errall.Error()))
+		return ""
+	}
+	if reply != nil{
+		newlng := fmt.Sprintf("%s",reply)
+		logging.Log("lng conv:" + newlng)
+		reply,err := conn.Do("hget","imeipos",newlng)
+		if err != nil {
+			logging.Log(fmt.Sprintf("hget imeipos:%s",err.Error()))
+			return ""
+		}
+		if reply != nil{
+			address = fmt.Sprintf("%s",reply)
+		}
+		logging.Log("address conv:" + address)
+	}else {
+		var converturl = "http://restapi.amap.com/v3/assistant/coordinate/convert?"
+		var locations = "locations="
+
+		locations += lng
+		converturl += locations
+		converturl += "&coordsys=gps&output=json&key="
+		rand.Seed(time.Now().UnixNano())
+		index = rand.Uint64() % uint64(len(proto.MapKey))
+		key = proto.MapKey[index]
+		converturl += key
+		logging.Log("converturl" + converturl)
+		respconv, err := http.Get(converturl)
+		bodyconv, err := ioutil.ReadAll(respconv.Body)
+		if err != nil {
+			fmt.Println("ioutil.ReadAll errr: " + err.Error())
+			return ""
+		}
+		json.Unmarshal(bodyconv, &itfconv)
+		convdata := itfconv.(map[string]interface{})
+		if convdata == nil {
+			return ""
+		}
+		amapPos = convdata["locations"].(string)
+
+		_, err = conn.Do("hset", "latlngconv", lng,amapPos)
+		if err != nil {
+			logging.Log(fmt.Sprintf("sadd %d failed:%s", imei, err.Error()))
+			return ""
+		}
+
+		rand.Seed(time.Now().UnixNano())
+		index = rand.Uint64() % uint64(len(proto.MapKey))
+		key = proto.MapKey[index]
+		resp, err := http.PostForm(weburl, url.Values{"output": {"json"}, "location": {amapPos}, "batch": {"true"},
+			"key":                                              {key}, "radius": {"100000"}, "extensions": {"all"}})
+		defer resp.Body.Close()
+		if err != nil {
+			logging.Log("errr: " + err.Error())
+			return ""
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			logging.Log("ioutil.ReadAll errr: " + err.Error())
+			return ""
+		}
+		json.Unmarshal(body, &itf)
+		mapdata := itf.(map[string]interface{})
+		if mapdata == nil {
+			return ""
+		}
+		for _, data := range mapdata["regeocodes"].([]interface{}) {
+			location := data.(map[string]interface{})
+			address = location["formatted_address"].(string)
+		}
+
+		_,err = conn.Do("hset","imeipos",amapPos,address)
+		if err != nil{
+			logging.Log(fmt.Sprintf("hset imeipos failed:%s",err.Error()))
+			return ""
+		}
+	}
+	return address
 }
 
 func AppDeleteAlarms(connid uint64, params *proto.QueryLocationsParams) bool {

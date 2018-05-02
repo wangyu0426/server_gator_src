@@ -6,7 +6,7 @@ import (
 	"../logging"
 	"time"
 	"strings"
-	"math"
+	"math/rand"
 	"github.com/jackc/pgx"
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
@@ -17,6 +17,9 @@ import (
 	"os"
 	"os/exec"
 	"bytes"
+	"net/url"
+	"math"
+	"github.com/garyburd/redigo/redis"
 )
 
 type ResponseItem struct {
@@ -136,6 +139,8 @@ type LocationData struct {
 	OrigAlarm uint8       		`json:"org_alarm"`
 	LastAlarmType uint8      `json:"lastAlarmType"`
 	LastZoneIndex int32 	`json:"lastZoneIndex"`
+
+	Address	string			`json:"address"`
 }
 
 const (
@@ -415,7 +420,6 @@ func (service *GT06Service) DoSendCmd() bool {
 	msg.Header.Header.Status = 0
 	DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*DeviceInfoList)[service.imei]
-	DeviceInfoListLock.Unlock()
 	if ok && deviceInfo != nil {
 		body := fmt.Sprintf("%015dAP06%s,%016X)", service.imei,
 			makeDeviceFamilyPhoneNumbers(&deviceInfo.Family, true), msg.Header.Header.ID)
@@ -425,7 +429,7 @@ func (service *GT06Service) DoSendCmd() bool {
 		service.rspList = append(service.rspList, resp)
 		logging.Log(fmt.Sprintf("AP06body:%s", body))
 	}
-
+	DeviceInfoListLock.Unlock()
 	return  true
 }
 
@@ -1536,6 +1540,16 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 		}
 	}
 
+	//高德地图判定经纬度是否在大陆
+	if service.cur.Lat <= 53.33 &&
+		service.cur.Lat >= 3.51 &&
+		service.cur.Lng >= 73.33 &&
+		service.cur.Lng <= 135.05{
+
+		addr := service.GetAddress()
+		service.cur.Address = addr
+	}
+
 	ret = service.WatchDataUpdateDB()
 	if ret == false {
 		logging.Log(fmt.Sprintf("Update WatchData into Database failed"))
@@ -1568,9 +1582,169 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 	return true
 }
 
+func (service *GT06Service) GetAddress() string {
+	/*var address string
+	var itf interface{}
+	var itfconv interface{}
+	var converturl = "http://restapi.amap.com/v3/assistant/coordinate/convert?"
+	var locations = "locations="
+	var weburl = "http://restapi.amap.com/v3/geocode/regeo"
+	lat :=strconv.FormatFloat(service.cur.Lat,'f', -1, 64)
+	lng :=strconv.FormatFloat(service.cur.Lng,'f', -1, 64)
+	lng += ","
+	lng += lat
+	locations += lng
+	converturl += locations
+	converturl += "&coordsys=gps&output=json&key="
+	rand.Seed(time.Now().UnixNano())
+	index := rand.Uint64() %  uint64(len(MapKey))
+	key := MapKey[index]
+	converturl += key
+	logging.Log("converturl:" + converturl)
+	respconv,err := http.Get(converturl)
+	bodyconv,err := ioutil.ReadAll(respconv.Body)
+	if err != nil{
+		fmt.Println("ioutil.ReadAll errr: " + err.Error())
+		return ""
+	}
+	json.Unmarshal(bodyconv,&itfconv)
+	convdata := itfconv.(map[string]interface{})
+	if convdata == nil {
+		return ""
+	}
+	amapPos := convdata["locations"].(string)
+
+	rand.Seed(time.Now().UnixNano())
+	index = rand.Uint64() %  uint64(len(MapKey))
+	key = MapKey[index]
+	resp,err := http.PostForm(weburl, url.Values{"output":{"json"},"location":{amapPos},"batch":{"true"},
+		"key":{key},"radius":{"100000"},"extensions":{"all"}})
+	defer resp.Body.Close()
+	if err != nil{
+		logging.Log("errr: " + err.Error())
+		return ""
+	}
+	body,err := ioutil.ReadAll(resp.Body)
+	if err != nil{
+		logging.Log("ioutil.ReadAll errr: " + err.Error())
+		return ""
+	}
+	json.Unmarshal(body,&itf)
+	mapdata := itf.(map[string]interface{})
+	if mapdata == nil{
+		return ""
+	}
+	for _,data := range mapdata["regeocodes"].([]interface{}){
+		location := data.(map[string]interface{})
+		address = location["formatted_address"].(string)
+	}
+
+	return address*/
+
+	var address string
+	var itf interface{}
+	var itfconv interface{}
+	var weburl= "http://restapi.amap.com/v3/geocode/regeo"
+	var index uint64
+	var key,amapPos string
+	var lng string
+	var conn redis.Conn
+	conn = redisPool.Get()
+	if conn == nil {
+		return ""
+	}
+	defer conn.Close()
+	lat := strconv.FormatFloat(service.cur.Lat, 'f', -1, 64)
+	lng = strconv.FormatFloat(service.cur.Lng, 'f', -1, 64)
+	lng += ","
+	lng += lat
+	reply,errall := conn.Do("hget","latlngconv",lng)
+	if errall != nil {
+		logging.Log(fmt.Sprintf("hget latlngconv:%s",errall.Error()))
+		return ""
+	}
+	if reply != nil{
+		newlng := fmt.Sprintf("%s",reply)
+		logging.Log("lng conv:" + newlng)
+		reply,err := conn.Do("hget","imeipos",newlng)
+		if err != nil {
+			logging.Log(fmt.Sprintf("hget imeipos:%s",err.Error()))
+			return ""
+		}
+		if reply != nil{
+			address = fmt.Sprintf("%s",reply)
+		}
+		logging.Log("address conv:" + address)
+	}else {
+		var converturl = "http://restapi.amap.com/v3/assistant/coordinate/convert?"
+		var locations = "locations="
+
+		locations += lng
+		converturl += locations
+		converturl += "&coordsys=gps&output=json&key="
+		rand.Seed(time.Now().UnixNano())
+		index = rand.Uint64() % uint64(len(MapKey))
+		key = MapKey[index]
+		converturl += key
+		logging.Log("converturl" + converturl)
+		respconv, err := http.Get(converturl)
+		bodyconv, err := ioutil.ReadAll(respconv.Body)
+		if err != nil {
+			fmt.Println("ioutil.ReadAll errr: " + err.Error())
+			return ""
+		}
+		json.Unmarshal(bodyconv, &itfconv)
+		convdata := itfconv.(map[string]interface{})
+		if convdata == nil {
+			return ""
+		}
+		amapPos = convdata["locations"].(string)
+
+		_, err = conn.Do("hset", "latlngconv", lng,amapPos)
+		if err != nil {
+			logging.Log(fmt.Sprintf("hset latlngconv:%s",err.Error()))
+			return ""
+		}
+
+		rand.Seed(time.Now().UnixNano())
+		index = rand.Uint64() % uint64(len(MapKey))
+		key = MapKey[index]
+		resp, err := http.PostForm(weburl, url.Values{"output": {"json"}, "location": {amapPos}, "batch": {"true"},
+			"key":                                              {key}, "radius": {"100000"}, "extensions": {"all"}})
+		defer resp.Body.Close()
+		if err != nil {
+			logging.Log("errr: " + err.Error())
+			return ""
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			logging.Log("ioutil.ReadAll errr: " + err.Error())
+			return ""
+		}
+		json.Unmarshal(body, &itf)
+		mapdata := itf.(map[string]interface{})
+		if mapdata == nil {
+			return ""
+		}
+		for _, data := range mapdata["regeocodes"].([]interface{}) {
+			location := data.(map[string]interface{})
+			address = location["formatted_address"].(string)
+		}
+
+		_,err = conn.Do("hset","imeipos",amapPos,address)
+		if err != nil{
+			logging.Log(fmt.Sprintf("hset imeipos failed:%s",err.Error()))
+			return ""
+		}
+	}
+	return address
+}
+
 func (service *GT06Service)  NotifyAppWithNewLocation() bool  {
 	result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
 	result.Locations = append(result.Locations, service.cur)
+
+	fmt.Println("NotifyAppWithNewLocation heartbeat-ack: ", MakeStructToJson(result))
 
 	service.reqCtx.AppNotifyChan  <- &AppMsgData{Cmd: HearbeatAckCmdName,
 		Imei: service.imei,
@@ -1586,8 +1760,6 @@ func (service *GT06Service)  NotifyAppWithNewMinichat(chat ChatInfo) bool  {
 func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan *AppMsgData,  chat ChatInfo) bool  {
 	result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
 
-	fmt.Println("NotifyAppWithNewMinichat heartbeat-ack: ", MakeStructToJson(result))
-
 	//result.Minichat = append(result.Minichat, GetChatListForApp(imei, "")...)
 	//只把当前要通知的微聊发送出去
 	result.Minichat = append(result.Minichat,chat)
@@ -1596,6 +1768,7 @@ func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan
 		Imei: imei,
 		Data: MakeStructToJson(result), ConnID: 0}
 
+	fmt.Println("NotifyAppWithNewMinichat heartbeat-ack: ", MakeStructToJson(result))
 	if apiBaseURL != "" {
 		ownerName := Num2Str(imei, 10)
 		DeviceInfoListLock.Lock()
@@ -1604,6 +1777,7 @@ func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan
 			if deviceInfo.OwnerName != "" {
 				ownerName = deviceInfo.OwnerName
 			}
+
 		}
 
 		DeviceInfoListLock.Unlock()
@@ -1734,6 +1908,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 	timestamp :=  Str2Num(fields[1], 10)
 	milisecs := int(Str2Num(fields[2], 16))
 	fileId := uint64(timestamp * 10000) + uint64(milisecs)
+	logging.Log(fmt.Sprintf("timestamp:%d--%d--%d",fileId,timestamp,milisecs))
 	blockCount := int(Str2Num(fields[3], 10))
 	blockIndex := int(Str2Num(fields[4], 10))
 	blockSize := Str2Num(fields[5], 10)
@@ -2673,6 +2848,17 @@ func (service *GT06Service) ProcessUpdateWatchStatus(pszMsgBuf []byte) bool {
 		newData.Battery = service.cur.Battery
 		newData.LocateType = service.cur.LocateType
 		service.cur = newData
+
+		//高德地图判定经纬度是否在大陆
+		if service.cur.Lat <= 53.33 &&
+			service.cur.Lat >= 3.51 &&
+			service.cur.Lng >= 73.33 &&
+			service.cur.Lng <= 135.05{
+
+			addr := service.GetAddress()
+			service.cur.Address = addr
+		}
+
 		ret = service.WatchDataUpdateDB()
 		if ret == false {
 			logging.Log(fmt.Sprintf("[%d] Update WatchData into Database failed", service.imei))
@@ -2768,7 +2954,7 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	iSpeed := int32(fSpeed * 10)
 	bufOffset += 5
 
-	logging.Log(fmt.Sprintf("[%d] fSpeed: %f, iSpeed: %d", service.imei, fSpeed, iSpeed))
+	logging.Log(fmt.Sprintf("[%d] fSpeed: %f, iSpeed: %d, iLongtitude:%d, iLatitude:%d", service.imei, fSpeed, iSpeed,iLongtitude,iLatitude))
 
 	iTimeSec := service.GetIntValue(pszMsg[bufOffset: ], TIME_LEN)
 	bufOffset += TIME_LEN
@@ -3759,7 +3945,6 @@ func  (service *GT06Service) GetLocationByAmap() bool  {
 	}
 
 	strRequestBody += "&key=7fdbbeb16c30e7660f8588afee2bf9ba"
-
 	//http://apilocate.amap.com/position?accesstype=1&imei=357593060571398&cdma=0&mmac=1C:78:57:08:A5:CA,-88,wifi2462&macs=D8:15:0D:5C:4D:74,-87,HDB-H&key=7fdbbeb16c30e7660f8588afee2bf9ba
 	//http://apilocate.amap.com/position?accesstype=0&imei=357593060571398&cdma=0&bts=460,00,9360,4880,-7&nearbts=460,00,9360,4183,-29|460,00,9360,4191,-41|460,00,9360,4072,-41&mmac=48:3C:0C:F5:56:48,-46,Gator&macs=FC:37:2B:50:A7:49,-55,ChinaNet-kWqN|14:B8:37:23:71:57,-57,ChinaNet-qi67|D8:24:BD:77:4D:6E,-61,gatorgroup|FC:37:2B:4B:06:11,-69,ChinaNet-z6QU|82:89:17:78:E2:21,-74,cfbb.com.cn&key=7fdbbeb16c30e7660f8588afee2bf9ba
 	//http://apilocate.amap.com/position?accesstype=0&imei=357593060571398&cdma=0&mmac=48:3C:0C:F5:56:48,-46,Gator&macs=FC:37:2B:50:A7:49,-55,ChinaNet-kWqN|14:B8:37:23:71:57,-57,ChinaNet-qi67|D8:24:BD:77:4D:6E,-61,gatorgroup|FC:37:2B:4B:06:11,-69,ChinaNet-z6QU|82:89:17:78:E2:21,-74,cfbb.com.cn&key=7fdbbeb16c30e7660f8588afee2bf9ba
