@@ -86,7 +86,7 @@ const (
 	DRT_QUERY_TEL_USE_ACK       	// 同BP24	，手表对服务器查询短信条数的ACK
 	DRT_DELETE_PHONE_PHOTO_ACK       	// 同BP25	，手表对删除亲情号图片的ACK
 	DRT_FETCH_APP_URL_ACK       	// 同BP26	，手表获取app下载页面URL的ACK
-
+	DRT_ADD_NEW_FRIENDS				//同BP35，向服务器发送添加好友请求
 	DRT_MAX
 )
 
@@ -203,6 +203,7 @@ var commands = []string{
 	"BP24",
 	"BP25",
 	"BP26",
+	"BP35",
 }
 
 const (
@@ -327,12 +328,19 @@ type AppMsgData struct {
 	AccessToken string `json:"accessToken,omitempty"`
 	//Conn interface{}  `json:"-"`
 	ConnID uint64  `json:"connid"`
+
+	//imei互相添加好友标志
+	AddFriend	bool	`json:"addfriend"`
 }
 
 type AppRequestTcpConnParams struct {
 	ConnID  uint64		 	`json:"connid"`
 	ReqCmd string 		`json:"reqCmd"`
 	Params DeviceActiveParams `json:"params"`
+}
+type AppRequestLocationParams struct{
+	ConnID uint64 `json:"connid"`
+	Params LocateIMEIParams `json:"params"`
 }
 
 type HeartbeatParams struct {
@@ -349,11 +357,22 @@ type HeartbeatParams struct {
 	FamilyNumber string `json:"familyNumber"`
 }
 
+type AddFriend struct{
+	FriendDevName	string `json:"friend_dev_name"`
+	FriendPhone		string	`json:"friend_phone"`
+	FriendAvatar	string	`json:"friend_avatar"`
+	FriendIMEI		uint64	`json:"friend_imei"`
+}
+
+
 type HeartbeatResult struct {
 	Timestamp string `json:"timestamp"`
 	Locations []LocationData`json:"locations"`
 	Minichat []ChatInfo`json:"minichat"`
 	Alarms []LocationData`json:"alarms"`
+
+	ImeiAddFriend	map[uint64]AddFriend	`json:"imei_add_friend"`
+
 }
 
 type DeviceSettingResult struct {
@@ -494,6 +513,14 @@ type PhpQueryLocationsResult struct {
 	Data  []interface{} 		`json:"data"`
 }
 
+
+type PhpQueryLocationsResult_ struct {
+	Result int 				`json:"result"`
+	ResultStr string			`json:"resultstr"`
+	Data  []interface{} 		`json:"data"`
+}
+
+
 type DeleteAlarmsResult struct {
 	Imei string  				`json:"imei"`
 	BeginTime uint64		`json:"beginTime"`
@@ -521,6 +548,7 @@ type DeviceAddParams struct {
 
 	//chenqw
 	AccountType int `json:"accountType"`
+	DeviceToken string `json:"deviceToken"`
 }
 
 type SettingParam struct {
@@ -545,6 +573,10 @@ type DeleteVoicesParams struct {
 	DeleteVoices []ChatInfo  `json:"deleteVoices"`
 }
 
+type LocateIMEIParams struct{
+	Imei string `json:"imei"`
+}
+
 
 type IPInfo struct {
 	StartIP uint32
@@ -563,10 +595,11 @@ const (
 	DM_GTI3
 	DM_GT06
 	DM_GT02
+	DM_GT05
 	DM_MAX
 )
 
-var ModelNameList = []string{ "WH01", "GT03","GTI3", "GT06","GT02"}
+var ModelNameList = []string{ "WH01", "GT03","GTI3", "GT06","GT02","GT05"}
 
 const (
 	ALARM_INZONE = 1
@@ -630,6 +663,9 @@ var CmdAckTail 				= "-ack"
 var LoginCmdName  			= "login"
 var LoginAckCmdName  		= LoginCmdName + CmdAckTail
 
+var LoginOutCmdName			= "logout"
+var LoginOutAckCmdName		= LoginOutCmdName + CmdAckTail
+
 var RegisterCmdName  		= "register"
 var RegisterAckCmdName  		= RegisterCmdName + CmdAckTail
 
@@ -691,6 +727,12 @@ var RefreshDeviceAckCmdName  		= RefreshDeviceCmdName + CmdAckTail
 var ActiveDeviceSms 				= "#CONNECTSERVER#0#GATOR#"
 var DeviceLocateNowSms 			= "#LOCATION#GATOR#"
 
+var CmdLocation					= "cmd-location"
+var CmdLocationAck				= CmdLocation + CmdAckTail
+
+var CmdAddFriend				= "add-friend"
+var CmdAddFriendAck				= CmdAddFriend + CmdAckTail
+
 type SafeZone struct {
 	ZoneID int32
 	//ZoneName string
@@ -719,6 +761,11 @@ type FamilyMember struct {
 
 	IsAdmin int `json:"is_admin"`		//0:管理员,1:非管理员
 	Username string `json:"username"`
+
+	IsAddFriend	int `json:"is_add_friend"`	//1:为手表互相添加好友关系
+	FriendDevName string `json:"friend_dev_name"`
+	FriendAvatar string `json:"friend_avatar"`
+	FriendImei	uint64	`json:"friend_imei"`
 }
 
 type ContactAvatars struct {
@@ -879,8 +926,9 @@ var DeviceInfoListLock =  sync.Mutex{}
 var SystemNo2ImeiMap = map[uint64]uint64{}
 var SystemNo2ImeiMapLock =  sync.Mutex{}
 
-//var AdminList = &map[string]*UserInfo{}
-//var AdminListLock =  sync.RWMutex{}
+//
+var MapPhone2IMEI = &map[string]uint64{}
+var MapPhone2IMEILock = sync.Mutex{}
 
 var company_blacklist = []string {
 	"UES",
@@ -1393,8 +1441,8 @@ func MakeFamilyPhoneNumbersEx(family *[MAX_FAMILY_MEMBER_NUM]FamilyMember) strin
 		if family[i].Username == "" {
 			family[i].Username = "0"
 		}
-		phoneNumbers += fmt.Sprintf("%s|%d|%s|%d|%s",  family[i].Phone, family[i].Type, family[i].Name,
-		family[i].IsAdmin,family[i].Username)
+		phoneNumbers += fmt.Sprintf("%s|%d|%s|%d|%s|%d|%s|%s|%d",  family[i].Phone, family[i].Type, family[i].Name,
+		family[i].IsAdmin,family[i].Username,family[i].IsAddFriend,family[i].FriendDevName,family[i].FriendAvatar,family[i].FriendImei)
 	}
 
 	return phoneNumbers
@@ -1524,6 +1572,12 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		ParseFamilyMembers(parseUint8Array(PhoneNumbers), &deviceInfo.Family)
 		//fmt.Printf("ContactAvatar:##%s\n",ContactAvatar)
 		ParseContactAvatars(parseUint8Array(ContactAvatar), &deviceInfo.Family)
+		//
+		for k,_ := range deviceInfo.Family{
+			if deviceInfo.Family[k].IsAddFriend == 1{
+				(*MapPhone2IMEI)[deviceInfo.Family[k].Phone] = deviceInfo.Family[k].FriendImei
+			}
+		}
 		deviceInfo.TimeZone  = ParseTimeZone(parseUint8Array(TimeZone))
 		deviceInfo.CountryCode = parseUint8Array(CountryCode)
 		deviceInfo.Avatar = parseUint8Array(Avatar)
@@ -1681,7 +1735,16 @@ func ParseSinglePhoneNumberString(phone string, i int)  FamilyMember{
 		member.IsAdmin = int(Str2Num(fields[3], 10))
 		member.Username = fields[4]
 	}
-
+	if len(fields) >= 6 {
+		member.IsAddFriend = int(Str2Num(fields[5],10))
+		member.FriendDevName = fields[6]
+		if len(fields) >= 8{
+			member.FriendAvatar = fields[7]
+		}
+	}
+	if len(fields) >= 9{
+		member.FriendImei = Str2Num(fields[8],10)
+	}
 	return member
 }
 

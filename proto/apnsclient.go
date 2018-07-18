@@ -40,7 +40,7 @@ type pushJSON struct {
 func ReportDevieeToken(apiBaseURL string, imei uint64, familyNumber, uuid, deviceToken, platform, lang  string )  {
 	urlRequest := apiBaseURL + "/report"
 	reportInfo := reportJSON{Imei: imei, UUID: uuid, Data: reportJSONData{familyNumber, deviceToken, platform, lang}}
-	logging.Log(fmt.Sprintf("%d report device token: %s", imei, MakeStructToJson(&reportInfo)))
+	//logging.Log(fmt.Sprintf("%d report device token: %s", imei, MakeStructToJson(&reportInfo)))
 	reader := strings.NewReader(MakeStructToJson(&reportInfo))
 	requestAPNS(urlRequest, imei, reader)
 }

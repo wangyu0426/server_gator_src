@@ -325,7 +325,7 @@ func PushChatNum(imei uint64) bool {
 	if len(chatData) > 0 {
 		//通知终端有聊天信息
 		model := proto.GetDeviceModel(imei)
-		if model == proto.DM_GT06 {
+		if model == proto.DM_GT06 || model == proto.DM_GT05{
 			msg := proto.MakeReplyMsg(imei, false,
 				proto.MakeFileNumReplyMsg(imei, proto.ChatContentVoice, len(chatData), true),
 				proto.NewMsgID())
@@ -432,6 +432,12 @@ func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 
 		}else {
 			logging.Log(fmt.Sprintf("[%d] get device data: no data in db", imei))
+
+			//加载地图比较慢,psql里没有数据
+			DeviceTableLock.Lock()
+			DeviceTable[imei] = &proto.DeviceCache{}
+			DeviceTable[imei].Imei = imei
+			DeviceTableLock.Unlock()
 		}
 
 		deviceData.Imei = imei
@@ -528,7 +534,8 @@ func SetDeviceData(imei uint64, updateType int, deviceData proto.LocationData) {
 	case proto.DEVICE_DATA_STATUS:
 		device, ok := DeviceTable[imei]
 		if ok && device != nil {
-			device.CurrentLocation.LocateType = deviceData.LocateType
+			//LocateType,心跳数据对GT06来说为零，不能设置,20180619
+			//device.CurrentLocation.LocateType = deviceData.LocateType
 			device.CurrentLocation.DataTime = deviceData.DataTime
 			device.CurrentLocation.Steps = deviceData.Steps
 			device.CurrentLocation.AlarmType = deviceData.AlarmType

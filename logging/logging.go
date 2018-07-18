@@ -131,7 +131,7 @@ func PanicLogAndExit(errmsg string){
 	Log(errText)
 
 	SendMail("835280181@qq.com", "835280181@qq.com",  "Go Server Panic", errText, "",
-		"smtp.qq.com", 587, "835280181@qq.com", "zmblbqvsomaybehb")
+		"smtp.qq.com", 587, "835280181@qq.com", "wbsvaskutjpbbdfc")
 
 	panic("panic error cause exit")
 }
@@ -147,12 +147,12 @@ func PanicLogAndCatch(errmsg string){
 	Log(errText)
 
 	SendMail("835280181@qq.com", "835280181@qq.com",  "Go Server Panic", errText, "",
-		"smtp.qq.com", 587, "835280181@qq.com", "zmblbqvsomaybehb")
+		"smtp.qq.com", 587, "835280181@qq.com", "wbsvaskutjpbbdfc")
 }
 
 func SendMailToDefaultReceiver(body string)  {
 	SendMail("835280181@qq.com", "835280181@qq.com",  "Go Server Msg", body, "",
-		"smtp.qq.com", 587, "835280181@qq.com", "zmblbqvsomaybehb")
+		"smtp.qq.com", 587, "835280181@qq.com", "wbsvaskutjpbbdfc")
 }
 
 func SendMail(from, to, subject, text, attachmentFile, mailServer  string, mailPort int, user, password string)  {

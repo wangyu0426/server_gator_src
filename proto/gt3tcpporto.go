@@ -156,9 +156,7 @@ func (service *GT03Service)DoRequest(msg *MsgData) bool  {
 		}
 	}
 	DeviceInfoListLock.Unlock()
-
 	service.GetWatchDataInfo(service.imei)
-
 	if service.cmd >=  DRT_GT3_BP01_LOCATION && service.cmd <=  DRT_GT3_BPM2_LOCATION_ALARM {
 		//定位数据：经纬度、时间、步数、电量、报警
 		//首先解析消息中的各字段数据
@@ -220,6 +218,12 @@ func (service *GT03Service)DoRequest(msg *MsgData) bool  {
 		//BP09  heart beat
 		//解析消息中的各字段数据
 		parseMsgString((msg.Data[0:]), service)
+		length := len(string(msg.Data[0:]))
+		spliptMsg := strings.Split(string(msg.Data[1:length - 1]),",")
+		if len(spliptMsg) >= 3{
+			service.cur.LocateType = uint8(Str2Num(spliptMsg[2],10))
+		}
+
 		if service.cur.DataTime == 0 {
 			service.cur.DataTime = service.old.DataTime
 		}
@@ -242,6 +246,7 @@ func (service *GT03Service)DoRequest(msg *MsgData) bool  {
 
 func (service *GT03Service)CountSteps() {
 	//170520114920
+	//logging.Log(fmt.Sprintf("gt3 CountSteps :%d--%d--%d--%d",service.cur.Steps,service.old.Steps,service.cur.DataTime,service.old.DataTime))
 	if service.old.DataTime == 0 || (service.cur.DataTime / 1000000 ==  service.old.DataTime / 1000000) {
 		service.cur.Steps += service.old.Steps
 	}
@@ -544,8 +549,8 @@ func (service *GT03Service) ProcessLocate() bool {
 
 	service.CountSteps()
 
-	logging.Log(fmt.Sprintf("%d - middle: m_iAlarmStatu=%d, parsed location:  m_DateTime=%d, m_lng=%f, m_lat=%f",
-		service.imei, service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat))
+	logging.Log(fmt.Sprintf("%d - middle: m_iAlarmStatu=%d, parsed location:  m_DateTime=%d, m_lng=%f, m_lat=%f,LocateType = %d,ret = %t,steps = %d",
+		service.imei, service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat,service.cur.LocateType,ret,service.cur.Steps))
 
 	if ret == false ||  service.cur.LocateType == LBS_INVALID_LOCATION  || service.cur.Lng == 0 && service.cur.Lat== 0 {
 		service.needSendLocation = false
@@ -698,7 +703,7 @@ func (service *GT03Service) GetAddress() string {
 		}
 		json.Unmarshal(body, &itf)
 		mapdata := itf.(map[string]interface{})
-		if mapdata == nil {
+		if mapdata == nil || mapdata["regeocodes"] == nil{
 			return ""
 		}
 		for _, data := range mapdata["regeocodes"].([]interface{}) {
@@ -744,7 +749,7 @@ func (service *GT03Service) ProcessMicChat() bool {
 	//newChatInfo.DateTime = newChatInfo.DateTime / 10000
 	newChatInfo.Receiver = ""
 	newChatInfo.VoiceMilisecs = service.chat.VoiceMilisecs
-	logging.Log(fmt.Sprintf("gt3 timestamp:%d--%d",fileId,service.chat.DateTime))
+	//logging.Log(fmt.Sprintf("gt3 timestamp:%d--%d",fileId,service.chat.DateTime))
 	filePathDir := fmt.Sprintf("%s%d", service.reqCtx.MinichatUploadDir + "watch/", service.imei)
 	os.MkdirAll(filePathDir, 0755)
 	filePath := fmt.Sprintf("%s/%d.amr", filePathDir, fileId)
@@ -875,11 +880,12 @@ func (service *GT03Service) ProcessUpdateWatchStatus() bool {
 	}
 
 	service.cur.Battery = uint8(ucBattery)
-	service.cur.LocateType = LBS_SMARTLOCATION
+	//modified by steven,2018.6.4
+	//if service.cur.LocateType == service.old.LocateType {
+	//	service.cur.LocateType = LBS_SMARTLOCATION
+	//}
 
 	service.CountSteps()
-
-	logging.Log(fmt.Sprintf("Update Watch %d, Step:%d, Battery:%d", service.imei, service.cur.Steps, ucBattery))
 
 	stWatchStatus := &WatchStatus{}
 	stWatchStatus.i64DeviceID = service.imei
@@ -888,6 +894,7 @@ func (service *GT03Service) ProcessUpdateWatchStatus() bool {
 	stWatchStatus.Step = service.cur.Steps
 	stWatchStatus.AlarmType = service.cur.AlarmType
 	stWatchStatus.Battery = service.cur.Battery
+	stWatchStatus.iLocateType = service.cur.LocateType
 	ret := service.UpdateWatchStatus(stWatchStatus)
 	if ret == false {
 		logging.Log("Update Watch status failed ")
@@ -1394,10 +1401,10 @@ func (service *GT03Service) WatchDataUpdateDB() bool {
 
 	logging.Log(fmt.Sprintf("SQL: %s", strSQL))
 
-	strSQLTest := fmt.Sprintf("update %s set location_time=%d,data=jsonb_set(data,'{datatime}','%d'::jsonb,'{steps}','%d'::jsonb,'{locateType}','%d'::jsonb,true) ",
-		strTableaName, 20000000000000 + service.cur.DataTime, service.cur.DataTime, service.cur.Steps, service.cur.LocateType)
+	//strSQLTest := fmt.Sprintf("update %s set location_time=%d,data=jsonb_set(data,'{datatime}','%d'::jsonb,'{steps}','%d'::jsonb,'{locateType}','%d'::jsonb,true) ",
+	//	strTableaName, 20000000000000 + service.cur.DataTime, service.cur.DataTime, service.cur.Steps, service.cur.LocateType)
 
-	logging.Log(fmt.Sprintf("SQL Test: %s", strSQLTest))
+	//logging.Log(fmt.Sprintf("SQL Test: %s", strSQLTest))
 
 	_, err := service.reqCtx.Pgpool.Exec(strSQL)
 	if err != nil {
@@ -1499,7 +1506,7 @@ func (service *GT03Service) NotifyAlarmMsg() bool {
 	DeviceInfoListLock.Unlock()
 
 	PushNotificationToApp(service.reqCtx.APNSServerBaseURL, service.imei, "",  ownerName,
-		service.cur.DataTime, service.cur.AlarmType, service.cur.ZoneName)
+		service.cur.DataTime * 10000, service.cur.AlarmType, service.cur.ZoneName)
 
 	return true
 }

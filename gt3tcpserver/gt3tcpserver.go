@@ -53,16 +53,16 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				connDel.conn.Close()
 
 				delete(TcpClientTable, connDel.imei)
-				logging.Log(fmt.Sprintf("%d connection deleted from TcpClientTable", connAdd.imei))
+				logging.Log(fmt.Sprintf("%d gt3 connection deleted from TcpClientTable", connAdd.imei))
 			}else {
-				logging.Log(fmt.Sprintf("%d will delete connection from TcpClientTable, but connection not found", connAdd.imei))
+				logging.Log(fmt.Sprintf("%d gt3 will delete connection from TcpClientTable, but connection not found", connAdd.imei))
 			}
 
 			TcpClientTable[connAdd.imei] = connAdd
-			logging.Log(fmt.Sprintf("%d new connection added", connAdd.imei))
+			logging.Log(fmt.Sprintf("%d gt3 new connection added", connAdd.imei))
 		case connDel := <-delConnChan:
 			if connDel == nil {
-				logging.Log("main lopp exit, connection manager goroutine exit")
+				logging.Log("gt3 main lopp exit, connection manager goroutine exit")
 				return
 			}
 
@@ -75,13 +75,13 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				connDel.conn.Close()
 
 				delete(TcpClientTable, connDel.imei)
-				logging.Log(fmt.Sprintf("%d connection deleted from TcpClientTable", connDel.imei))
+				logging.Log(fmt.Sprintf("%d gt3 connection deleted from TcpClientTable", connDel.imei))
 			}else {
-				logging.Log(fmt.Sprintf("%d will delete connection from TcpClientTable, but connection not found", connDel.imei))
+				logging.Log(fmt.Sprintf("%d gt3 will delete connection from TcpClientTable, but connection not found", connDel.imei))
 			}
 		case msg := <- serverCtx.GT3TcpServerChan:
 			if msg == nil {
-				logging.Log("main lopp exit, connection manager goroutine exit")
+				logging.Log("gt3 main lopp exit, connection manager goroutine exit")
 				return
 			}
 
@@ -265,7 +265,8 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		if n > 0 {
 			c.recvEndPosition += n
 		}else {
-			logging.Log(fmt.Sprintf("recv data failed, %s, recv %d bytes", err.Error(), n))
+			logging.Log(fmt.Sprintf("" +
+				", %s, recv %d bytes", err.Error(), n))
 			breakLoop = true
 		}
 
@@ -274,7 +275,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		}
 
 		//记录收到的是些什么数据
-		logging.Log(string(c.buf[0: c.recvEndPosition]))
+		//logging.Log(string(c.buf[0: c.recvEndPosition]))
 
 		//切割消息
 		for {
@@ -313,7 +314,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				}
 
 				//记录解密后(如果需要解密)的是些什么数据
-				logging.Log(string(packet))
+				logging.Log("GT03  " + string(packet))
 
 				if packet[msgLen - 1] != ')' || msgLen < 21 {
 					logging.Log("bad format of data packet, it must end with )")
@@ -341,7 +342,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				copy(msg.Data, packet[0: msgLen])
 
 				c.requestChan <- msg
-
+				//logging.Log("GT03 msg  " + string(msg.Data))
 				c.FlushRecvBuf(int(parseLen))
 			}
 		}
@@ -359,11 +360,11 @@ func ConnWriteLoop(c *Connection) {
 	for   {
 		select {
 		case <-c.closeChan:
-			logging.Log("write goroutine exit")
+			logging.Log("gt3 write goroutine exit")
 			return
 		case data := <-c.responseChan:
 			if data == nil ||  c.IsClosed() { //连接关闭了，这里需要将响应数据推入续传队列
-				logging.Log("connection closed, write goroutine exit")
+				logging.Log("gt3 connection closed, write goroutine exit")
 
 				//连接关闭了，这里需要将响应数据推入续传队列
 				return
@@ -401,11 +402,11 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 	for {
 		select {
 		case <-c.closeChan:
-			logging.Log("business goroutine exit")
+			logging.Log("gt3 business goroutine exit")
 			return
 		case data := <-c.requestChan:
 			if data == nil {
-				logging.Log("connection closed, business goroutine exit")
+				logging.Log("gt3 connection closed, business goroutine exit with data = nil" )
 				return
 			}
 

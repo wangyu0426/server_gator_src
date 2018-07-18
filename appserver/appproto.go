@@ -19,6 +19,12 @@ import (
 	"math/rand"
 	"github.com/garyburd/redigo/redis"
 	"crypto/tls"
+	"image"
+	"os"
+	"path/filepath"
+	"image/jpeg"
+	"image/png"
+	"image/gif"
 )
 
 const (
@@ -77,12 +83,9 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		//logging.Log(fmt.Sprintf("handle connid:%d\n\n",connid))
 		proto.DevConnidenc[connid] = true
 		ens := data[6:len(data)]
-		logging.Log("ens: " + string(ens))
+		//logging.Log("ens: " + string(ens))
 		desc := proto.AppserDecrypt(string(ens))
-		/*if err != nil {
-			logging.Log("GTS01:AppserDecrypt failed, " + err.Error())
-			return false
-		}*/
+
 		err :=json.Unmarshal([]byte(desc), &itf)
 		if err != nil {
 			logging.Log("GTS01:parse recved json data failed, " + err.Error())
@@ -152,7 +155,13 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 	case proto.LoginCmdName:
 		//logging.Log(fmt.Sprintf("Login username:%s,password:%s\n\n",params["username"].(string), params["password"].(string)))
 		return login(connid, params["username"].(string), params["password"].(string), false)
-
+	case proto.LoginOutCmdName:
+		logging.Log(fmt.Sprintf("Logout imei:%s,uuid:%s\n\n",params["imei"].([]interface{}), params["uuid"].(string)))
+		var _imeiList []string
+		for _,mem := range params["imei"].([]interface{}){
+			_imeiList = append(_imeiList,mem.(string))
+		}
+		return LoginOut(connid,_imeiList,params["uuid"].(string))
 	case proto.RegisterCmdName:
 		return login(connid, params["username"].(string), params["password"].(string), true)
 
@@ -167,11 +176,7 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		return handleFeedback(connid, params["username"].(string), params["accessToken"].(string),params["feedback"].(string))
 
 	case proto.HearbeatCmdName:
-		//datas := msg["data"].(map[string]interface{})
-		//params := proto.HeartBeatParams{TimeStamp: datas["timestamp"].(string),
-		//	UserName: datas["username"].(string),
-		//	AccessToken: datas["accessToken"].(string)}
-		logging.Log(fmt.Sprintf("Hearbeat username:%s,accessToken:%s\n\n",params["username"].(string), params["accessToken"].(string)))
+		//logging.Log(fmt.Sprintf("Hearbeat username:%s,accessToken:%s\n\n",params["username"].(string), params["accessToken"].(string)))
 		jsonString, _ := json.Marshal(msg["data"])
 		params := proto.HeartbeatParams{}
 		err:=json.Unmarshal(jsonString, &params)
@@ -180,7 +185,7 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 			return false
 		}
 
-		logging.Log(fmt.Sprint( "imeiList 1 :", params.UserName, params.AccessToken, imeiList))
+		//logging.Log(fmt.Sprint( "imeiList 1 :", params.UserName, params.AccessToken, imeiList))
 		return handleHeartBeat(imeiList, connid, &params)
 
 	case proto.VerifyCodeCmdName:
@@ -349,6 +354,17 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		}
 
 		return AppDeleteAlarms(connid, &params)
+	case proto.CmdLocation:
+		jsonString,_ := json.Marshal(msg["data"])
+		params := proto.LocateIMEIParams{}
+		err := json.Unmarshal(jsonString,&params)
+		if err != nil{
+			logging.Log(cmd.(string) + " parse json LocateIMEIParams failed, " + err.Error())
+			return false
+		}
+		if InStringArray(params.Imei,imeiList) == false{
+			return false
+		}
 	default:
 		break
 	}
@@ -373,18 +389,18 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 
 		imeiUint64 := proto.Str2Num(imei, 10)
 		if params.FamilyNumbers == nil || len(params.FamilyNumbers) < (i + 1) {
-			if params.UUID != "" &&  params.DeviceToken != ""{
+			if params.UUID != "" &&  params.DeviceToken != "" && params.Platform != "android"{
 				proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, "",
 					params.UUID, params.DeviceToken, params.Platform, params.Language)
-			}else if params.UUID != "" &&  params.AccessToken != "" {
+			}else if params.UUID != "" &&  params.AccessToken != "" && params.Platform == "android"{
 				proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, "",
 					params.UUID, params.AccessToken, params.Platform, params.Language)
 			}
 		}else{
-			if params.UUID != "" &&  params.DeviceToken != "" {
+			if params.UUID != "" &&  params.DeviceToken != "" && params.Platform != "android"{
 				proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, params.FamilyNumbers[i],
 					params.UUID, params.DeviceToken, params.Platform, params.Language)
-			}else if params.UUID != "" &&  params.AccessToken != "" {
+			}else if params.UUID != "" &&  params.AccessToken != "" && params.Platform == "android"{
 				proto.ReportDevieeToken(svrctx.Get().APNSServerApiBase, imeiUint64, params.FamilyNumbers[i],
 					params.UUID, params.AccessToken, params.Platform, params.Language)
 			}
@@ -401,7 +417,7 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 	}
 
 	tmpMinichat := []proto.ChatInfo{}
-	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
+	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405"),ImeiAddFriend:map[uint64]proto.AddFriend{}}
 	if params.SelectedDevice == "" {
 		for _, imei := range params.Devices {
 			if InStringArray(imei, imeiList) == false {
@@ -425,17 +441,49 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 				if (result.Minichat[k].Receiver == params.FamilyNumber && len(result.Minichat[k].Receiver) > 1) ||
 					len(result.Minichat[k].Receiver) == 0{
 					tmpMinichat = append(tmpMinichat,result.Minichat[k])
-					logging.Log("handleHeartBeat responseChan")
+					logging.Log("1 handleHeartBeat responseChan")
 					continue
 				}
 
 				if result.Minichat[k].Receiver == "0" {
 					tmpMinichat = append(tmpMinichat,result.Minichat[k])
-					logging.Log("handleHeartBeat responseChan 000")
-					break
+					logging.Log("1 handleHeartBeat responseChan 000")
+					continue
 				}
 			}
 
+			//add friend flag
+
+			proto.DeviceInfoListLock.Lock()
+			deviceInfo, ok := (*proto.DeviceInfoList)[imeiUint64]
+			if ok{
+				for index,_ := range deviceInfo.Family {
+					if deviceInfo.Family[index].IsAddFriend == 1{
+						var addfriend = proto.AddFriend{}
+						addfriend.FriendPhone = deviceInfo.Family[index].Phone
+						addfriend.FriendDevName = deviceInfo.Family[index].FriendDevName
+						if deviceInfo.Family[index].FriendAvatar != "" {
+							if svrctx.Get().UseHttps {
+								addfriend.FriendAvatar = fmt.Sprintf("%s:%d", svrctx.Get().HttpServerName, svrctx.Get().WSSPort) +
+									deviceInfo.Family[index].FriendAvatar
+							} else {
+								addfriend.FriendAvatar = fmt.Sprintf("%s:%d", svrctx.Get().HttpServerName, svrctx.Get().WSPort) +
+									deviceInfo.Family[index].FriendAvatar
+							}
+						}
+
+						proto.MapPhone2IMEILock.Lock()
+						_imei,ok1 := (*proto.MapPhone2IMEI)[deviceInfo.Family[index].Phone]
+						if ok1{
+							addfriend.FriendIMEI = _imei
+						}
+						proto.MapPhone2IMEILock.Unlock()
+
+						result.ImeiAddFriend[imeiUint64] = addfriend
+					}
+				}
+			}
+			proto.DeviceInfoListLock.Unlock()
 		}
 	}else{
 		if InStringArray(params.SelectedDevice, imeiList) {
@@ -464,7 +512,7 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 				if (result.Minichat[k].Receiver == params.FamilyNumber && len(result.Minichat[k].Receiver) > 1) ||
 					len(result.Minichat[k].Receiver) == 0{
 					tmpMinichat = append(tmpMinichat,result.Minichat[k])
-					logging.Log("handleHeartBeat responseChan")
+					logging.Log("2 handleHeartBeat responseChan")
 					continue
 				}
 				//Receiver == "0"表示群发消息至关注该手表的人;len(Receiver) == 0表示仅仅手机端发送和接收
@@ -475,9 +523,41 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 				}
 			}
 
+			//add friend tag
+			proto.DeviceInfoListLock.Lock()
+			deviceInfo, ok := (*proto.DeviceInfoList)[imeiUint64]
+			if ok{
+				for index,_ := range deviceInfo.Family {
+					fmt.Println("AAAA",deviceInfo.Family[index].IsAddFriend)
+					if deviceInfo.Family[index].IsAddFriend == 1{
+						var addfriend = proto.AddFriend{}
+						//对应好友的
+						addfriend.FriendPhone = deviceInfo.Family[index].Phone
+						addfriend.FriendDevName = deviceInfo.Family[index].FriendDevName
+						if deviceInfo.Family[index].FriendAvatar != "" {
+							if svrctx.Get().UseHttps {
+								addfriend.FriendAvatar = fmt.Sprintf("%s:%d", svrctx.Get().HttpServerName, svrctx.Get().WSSPort) +
+									deviceInfo.Family[index].FriendAvatar
+							} else {
+								addfriend.FriendAvatar = fmt.Sprintf("%s:%d", svrctx.Get().HttpServerName, svrctx.Get().WSPort) +
+									deviceInfo.Family[index].FriendAvatar
+							}
+						}
+						proto.MapPhone2IMEILock.Lock()
+						_imei,ok1 := (*proto.MapPhone2IMEI)[deviceInfo.Family[index].Phone]
+						if ok1{
+							addfriend.FriendIMEI = _imei
+						}
+						proto.MapPhone2IMEILock.Unlock()
+
+						result.ImeiAddFriend[imeiUint64] = addfriend
+					}
+				}
+			}
+			proto.DeviceInfoListLock.Unlock()
 		}
 	}
-
+	fmt.Println("MapPhone2IMEI:",*proto.MapPhone2IMEI)
 	result.Minichat = tmpMinichat
 	proto.QuickSort(result.Minichat,0,len(result.Minichat) - 1)
 	//logging.Log(fmt.Sprintf("atfer sort...%s:", proto.MakeStructToJson(result)))
@@ -494,14 +574,9 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	var urlRequest string
 	if !svrctx.Get().IsUseAliYun {
 		urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
-		if svrctx.Get().IsDebugLocal {
-			urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
-		}
 	}else {
 		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
-	if svrctx.Get().IsDebugLocal {
-		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
-	}
+
 	}
 	reqType := "login"
 	if isRegister {
@@ -532,10 +607,10 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 
 	var itf interface{}
 	err = json.Unmarshal(body, &itf)
-	re,_ := json.Marshal(itf)
-	fmt.Printf("\n" + string(re) + "\n")
+	//re,_ := json.Marshal(itf)
+	logging.Log(fmt.Sprintf("parse login format :%s", string(body)))
 	if err != nil {
-		logging.Log("parse  " + reqType + " response as json failed, " + err.Error())
+		logging.Log("login parse  " + reqType + " response as json failed, " + err.Error())
 		return false
 	}
 
@@ -620,7 +695,6 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 						//chenqw 20171228
 						//deviceInfoResult.PhoneNumbers = proto.SplitPhone(deviceInfoResult.PhoneNumbers)
 						logging.Log(fmt.Sprintf("the deviceInfoResult.PhoneNumbers is :%s",deviceInfoResult.PhoneNumbers))
-						//
 						if k != len(deviceInfo.Family) {
 							logging.Log(fmt.Sprintf("len devices = %d i = %d,k = %d",len(loginData["devices"].([]interface{})),i,k))
 							loginData["devices"].([]interface{})[i] = deviceInfoResult
@@ -696,19 +770,20 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	return true
 }
 
+func LoginOut(connid uint64,IMEI []string,UUID string) bool {
+	for _,imei := range IMEI {
+		proto.DeleteDevieeToken(svrctx.Get().APNSServerApiBase,proto.Str2Num(imei,10),UUID)
+	}
+	return true
+}
+
 //忘记密码，通过服务器重设秘密
 func resetPassword(connid uint64, username string) bool {
 	var urlRequest string
 	if !svrctx.Get().IsUseAliYun {
 		urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
-		if svrctx.Get().IsDebugLocal {
-			urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
-		}
 	}else {
 		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
-	if svrctx.Get().IsDebugLocal {
-		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
-	}
 	}
 	//reqType := "login"
 	reqType := "reset"
@@ -748,14 +823,9 @@ func modifyPassword(connid uint64, username, accessToken, oldPasswd, newPasswd  
 	var requesetURL string
 	if !svrctx.Get().IsUseAliYun {
 		requesetURL = "https://watch.gatorcn.com/web/index.php?r=app/service/modpwd&access-token=" + accessToken
-		if svrctx.Get().IsDebugLocal {
-			requesetURL = "https://watch.gatorcn.com/web/index.php?r=app/service/modpwd&access-token=" + accessToken
-		}
 	}else {
 		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/modpwd&access-token=" + accessToken
-	if svrctx.Get().IsDebugLocal {
-		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/modpwd&access-token=" + accessToken
-	}
+
 	}
 
 
@@ -765,7 +835,7 @@ func modifyPassword(connid uint64, username, accessToken, oldPasswd, newPasswd  
 	client := &http.Client{Transport: tr}
 
 
-	logging.Log("url: " + requesetURL)
+	logging.Log("modify password url: " + requesetURL)
 	resp, err := client.PostForm(requesetURL, url.Values{"oldpwd": {oldPasswd}, "newpwd": {newPasswd}})
 	if err != nil {
 		logging.Log(fmt.Sprintf("user %s modify password  failed, ", username, err.Error()))
@@ -792,14 +862,9 @@ func handleFeedback(connid uint64, username, accessToken, feedback string) bool 
 	var requesetURL string
 	if !svrctx.Get().IsUseAliYun {
 		requesetURL = "https://watch.gatorcn.com/web/index.php?r=app/service/feedback&access-token=" + accessToken
-		if svrctx.Get().IsDebugLocal {
-			requesetURL = "https://watch.gatorcn.com/web/index.php?r=app/service/feedback&access-token=" + accessToken
-		}
 	}else {
 		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/feedback&access-token=" + accessToken
-	if svrctx.Get().IsDebugLocal {
-		requesetURL = "http://120.25.214.188/tracker/web/index.php?r=app/service/feedback&access-token=" + accessToken
-	}
+
 	}
 
 	tr := &http.Transport{
@@ -969,6 +1034,7 @@ func  getDeviceInfoByImei(connid uint64, params *proto.DeviceAddParams) bool {
 	if ok && deviceInfo != nil {
 		//deviceInfoResult = *deviceInfo
 		deviceInfoResult.Imei = imei
+		deviceInfoResult.Model = deviceInfo.Model
 		found = true
 	}else{
 		//logging.Log(params.Imei + "  imei not found")
@@ -982,21 +1048,25 @@ func  getDeviceInfoByImei(connid uint64, params *proto.DeviceAddParams) bool {
 		logging.Log(params.Imei + "  imei not found")
 	}
 
+	isAdmin := true		//true表示是管理员
+	var err error
 	if found {
-		/*isAdmin, _, _, err := queryIsAdmin(params.Imei, params.UserName)
-		if err != nil {
-			return false
-		}*/
-		isAdmin := true		//true表示是管理员
-		for i,_ := range deviceInfo.Family{
-			if deviceInfo.Family[i].Phone != ""{
-				if deviceInfo.Family[i].IsAdmin == 0 {
-					isAdmin = false
-					break
+		if deviceInfo.Model == proto.DM_GT02 {
+			isAdmin, _, _, err = queryIsAdmin(params.Imei, params.UserName)
+			if err != nil {
+				return false
+			}
+		}else {
+
+			for i, _ := range deviceInfo.Family {
+				if deviceInfo.Family[i].Phone != "" {
+					if deviceInfo.Family[i].IsAdmin == 0 {
+						isAdmin = false
+						break
+					}
 				}
 			}
 		}
-
 		//
 		if isAdmin {
 			deviceInfoResult.IsAdmin = 1		//deviceInfoResult.IsAdmin = 1表示这个手表首次被关注
@@ -1007,8 +1077,9 @@ func  getDeviceInfoByImei(connid uint64, params *proto.DeviceAddParams) bool {
 		deviceInfoResult.Imei = 0
 	}
 
-	if deviceInfoResult.IsAdmin == 0 {
-		deviceInfoResult.SimID = ""
+	if deviceInfoResult.IsAdmin == 0 && found == true {
+		deviceInfoResult.SimID = deviceInfo.SimID
+		deviceInfoResult.CountryCode = deviceInfo.CountryCode
 	}
 
 	resultData, _ := json.Marshal(&deviceInfoResult)
@@ -1093,12 +1164,9 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 				phone = devinfo.Family[i].Phone
 				deviceInfoResult.FamilyNumber = phone
 				deviceInfoResult.AccountType = deviceInfo.Family[i].IsAdmin
-
-				//var tag proto.TagUserName
-				//tag.Username = params.UserName
-				//tag.Phone = deviceInfo.Family[i].Phone
-				//proto.ConnidtagUserName[params.UserName] = tag
-				break
+			}
+			if deviceInfo.Family[i].IsAddFriend == 1{
+				deviceInfoResult.OwnerName = deviceInfo.OwnerName
 			}
 		}
 	}
@@ -1184,6 +1252,34 @@ func addDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 		}
 	}
 	proto.DeviceInfoListLock.Unlock()
+
+	// 手表换了号码后，要把以前的好友关系清除
+	setPhone := ""
+	if deviceInfo.SimID != params.DeviceSimID{
+		for k,_:= range deviceInfo.Family{
+			if deviceInfo.Family[k].IsAddFriend == 1 {
+				deviceInfo.Family[k] = proto.FamilyMember{}
+			}
+			setPhone += fmt.Sprintf("#%s#%s#%d", deviceInfo.Family[k].Phone, deviceInfo.Family[k].Name, deviceInfo.Family[k].Type)
+		}
+		phoneNumbers = proto.MakeFamilyPhoneNumbersEx(&deviceInfo.Family)
+		strSQL := fmt.Sprintf("update watchinfo set PhoneNumbers='%s' where IMEI = '%s'",phoneNumbers,params.Imei)
+		logging.Log("delete friend SQL :" + strSQL)
+		_,err := svrctx.Get().MySQLPool.Exec(strSQL)
+		if err != nil{
+			logging.Log("add friend server failed to update db" + err.Error())
+			return false
+		}
+		msg := proto.MsgData{}
+		msg.Header.Header.Imei = imei
+		msg.Header.Header.ID = proto.NewMsgID()
+		msg.Header.Header.Status = 0
+
+		body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
+			setPhone, msg.Header.Header.ID)
+		msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+		svrctx.Get().TcpServerChan <- &msg
+	}
 	//
 	_, _, deviceRecId, err := queryIsAdmin(params.Imei, params.UserName)
 	if err == nil {
@@ -1625,7 +1721,7 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 	newPhone := proto.MakeFamilyPhoneNumbersEx(&deviceInfo.Family)
 	ContactAvatar := makeContactAvatars(&deviceInfo.Family)
 
-	logging.Log(fmt.Sprintf("newPhone Number: %s",newPhone))
+	logging.Log(fmt.Sprintf("newPhone Number: %s--%s--%s",newPhone,params.DeviceToken,params.AccessToken))
 	strSQL := fmt.Sprintf("UPDATE watchinfo SET PhoneNumbers = '%s' where IMEI='%d'", newPhone, imei)
 	logging.Log("SQL: " + strSQL)
 	_,err = svrctx.Get().MySQLPool.Exec(strSQL)
@@ -1685,8 +1781,16 @@ LABEL_REDIS:
 		UserName: params.UserName, AccessToken:params.AccessToken,
 		Data: string(resultData), ConnID: connid})
 
-	if params.UUID != "" {
-		proto.DeleteDevieeToken(svrctx.Get().APNSServerApiBase, imei, params.UUID)
+	//ios:deviceToken,android:accessToken
+	//if params.UUID != "" {
+	//	proto.DeleteDevieeToken(svrctx.Get().APNSServerApiBase, imei, params.UUID)
+	//}
+	if params.DeviceToken == ""{
+		//android,delete
+		proto.DeleteDevieeToken(svrctx.Get().APNSServerApiBase,imei,params.AccessToken)
+	}else {
+		//ios,delete
+		proto.DeleteDevieeToken(svrctx.Get().APNSServerApiBase,imei,params.DeviceToken)
 	}
 
 	return true
@@ -1728,7 +1832,6 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 				}else {
 					err := json.Unmarshal([]byte(setting.NewValue), &deviceInfo.SafeZoneList[setting.Index - 1])
 					if err != nil {
-						proto.DeviceInfoListLock.Unlock()
 						logging.Log(fmt.Sprintf("[%d] bad data for fence setting %d, err(%s) for %s",
 							imei, setting.Index, err.Error(), setting.NewValue))
 						proto.DeviceInfoListLock.Unlock()
@@ -2281,7 +2384,7 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 
 		//上面都是需要通知手表更新设置的
 		case proto.FenceFieldName:
-			if model == proto.DM_GT06{
+			if model == proto.DM_GT06 || model == proto.DM_GT05{
 				isNeedNotifyDevice[i] = false
 				if setting.Index == 1 || setting.Index == 2{
 					proto.DeviceInfoListLock.Lock()
@@ -2484,6 +2587,50 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 			}else{
 				concatValues += fmt.Sprintf(", %s=%s ", setting.FieldName, newValue)
 			}
+
+			//好友修改ownername时要及时更新name
+			proto.DeviceInfoListLock.Lock()
+			deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+			proto.DeviceInfoListLock.Unlock()
+			if ok{
+				for k,_ := range deviceInfo.Family{
+					if deviceInfo.Family[k].IsAddFriend == 1{
+						fmt.Println("MapPhone2IMEI:",*proto.MapPhone2IMEI)
+						Imei := (*proto.MapPhone2IMEI)[deviceInfo.Family[k].Phone]
+						proto.DeviceInfoListLock.Lock()
+						dev, ok1 := (*proto.DeviceInfoList)[Imei]
+						proto.DeviceInfoListLock.Unlock()
+						if ok1{
+							if dev.Family[k].FriendDevName != deviceInfo.OwnerName {
+								dev.Family[k].FriendDevName = deviceInfo.OwnerName
+								dev.Family[k].Name = deviceInfo.OwnerName
+								newPhone := proto.MakeFamilyPhoneNumbersEx(&dev.Family)
+								strSQL = fmt.Sprintf("update watchinfo set PhoneNumbers = '%s' where IMEI = '%s'",newPhone,proto.Num2Str(Imei,10))
+								logging.Log("SQL update new: " + strSQL)
+								_,err := svrctx.Get().MySQLPool.Exec(strSQL)
+								if err != nil{
+									logging.Log(fmt.Sprintf("[%d] UPDATE watchinfo SET PhoneNumbers db failed, %s", Imei, err.Error()))
+									return  false
+								}
+
+								//AP06 TO devinfo set
+								msg := &proto.MsgData{}
+								msg.Header.Header.Imei = Imei
+								msg.Header.Header.ID = proto.NewMsgID()
+								msg.Header.Header.Status = 0
+								setPhone := ""
+								for k,_:= range dev.Family{
+									setPhone += fmt.Sprintf("#%s#%s#%d", dev.Family[k].Phone, dev.Family[k].Name, dev.Family[k].Type)
+								}
+								body := fmt.Sprintf("%015dAP06%s,%016X)", Imei, setPhone, msg.Header.Header.ID)
+								msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+
+								svrctx.Get().TcpServerChan <- msg
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -2645,7 +2792,7 @@ func GetAddress(Lat,Lng float64,imei  uint64) string {
 		index = rand.Uint64() % uint64(len(proto.MapKey))
 		key = proto.MapKey[index]
 		resp, err := http.PostForm(weburl, url.Values{"output": {"json"}, "location": {amapPos}, "batch": {"true"},
-			"key":                                              {key}, "radius": {"100000"}, "extensions": {"all"}})
+			"key":{key}, "radius": {"100000"}, "extensions": {"all"}})
 		defer resp.Body.Close()
 		if err != nil {
 			logging.Log("errr: " + err.Error())
@@ -2659,6 +2806,10 @@ func GetAddress(Lat,Lng float64,imei  uint64) string {
 		json.Unmarshal(body, &itf)
 		mapdata := itf.(map[string]interface{})
 		if mapdata == nil {
+			return ""
+		}
+		logging.Log(fmt.Sprintf("mapdata:%s",mapdata["regeocodes"]))
+		if mapdata["regeocodes"] == nil{
 			return ""
 		}
 		for _, data := range mapdata["regeocodes"].([]interface{}) {
@@ -2705,6 +2856,23 @@ func AppActiveDevice(connid uint64, reqCmd string, msgCmd uint16, params *proto.
 	msg.Header.Header.Imei = proto.Str2Num(params.Imei, 10)
 	msg.Header.Header.Cmd = msgCmd
 	msg.Header.Header.Version = proto.MSG_HEADER_VER_EX
+	msg.Header.Header.From = proto.MsgFromAppServerToTcpServer
+
+	svrctx.Get().TcpServerChan <- &msg
+
+	return true
+}
+
+func AppLocateImei(connid uint64,msgCmd uint16,params *proto.LocateIMEIParams) bool {
+	reqParams := proto.AppRequestLocationParams{}
+	reqParams.ConnID = connid
+	reqParams.Params = *params
+
+	msg := proto.MsgData{Data:[]byte(proto.MakeStructToJson(&reqParams))}
+	msg.Header.Header.ID = proto.NewMsgID()
+	msg.Header.Header.Imei = proto.Str2Num(params.Imei, 10)
+	msg.Header.Header.Cmd = msgCmd
+	msg.Header.Header.Version = proto.MSG_HEADER_VER
 	msg.Header.Header.From = proto.MsgFromAppServerToTcpServer
 
 	svrctx.Get().TcpServerChan <- &msg
@@ -2849,4 +3017,23 @@ func checkOwnedDevices(AccessToken string)  []string {
 	}
 
 	return imeiList
+}
+
+func SaveImages(p string,src image.Image) error{
+	f,err := os.OpenFile(p,os.O_SYNC | os.O_RDWR | os.O_CREATE,0666)
+	if err != nil{
+		return err
+	}
+	defer f.Close()
+	ext := filepath.Ext(p)
+
+	if strings.EqualFold(ext,".jpg") || strings.EqualFold(ext,".jpg") {
+		err = jpeg.Encode(f, src, &jpeg.Options{Quality: 80})
+	}else if strings.EqualFold(ext, ".png"){
+		err = png.Encode(f,src)
+	}else if strings.EqualFold(ext,"gif"){
+		err = gif.Encode(f,src, &gif.Options{NumColors: 256})
+	}
+
+	return err
 }

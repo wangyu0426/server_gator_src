@@ -17,6 +17,8 @@ import (
 	"time"
 	"crypto/tls"
 	_"net/http/pprof"
+	"bytes"
+	"image/jpeg"
 )
 
 // go get github.com/golang/net
@@ -134,7 +136,14 @@ func LocalAPIServerRunLoop(serverCtx *svrctx.ServerContext) {
 
 	http.HandleFunc("/api/get-locations", GetLocationsByURL)
 	http.HandleFunc("/GetWatchData", GetLocationsByURLfromPHP)
-	addr := fmt.Sprintf("%s:%d", serverCtx.LocalAPIBindAddr, serverCtx.LocalAPIPort)
+	http.HandleFunc("/GetMultiWatchData",GetLocationsByURL_)
+
+	addr := fmt.Sprintf("%s:%d", serverCtx.LocalAPIBindAddr, 18016)
+	go http.ListenAndServeTLS(addr,
+		"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.cer",
+		"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.key",nil)
+
+	addr = fmt.Sprintf("%s:%d", serverCtx.LocalAPIBindAddr, serverCtx.LocalAPIPort)
 	logging.Log("LocalAPIServer listen:  " + addr)
 	http.ListenAndServe(addr, nil)
 }
@@ -250,7 +259,7 @@ func AppConnManagerLoop() {
 				os.Exit(-1)
 			}
 
-			logging.Log(fmt.Sprintf("send data to app:%s--%d", msg.Cmd,msg.Imei))
+			//logging.Log(fmt.Sprintf("send data to app:%s--%d", msg.Cmd,msg.Imei))
 
 			if msg.Cmd == proto.DeviceLocateNowAckCmdName {
 				params := proto.AppRequestTcpConnParams{}
@@ -301,9 +310,23 @@ func AppConnManagerLoop() {
 					break
 				}
 
+			}else if msg.Cmd == proto.CmdAddFriendAck && msg.AddFriend == true{
+				//imei add friend
+				if len(imeiAppUsers) > 0{
+					for username,_ := range imeiAppUsers{
+						userConntable := getAppConnsByUserName(username)
+						if userConntable != nil{
+							for _,c := range userConntable{
+								if c != nil && c.responseChan != nil{
+									c.responseChan <- msg
+								}
+							}
+						}
+					}
+				}
 			}
 
-			if len(imeiAppUsers) >  0 {
+			if len(imeiAppUsers) >  0 && msg.AddFriend == false{
 				for username, _ := range imeiAppUsers {
 					logging.Log(fmt.Sprintf("%d-imeiAppUsers %s len = %d",msg.Imei,username,len(imeiAppUsers)))
 					userConnTable := getAppConnsByUserName(username)
@@ -311,7 +334,7 @@ func AppConnManagerLoop() {
 						for _, c := range userConnTable {
 							if c != nil  && c.responseChan != nil {
 								for _,chat := range param.Minichat{
-									if len(chat.Receiver) > 1 && chat.SenderType != 1{
+									if len(chat.Receiver) > 1 && chat.SenderType != 1 && chat.Flags != 1{
 										//对于手机端发送的微聊，修改set-device 命令对应的键值对
 										phone2name,ok := proto.ConnidUserName[msg.Imei]
 										logging.Log(fmt.Sprintf("receiver from watch:%s--%s--%s", chat.Receiver,phone2name[chat.Receiver],c.user.Name))
@@ -479,6 +502,16 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		//jpg decode
+		body := ioutil.NopCloser(bytes.NewReader(fileData))
+		image,err := jpeg.Decode(body)
+		if err != nil{
+			result.ErrCode = 500
+			result.ErrMsg = "jpeg data error"
+			JSON(w, 500, &result)
+			return
+		}
+
 		os.MkdirAll(svrctx.Get().HttpStaticDir + svrctx.Get().HttpStaticAvatarDir + imei, 0755)
 		fileName, timestampString := "", proto.MakeTimestampIdString()
 
@@ -491,7 +524,8 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 
 		uploadTypeDir := svrctx.Get().HttpStaticAvatarDir
 
-		err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + uploadTypeDir + imei + "/" + fileName, fileData, 0666)
+		//err4 := ioutil.WriteFile(svrctx.Get().HttpStaticDir + uploadTypeDir + imei + "/" + fileName, fileData, 0666)
+		err4 := SaveImages(svrctx.Get().HttpStaticDir + uploadTypeDir + imei + "/" + fileName,image)
 		if err4 != nil {
 			result.ErrCode = 500
 			result.ErrMsg = "server failed to save the uploaded  file"
@@ -685,15 +719,11 @@ func AppConnReadLoop(c *AppConnection) {
 		}
 
 		var itf interface{}
-		//chenqw,20171124
-		//desdata,err :=proto.Gt3AesDecrypt(string(buf[0:n]))
-		//logging.Log("desdata:" + string(desdata))
-		//logging.Log("recv from appclient: " + string(buf[0: n]))
 		if buf[0] == '"'{
 			buf[n - 1] = 0
 			buf = buf[1:n - 1]
 			n = n - 1
-			logging.Log("new from appclient: " + string(buf[0:n]))
+			//logging.Log("new from appclient: " + string(buf[0:n]))
 		}
 
 		header := buf[:6]
@@ -748,14 +778,14 @@ func AppConnReadLoop(c *AppConnection) {
 			c.saved = true
 			addConnChan <- c
 		}else{
-			logging.Log(fmt.Sprintf("connid=%d, old user=%s, new user=%s", c.ID, c.user.Name, params["username"].(string)))
+			//logging.Log(fmt.Sprintf("connid=%d, old user=%s, new user=%s", c.ID, c.user.Name, params["username"].(string)))
 			if c.user.Name != "" && c.ID != 0 && params["username"].(string) != "" && params["username"].(string) != c.user.Name {
 				info := &UpdateAppConnInfo{}
 				info.connID = c.ID
 				info.usernameOld = c.user.Name
 				info.usernameNew = params["username"].(string)
 				info.conn = c
-				logging.Log(fmt.Sprintf("504: update an app connection:%v", (*info)))
+				//logging.Log(fmt.Sprintf("504: update an app connection:%v", (*info)))
 				updateConnChan <- info
 			}
 		}
@@ -956,12 +986,39 @@ func JSON2PHP(w http.ResponseWriter, ret int,  data interface{}) {
 	////unescapedString := bytes.Replace([]byte(buf), andHex, and, -1)
 	//
 	encodedString := buf //strings.Replace(buf, "\\", "\\\\", -1)
-	//fmt.Println("JSON2PHP" + encodedString)
+	//logging.Log(fmt.Sprintf("JSON2PHP" + encodedString))
 	w.Header().Add("Access-Control-Allow-Origin", "*")
 	w.Header().Add("Access-Control-Allow-Methods", "POST, GET,OPTIONS,DELETE,PUT")
 	w.Header().Add("Access-Control-Allow-Headers", "Action, Module")
 	w.Header().Add("Access-Control-Allow-Headers","Content-Type")//header的类型
 	w.Header().Add("content-type","application/json")//返回数据格式是json
+
+	w.Write([]byte(encodedString))
+}
+
+func JSON2PHP_(w http.ResponseWriter, head string,ret int,  data interface{}) {
+	w.Header().Add("Access-Control-Allow-Headers","Content-Type")//header的类型
+	w.Header().Set("Content-Type", "text/javascript")
+	w.WriteHeader(ret)
+	buf := (proto.MakeStructToJson(&data))
+	head += "("
+	head = head + buf;
+	head += ")"
+	//
+	////andHex := []byte("\\u0026")
+	////and    := []byte("&")
+	//
+	////result = bytes.Replace(buf, ltHex, lt, -1)
+	////result = bytes.Replace(result, gtHex, gt, -1)
+	////unescapedString := bytes.Replace([]byte(buf), andHex, and, -1)
+	//
+	encodedString := head //strings.Replace(buf, "\\", "\\\\", -1)
+	//logging.Log(fmt.Sprintf("JSON2PHP" + encodedString))
+	//w.Header().Add("Access-Control-Allow-Origin", "*")
+	//w.Header().Add("Access-Control-Allow-Methods", "POST, GET,OPTIONS,DELETE,PUT")
+	//w.Header().Add("Access-Control-Allow-Headers", "Action, Module")
+	//
+
 
 	w.Write([]byte(encodedString))
 }
@@ -1027,9 +1084,49 @@ func GetLocationsByURL(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func GetLocationsByURLfromPHP(w http.ResponseWriter, r *http.Request) {
-	logging.Log(fmt.Sprintf("GetLocationsByURL from %s:%s:%s:%s:%s:%s:%s\n",
+func GetLocationsByURL_(w http.ResponseWriter, r *http.Request) {
+	logging.Log(fmt.Sprintf("GetLocationsByURL_ from %s:%s:%s:%s:%s:%s:%s\n",
 		r.URL.Scheme,r.URL.Host,r.URL.Path,r.URL.ForceQuery,r.URL.Fragment,r.URL.RawPath,r.URL.User))
+
+	systemNo := r.FormValue("systemno")
+	theAll := strings.Split(systemNo,"|")
+	logging.Log(fmt.Sprintf("theAll:%s",theAll))
+
+	callback := r.FormValue("callback")
+	dataResult := proto.PhpQueryLocationsResult_{Result: 0, ResultStr: ""}
+	for _,member := range  theAll {
+		systemno := proto.Str2Num(member, 10)
+		proto.SystemNo2ImeiMapLock.Lock()
+		imei, ok := proto.SystemNo2ImeiMap[systemno]
+		proto.SystemNo2ImeiMapLock.Unlock()
+		if ok == false || imei == 0 {
+			logging.Log(fmt.Sprintf("bad imei for systemno %d ", systemno))
+			//dataResult := proto.PhpQueryLocationsResult{Result: -1, ResultStr: "", Systemno: systemno}
+			//JSON2PHP_(w, callback, 200, &dataResult)
+			continue
+		}
+
+		data := svrctx.GetDeviceData(imei, svrctx.Get().PGPool)
+		var it []interface{}
+		it= append(it, systemno)
+		it= append(it, data.DataTime)
+		it = append(it, int64(data.Lat*1000000))
+		it = append(it, int64(data.Lng*1000000))
+		it = append(it, data.Steps)
+		it = append(it, data.Battery)
+		it = append(it, data.AlarmType)
+		it = append(it, data.ReadFlag)
+		it = append(it, data.LocateType)
+		it = append(it, data.ZoneName)
+		it = append(it, data.Accracy)
+		dataResult.Data = append(dataResult.Data,it)
+	}
+	JSON2PHP_(w, callback,200, &dataResult)
+}
+
+func GetLocationsByURLfromPHP(w http.ResponseWriter, r *http.Request) {
+	//logging.Log(fmt.Sprintf("GetLocationsByURLfromPHP from %s:%s:%s:%s:%s:%s:%s\n",
+	//	r.URL.Scheme,r.URL.Host,r.URL.Path,r.URL.ForceQuery,r.URL.Fragment,r.URL.RawPath,r.URL.User.Username()))
 	w.Header().Set("Content-Type", "application/json")
 	systemno := proto.Str2Num(r.FormValue("systemno"), 10)
 	proto.SystemNo2ImeiMapLock.Lock()
@@ -1077,12 +1174,12 @@ func GetLocationsByURLfromPHP(w http.ResponseWriter, r *http.Request) {
 				dataItem = append(dataItem, data.LocateType)
 				dataItem = append(dataItem, data.ZoneName)
 				dataItem = append(dataItem, data.Accracy)
-
 				dataResult.Data = append(dataResult.Data, dataItem)
 			}
 		}else{
 			dataResult.Data = []interface{}{}
 		}
+		logging.Log(fmt.Sprintf("get history location: %s ",proto.MakeStructToJson(dataResult)))
 
 		JSON2PHP(w, 200, &dataResult)
 	}
@@ -1394,7 +1491,7 @@ func ValidAccessTokenFromService(AccessToken string)  (bool, []string) {
 	var itf interface{}
 	err = json.Unmarshal(body, &itf)
 	if err != nil {
-		logging.Log("parse login response as json failed, " + err.Error())
+		logging.Log("ValidAccess parse login response as json failed, " + err.Error())
 		return false, nil
 	}
 
@@ -1526,11 +1623,15 @@ func TcpServerBridgeRunLoop(serverCtx *svrctx.ServerContext) {
 
 			model := proto.GetDeviceModel(msg.Header.Header.Imei)
 			switch model {
+				case proto.DM_GT05:
+				fallthrough
 				case proto.DM_GT06:
 				serverCtx.GT6TcpServerChan <- msg
 			case proto.DM_GTI3:
 				fallthrough
 			case proto.DM_GT03:
+				fallthrough
+			case proto.DM_GT02:
 				serverCtx.GT3TcpServerChan <- msg
 			case proto.DM_WH01:
 			default:
@@ -1636,15 +1737,15 @@ LABEL_REDIS:
 							logging.Log(fmt.Sprintf("parse json string failed for ntfy:%d, err: %s", imei, err.Error()))
 						} else {
 							if alarmItem.Time > params.LastUpdates[i] {
-								logging.Log(fmt.Sprintf("token:%s==%s==%s",proto.MapAccessToLang[params.AccessToken],alarmItem.Language,proto.AccessTokenMap[params.AccessToken]))
+								//logging.Log(fmt.Sprintf("token:%s==%s==%s==%s",proto.MapAccessToLang[params.AccessToken],alarmItem.Language,proto.AccessTokenMap[params.AccessToken],alarmItem.Alarm))
 								deviceAlarms.Alarms = append(deviceAlarms.Alarms, alarmItem)
 
 								//发送推送后删除之
-								response,err := conn.Do("LPOP",fmt.Sprintf("ntfy:%d",imei))
-								if err != nil{
-									logging.Log(fmt.Sprintf("LPOP ntfy:%d error %s",imei,err.Error()))
-								}
-								logging.Log(fmt.Sprintf("LPOP ntfy:%d %s",imei,parseUint8Array(response)))
+								//response,err := conn.Do("RPOP",fmt.Sprintf("ntfy:%d",imei))
+								//if err != nil{
+								//	logging.Log(fmt.Sprintf("RPOP ntfy:%d error %s",imei,err.Error()))
+								//}
+								//logging.Log(fmt.Sprintf("RPOP ntfy:%d %s",imei,parseUint8Array(response)))
 							}
 						}
 					}

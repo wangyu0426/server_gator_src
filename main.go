@@ -32,7 +32,7 @@ func main() {
 	go tcpserver.TcpServerRunLoop(svrctx.Get())
 	//receive data from app
 	go appserver.AppServerRunLoop(svrctx.Get())
-
+	logging.Log("main start...")
 	//svrctx.Get().WaitLock.Wait()
 	//svrctx.Get().WaitLock.Wait()
 

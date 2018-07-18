@@ -421,7 +421,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		if err == nil && n == len(dataBuf) {
 			full = true
 		}else {
-			logging.Log(fmt.Sprintf("recv data failed, %s, recv %d bytes", err.Error(), n))
+			logging.Log(fmt.Sprintf("gt6 recv data failed, %s, recv %d bytes", err.Error(), n))
 		}
 
 		if !full  {
@@ -455,11 +455,11 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		cmd := string(packet[24 : 28])
 
 		//记录收到的是些什么数据
-		if cmd == proto.StringCmd(proto.DRT_SEND_MINICHAT) {
-			logging.Log("DRT_SEND_MINICHAT" + string(packet[0: msgLen]))
-		}else{
-			logging.Log("NOT DRT_SEND_MINICHAT" + string(packet[0: msgLen]))
-		}
+		//if cmd == proto.StringCmd(proto.DRT_SEND_MINICHAT) {
+		//	logging.Log("DRT_SEND_MINICHAT" + string(packet[0: msgLen]))
+		//}else{
+		//	logging.Log("NOT DRT_SEND_MINICHAT" + string(packet[0: msgLen]))
+		//}
 
 		//// 消息接收不完整，如果是微聊（BP34）等需要支持续传的请求，
 		//// 则将当前不完整的数据加入续传队列，等待下一次连接以后进行续传
@@ -503,11 +503,6 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		// 包可能接收未完整，但此时可以开始进行业务逻辑处理
 		// 目前所有头部信息都已准备好，业务处理模块只需处理与断点续传相关逻辑
 		// 以及命令的实际逻辑
-		//判断连接是不是已经关闭了
-		if c.IsClosed() == true {
-			logging.Log(fmt.Sprintf("%d the conn is closed",c.imei))
-			break
-		}
 		c.requestChan <- msg
 
 		//业务逻辑只处理完整的请求和不完整的微聊请求，处理完请求以后，
@@ -573,7 +568,7 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 			return
 		case data := <-c.requestChan:
 			if data == nil {
-				logging.Log("connection closed, business goroutine exit")
+				logging.Log("gt06 connection closed, business goroutine exit")
 				return
 			}
 
