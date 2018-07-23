@@ -34,6 +34,7 @@ type pushJSON struct {
 	Time uint64  `json:"time"`
 	AlarmType uint8  `json:"alarmType"`
 	ZoneName string `json:"zoneName"`
+	Flags int 		`json:"flags"`
 }
 
 
@@ -56,7 +57,7 @@ func DeleteDevieeToken(apiBaseURL string, imei uint64, uuid string )  {
 func PushNotificationToApp(apiBaseURL string, imei uint64, familyNumber,  ownerName string, datatime uint64,
 	alarmType uint8, zoneName string)  {
 	urlRequest := apiBaseURL + "/push"
-	pushInfo := pushJSON{imei, familyNumber, ownerName, datatime, alarmType, zoneName}
+	pushInfo := pushJSON{imei, familyNumber, ownerName, datatime, alarmType, zoneName,0}
 	logging.Log(fmt.Sprintf("%d push notification: %s", imei, MakeStructToJson(&pushInfo)))
 	reader := strings.NewReader(MakeStructToJson(&pushInfo))
 	requestAPNS(urlRequest, imei, reader)
@@ -77,10 +78,11 @@ func PushNotificationToAppEx(apiBaseURL string, imei uint64, ownerName string, c
 			if (chat.Receiver == deviceInfo.Family[i].Phone &&
 				chat.Receiver != "0") ||
 				len(chat.Receiver) == 0 ||
-				chat.Receiver == "0"{
+				chat.Receiver == "0" ||
+				chat.Flags == 1 {
 
 				urlRequest := apiBaseURL + "/push"
-				pushInfo := pushJSON{imei, chat.Receiver, ownerName, chat.DateTime, alarmType, zoneName}
+				pushInfo := pushJSON{imei, chat.Receiver, ownerName, chat.DateTime, alarmType, zoneName,chat.Flags}
 				logging.Log(fmt.Sprintf("%d push notificationex: %s:%s", imei, MakeStructToJson(&pushInfo),chat.Receiver))
 				reader := strings.NewReader(MakeStructToJson(&pushInfo))
 				requestAPNS(urlRequest, imei, reader)

@@ -371,7 +371,7 @@ type HeartbeatResult struct {
 	Minichat []ChatInfo`json:"minichat"`
 	Alarms []LocationData`json:"alarms"`
 
-	ImeiAddFriend	map[uint64]AddFriend	`json:"imei_add_friend"`
+	ImeiAddFriend	map[uint64][]AddFriend	`json:"imei_add_friend"`
 
 }
 
@@ -405,6 +405,7 @@ type AlarmItem struct {
 	Alarm string 	`json:"alarm"`
 	FamilyPhone string `json:"familynumber"`
 	Language	string		`json:"language"`
+	Flags	int 	`json:"flags"`
 }
 
 type DeviceAlarms struct {

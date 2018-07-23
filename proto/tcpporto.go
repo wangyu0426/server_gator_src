@@ -1788,13 +1788,13 @@ func (service *GT06Service)  NotifyAppWithNewLocation() bool  {
 	return true
 }
 
-func (service *GT06Service)  NotifyAppWithNewMinichat(chat ChatInfo) bool  {
+func (service *GT06Service)  NotifyAppWithNewMinichat(chat ChatInfo,oldImei uint64) bool  {
 	return NotifyAppWithNewMinichat(service.reqCtx.APNSServerBaseURL, service.imei, service.reqCtx.AppNotifyChan, chat)
 }
 
 
 func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan *AppMsgData,  chat ChatInfo) bool  {
-	result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405"),ImeiAddFriend:map[uint64]AddFriend{}}
+	result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405"),ImeiAddFriend:map[uint64][]AddFriend{}}
 
 	//result.Minichat = append(result.Minichat, GetChatListForApp(imei, "")...)
 	//只把当前要通知的微聊发送出去
@@ -1808,36 +1808,35 @@ func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan
 			ownerName = deviceInfo.OwnerName
 		}
 
-	}
-	for index,_ := range deviceInfo.Family {
-		if deviceInfo.Family[index].IsAddFriend == 1 {
-			var addfriend = AddFriend{}
-			addfriend.FriendPhone = deviceInfo.Family[index].Phone
-			addfriend.FriendDevName = deviceInfo.Family[index].FriendDevName
-			//生产服务器要修改
-			if addfriend.FriendAvatar != "" {
-				addfriend.FriendAvatar = "http://120.25.214.188:8015" +
-					deviceInfo.Family[index].FriendAvatar
-			}
-			MapPhone2IMEILock.Lock()
-			_imei, ok1 := (*MapPhone2IMEI)[deviceInfo.Family[index].Phone]
-			if ok1 {
-				addfriend.FriendIMEI = _imei
-			}
-			MapPhone2IMEILock.Unlock()
+		for index, _ := range deviceInfo.Family {
+			if deviceInfo.Family[index].IsAddFriend == 1 {
+				var addfriend= AddFriend{}
+				addfriend.FriendPhone = deviceInfo.Family[index].Phone
+				addfriend.FriendDevName = deviceInfo.Family[index].FriendDevName
+				//生产服务器要修改
+				if addfriend.FriendAvatar != "" {
+					addfriend.FriendAvatar = "http://120.25.214.188:8015" +
+						deviceInfo.Family[index].FriendAvatar
+				}
+				MapPhone2IMEILock.Lock()
+				_imei, ok1 := (*MapPhone2IMEI)[deviceInfo.Family[index].Phone]
+				if ok1 {
+					addfriend.FriendIMEI = _imei
+				}
+				MapPhone2IMEILock.Unlock()
 
-			result.ImeiAddFriend[imei] = addfriend
+				result.ImeiAddFriend[imei] = append(result.ImeiAddFriend[imei],addfriend)
+			}
+
 		}
-
 	}
-
 	DeviceInfoListLock.Unlock()
 
 	appNotifyChan  <- &AppMsgData{Cmd: HearbeatAckCmdName,
 		Imei: imei,
 		Data: MakeStructToJson(result), ConnID: 0}
 
-	fmt.Println("NotifyAppWithNewMinichat heartbeat-ack: ", MakeStructToJson(result))
+	fmt.Println("NotifyAppWithNewMinichat heartbeat-ack: ", MakeStructToJson(result),apiBaseURL)
 	if apiBaseURL != "" {
 		PushNotificationToAppEx(apiBaseURL, imei, ownerName, chat, ALARM_NEW_MINICHAT, "")
 	}
@@ -2151,7 +2150,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		if ok1{
 			//通知APP有新的微聊信息。。。
 			//要把sender换成对方imei的电话号码
-			newChatInfo.Sender = newChatInfo.Receiver
+			//newChatInfo.Sender = newChatInfo.Receiver
 			newChatInfo.Imei = imei1
 			newChatInfo.Content = fmt.Sprintf("%swatch/%d/%d.amr", service.reqCtx.DeviceMinichatBaseUrl,
 				imei1, fileId)
@@ -2163,7 +2162,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 			newChatInfo_.Content = fmt.Sprintf("%swatch/%d/%d.amr", service.reqCtx.DeviceMinichatBaseUrl,
 				service.imei, fileId)
 			AddChatForApp(newChatInfo_)
-			service.NotifyAppWithNewMinichat(newChatInfo_)
+			service.NotifyAppWithNewMinichat(newChatInfo_,service.imei)
 			logging.Log(fmt.Sprintf("newChatInfo.Content:%s", newChatInfo.Content))
 		}else {
 			//通知APP有新的微聊信息。。。
@@ -2180,6 +2179,9 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 			if ok{
 				//Flags = 1表示好友发送微聊,要在群聊界面
 				newChatInfo.Flags = 1
+				//和APP端一样，Sender表示来自哪里
+				newChatInfo.Sender = deviceInfo.SimID
+
 				chatTask := ChatTask{Info: newChatInfo}
 				AppSendChatListLock.Lock()
 				chatList, ok := AppSendChatList[imei]
@@ -2232,9 +2234,14 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		}
 
 		AddChatForApp(newChatInfo)
-		service.imei = imei1
-		service.NotifyAppWithNewMinichat(newChatInfo)
-		service.imei = newChatInfo.Imei
+		if newChatInfo.Flags == 1 {
+			oldImei := service.imei
+			service.imei = imei1
+			service.NotifyAppWithNewMinichat(newChatInfo, oldImei)
+			service.imei = oldImei
+		}else {
+			service.NotifyAppWithNewMinichat(newChatInfo, 0)
+		}
 	}
 
 	//// for test
@@ -3078,7 +3085,35 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	}
 	bufOffset++;
 
-	shMaxTitudeLen := int32(10)
+	/*---------------------------------------------------------------------------------*/
+	mainLatitude := Str2SignedNum(string(pszMsg[bufOffset:bufOffset + 2]),10)
+	Lat := float64(mainLatitude)
+	iMaxLatLen := int32(10)
+	service.GetValue(pszMsg[bufOffset: ], &iMaxLatLen)
+
+	subLatitude := float64(Str2Float(string(pszMsg[bufOffset + 2:bufOffset + iMaxLatLen])) / 60)
+	bufOffset += iMaxLatLen
+	Lat += subLatitude
+	cTag = pszMsg[bufOffset]
+	if cTag == 'S'{
+		Lat = 0 - Lat
+	}
+	bufOffset++
+	mainLongtitude := Str2SignedNum(string(pszMsg[bufOffset:bufOffset + 3]),10)
+	Longtitude := float64(mainLongtitude)
+	iMaxLongLen := int32(10)
+	service.GetValue(pszMsg[bufOffset: ], &iMaxLongLen)
+	subLongtitude := float64(Str2Float(string(pszMsg[bufOffset + 3:bufOffset + iMaxLongLen])) / 60)
+	Longtitude += subLongtitude
+	bufOffset += iMaxLongLen
+	cTag = pszMsg[bufOffset]
+	if cTag == 'W' { //如果是西经的存为负数
+		Longtitude = 0 - Longtitude
+	}
+	bufOffset++
+	/*---------------------------------------------------------------------------------*/
+
+	/*shMaxTitudeLen := int32(10)
 	iLatitude := service.GetValue(pszMsg[bufOffset: ], &shMaxTitudeLen)
 	bufOffset += shMaxTitudeLen
 
@@ -3110,13 +3145,13 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	if cTag == 'W' { //如果是西经的存为负数
 		iLongtitude = 0 - iLongtitude
 	}
-	bufOffset++
+	bufOffset++*/
 
 	fSpeed := service.GetFloatValue(pszMsg[bufOffset: ], 5)
 	iSpeed := int32(fSpeed * 10)
 	bufOffset += 5
 
-	logging.Log(fmt.Sprintf("[%d] fSpeed: %f, iSpeed: %d, iLongtitude:%d, iLatitude:%d", service.imei, fSpeed, iSpeed,iLongtitude,iLatitude))
+	logging.Log(fmt.Sprintf("[%d] fSpeed: %f, iSpeed: %d, iLongtitude:%f, iLatitude:%f", service.imei, fSpeed, iSpeed,Longtitude,Lat))
 
 	iTimeSec := service.GetIntValue(pszMsg[bufOffset: ], TIME_LEN)
 	bufOffset += TIME_LEN
@@ -3142,8 +3177,10 @@ func (service *GT06Service) ProcessGPSInfo(pszMsg []byte) bool {
 	}
 
 	service.cur.DataTime = i64Time
-	service.cur.Lng = float64(float64(iLongtitude) / 1000000.0)
-	service.cur.Lat = float64(float64(iLatitude) / 1000000.0)
+	//service.cur.Lng = float64(float64(iLongtitude) / 1000000.0)
+	//service.cur.Lat = float64(float64(iLatitude) / 1000000.0)
+	service.cur.Lat = Lat
+	service.cur.Lng = Longtitude
 	service.cur.ReadFlag = 0
 	service.cur.Battery = iIOStatu
 	service.cur.LocateType = LBS_GPS
@@ -4169,16 +4206,22 @@ func (service *GT06Service) ProcessAddFriends() bool{
 			if devbluetooth.SendFlag == false{
 				DeviceInfoListLock.Lock()
 				deviceInfo, ok := (*DeviceInfoList)[service.imei]
+				DeviceInfoListLock.Unlock()
 				if ok{
 					for index,_ := range deviceInfo.Family {
 						//只在白名单里添加好友
-						if deviceInfo.Family[index].Phone == "" &&
-							deviceInfo.Family[index].IsAddFriend != 1 &&
-							index >= 3 && index < 12{
-							frienddeviceInfo, ok := (*DeviceInfoList)[devbluetooth.Imei]
-							if ok {
-								//当前手表发送AP06命令
+						frienddeviceInfo, ok := (*DeviceInfoList)[devbluetooth.Imei]
+						if ok {
+							//防止重复添加
+							if deviceInfo.Family[index].Phone == frienddeviceInfo.SimID {
+								fmt.Println("readd the same phone...")
+								break
+							}
 
+							if deviceInfo.Family[index].Phone == "" &&
+								deviceInfo.Family[index].IsAddFriend != 1 &&
+								index >= 3 && index < 12 {
+								//当前手表发送AP06命令
 								deviceInfo.Family[index].Phone = frienddeviceInfo.SimID
 								fmt.Println("SimID," + frienddeviceInfo.SimID)
 								deviceInfo.Family[index].Index = index
@@ -4190,9 +4233,9 @@ func (service *GT06Service) ProcessAddFriends() bool{
 								deviceInfo.Family[index].Type = 0
 								deviceInfo.Family[index].FriendImei = devbluetooth.Imei
 
-								deviceInfo.Family[index + 1].Phone = deviceInfo.SimID
+								/*deviceInfo.Family[index + 1].Phone = deviceInfo.SimID
 								deviceInfo.Family[index + 1].Name = deviceInfo.OwnerName
-								deviceInfo.Family[index + 1].Type = 0
+								deviceInfo.Family[index + 1].Type = 0*/
 								if deviceInfo.Family[index].Phone != "" {
 									//添加的好友对应IMEI
 									(*MapPhone2IMEI)[deviceInfo.Family[index].Phone] = devbluetooth.Imei
@@ -4208,8 +4251,8 @@ func (service *GT06Service) ProcessAddFriends() bool{
 									newPhone := MakeFamilyPhoneNumbersEx(&deviceInfo.Family)
 									strSQL := fmt.Sprintf("UPDATE watchinfo SET PhoneNumbers = '%s' where IMEI='%d'", newPhone, service.imei)
 									logging.Log("add friend SQL :" + strSQL)
-									_,err := service.reqCtx.MysqlPool.Exec(strSQL)
-									if err != nil{
+									_, err := service.reqCtx.MysqlPool.Exec(strSQL)
+									if err != nil {
 										logging.Log("add friend server failed to update db" + err.Error())
 										return false
 									}
@@ -4226,17 +4269,21 @@ func (service *GT06Service) ProcessAddFriends() bool{
 								deviceInfoResult := MakeDeviceInfoResult(deviceInfo)
 								deviceInfoResult.AccountType = 1
 
-								result := HttpAPIResult{ErrCode:0,ErrMsg:"",Imei:Num2Str(service.imei,10),Data:"",}
-								resultJson,_ := json.Marshal(deviceInfoResult)
+								result := HttpAPIResult{ErrCode: 0, ErrMsg: "", Imei: Num2Str(service.imei, 10), Data: "", }
+								resultJson, _ := json.Marshal(deviceInfoResult)
 								result.Data = string(resultJson)
-								resultData,_ := json.Marshal(result)
-								service.reqCtx.AppNotifyChan <- &AppMsgData{Cmd:CmdAddFriendAck,
-									Imei:service.imei,Data:string(resultData),AddFriend:true}
+								resultData, _ := json.Marshal(result)
+								service.reqCtx.AppNotifyChan <- &AppMsgData{Cmd: CmdAddFriendAck,
+									Imei:                                        service.imei, Data: string(resultData), AddFriend: true}
 
-								for k,_ := range frienddeviceInfo.Family{
+								for k, _ := range frienddeviceInfo.Family {
+									if frienddeviceInfo.Family[k].Phone == deviceInfo.SimID{
+										fmt.Println("2 readd the same phone...")
+										break
+									}
 									if frienddeviceInfo.Family[k].Phone == "" &&
 										frienddeviceInfo.Family[k].IsAddFriend != 1 &&
-										k >= 3 && k < 12{
+										k >= 3 && k < 12 {
 										fmt.Println("SimID1," + deviceInfo.SimID)
 										frienddeviceInfo.Family[k].Phone = deviceInfo.SimID
 										frienddeviceInfo.Family[k].Index = k
@@ -4248,9 +4295,9 @@ func (service *GT06Service) ProcessAddFriends() bool{
 										frienddeviceInfo.Family[k].Type = 0
 										frienddeviceInfo.Family[k].FriendImei = service.imei
 
-										frienddeviceInfo.Family[k + 1].Phone = frienddeviceInfo.SimID
+										/*frienddeviceInfo.Family[k + 1].Phone = frienddeviceInfo.SimID
 										frienddeviceInfo.Family[k + 1].Name = frienddeviceInfo.OwnerName
-										frienddeviceInfo.Family[k + 1].Type = 0
+										frienddeviceInfo.Family[k + 1].Type = 0*/
 										if frienddeviceInfo.Family[k].Phone != "" {
 											//对方IMEI
 											(*MapPhone2IMEI)[frienddeviceInfo.Family[k].Phone] = service.imei
@@ -4263,8 +4310,8 @@ func (service *GT06Service) ProcessAddFriends() bool{
 								newPhone := MakeFamilyPhoneNumbersEx(&frienddeviceInfo.Family)
 								strSQL := fmt.Sprintf("UPDATE watchinfo SET PhoneNumbers = '%s' where IMEI='%d'", newPhone, devbluetooth.Imei)
 								logging.Log("add friend SQL :" + strSQL)
-								_,err := service.reqCtx.MysqlPool.Exec(strSQL)
-								if err != nil{
+								_, err := service.reqCtx.MysqlPool.Exec(strSQL)
+								if err != nil {
 									logging.Log("add friend server failed to update db" + err.Error())
 									return false
 								}
@@ -4274,7 +4321,7 @@ func (service *GT06Service) ProcessAddFriends() bool{
 								msg.Header.Header.Imei = devbluetooth.Imei
 								msg.Header.Header.ID = NewMsgID()
 								msg.Header.Header.Status = 0
-								body := fmt.Sprintf("%015dAP06%s,%016X)",  devbluetooth.Imei,
+								body := fmt.Sprintf("%015dAP06%s,%016X)", devbluetooth.Imei,
 									makeDeviceFamilyPhoneNumbers(&frienddeviceInfo.Family, true), msg.Header.Header.ID)
 								msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
 								resp := &ResponseItem{CMD_AP06, msg}
@@ -4283,12 +4330,12 @@ func (service *GT06Service) ProcessAddFriends() bool{
 								//发送添加好友信息到好友APP
 								fdevinfo := MakeDeviceInfoResult(frienddeviceInfo)
 								fdevinfo.AccountType = 1
-								resultJson,_ = json.Marshal(fdevinfo)
-								result = HttpAPIResult{ErrCode:0,ErrMsg:"",Imei:Num2Str(devbluetooth.Imei,10),Data:"",}
+								resultJson, _ = json.Marshal(fdevinfo)
+								result = HttpAPIResult{ErrCode: 0, ErrMsg: "", Imei: Num2Str(devbluetooth.Imei, 10), Data: "", }
 								result.Data = string(resultJson)
-								resultData,_ = json.Marshal(result)
-								service.reqCtx.AppNotifyChan <- &AppMsgData{Cmd:CmdAddFriendAck,
-									Imei:devbluetooth.Imei,Data:string(resultData),AddFriend:true}
+								resultData, _ = json.Marshal(result)
+								service.reqCtx.AppNotifyChan <- &AppMsgData{Cmd: CmdAddFriendAck,
+									Imei:                                        devbluetooth.Imei, Data: string(resultData), AddFriend: true}
 
 								devbluetooth.SendFlag = true
 								break
@@ -4296,7 +4343,8 @@ func (service *GT06Service) ProcessAddFriends() bool{
 						}
 					}
 				}
-				DeviceInfoListLock.Unlock()
+
+				devbluetooth.SendFlag = true
 			}
 
 		}

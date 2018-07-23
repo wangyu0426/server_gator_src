@@ -417,7 +417,7 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 	}
 
 	tmpMinichat := []proto.ChatInfo{}
-	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405"),ImeiAddFriend:map[uint64]proto.AddFriend{}}
+	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405"),ImeiAddFriend:map[uint64][]proto.AddFriend{}}
 	if params.SelectedDevice == "" {
 		for _, imei := range params.Devices {
 			if InStringArray(imei, imeiList) == false {
@@ -479,7 +479,7 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 						}
 						proto.MapPhone2IMEILock.Unlock()
 
-						result.ImeiAddFriend[imeiUint64] = addfriend
+						result.ImeiAddFriend[imeiUint64] = append(result.ImeiAddFriend[imeiUint64], addfriend)
 					}
 				}
 			}
@@ -550,7 +550,7 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 						}
 						proto.MapPhone2IMEILock.Unlock()
 
-						result.ImeiAddFriend[imeiUint64] = addfriend
+						result.ImeiAddFriend[imeiUint64] = append(result.ImeiAddFriend[imeiUint64], addfriend)
 					}
 				}
 			}
@@ -1816,7 +1816,7 @@ func AddDeviceManagerLoop()  {
 	}
 }
 
-func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsString []bool)  (bool,[]proto.SettingParam) {
+func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsString []bool,params *proto.DeviceSettingParams)  (bool,[]proto.SettingParam) {
 	phoneNumbers := ""
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
@@ -1933,32 +1933,6 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 						}
 						proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[i].Phone)
 					}
-					//proto.Mapimei2PhoneLock.Unlock()
-
-					/*newContacts := [proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember{}
-					count := 0
-					for i := 0;i < len(deviceInfo.Family);i++ {
-						//前面3个phone不用往前移,
-						if setting.Index > 3 {
-							if i + 1 == setting.Index {
-								newPhone := proto.ParseSinglePhoneNumberString("",-1)
-								deviceInfo.Family[i] = newPhone
-							}
-							if i + 1 != setting.Index {
-								newContacts[count] = deviceInfo.Family[i]
-								count++
-							}
-						} else {
-							if i + 1 == setting.Index {
-								newPhone := proto.ParseSinglePhoneNumberString("", -1)
-								deviceInfo.Family[i] = newPhone
-							}
-						}
-					}
-
-					if setting.Index > 3 {
-						deviceInfo.Family = newContacts
-					}*/
 				}else{
 					//只有管理员才可以添加,delete亲情号码
 					logging.Log(fmt.Sprintf("enter add new phone......"))
@@ -2041,214 +2015,10 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 							}
 						}
 						proto.AppSendChatListLock.Unlock()
-
 					}
 
 
-					/*for i := 0; i < len(deviceInfo.Family); i++ {
-						curPhone := proto.ParseSinglePhoneNumberString(setting.CurValue, setting.Index)
-						newPhone = proto.ParseSinglePhoneNumberString(setting.NewValue, setting.Index)
-						//fullPhoneNnumber := "00" + deviceInfo.Family[i].CountryCode + deviceInfo.Family[i].Phone
-						if setting.Index != 0xff {
-							if len(curPhone.Phone) == 0 { //之前没有号码，直接寻找一个空位就可以了
-								if len(deviceInfo.Family[i].Phone) == 0 && i+1 == setting.Index {
-									bkAvatar := deviceInfo.Family[i].Avatar
-									deviceInfo.Family[i] = newPhone
-									deviceInfo.Family[i].Avatar = bkAvatar
-									//非管理员不保存username
-									//if deviceInfo.Family[i].IsAdmin == 1{
-									//	deviceInfo.Family[i].Username = "0"
-									//}
-									if deviceInfo.Family[i].Username == "undefined" {
-										deviceInfo.Family[i].Username = "0"
-									}
-
-									//chenqw,20180116,更新下发图片和语音发送对应的亲情号码
-									proto.AppNewPhotoPendingListLock.Lock()
-									photoList, ok := proto.AppNewPhotoPendingList[imei]
-									if ok {
-										for photoidx, _ := range *photoList {
-											logging.Log(fmt.Sprintf("##AppNewPhotoPendingList[%d],%s",
-												imei, (*proto.AppNewPhotoPendingList[imei])[photoidx].Info.Member.Phone))
-											//号码要做相应的改变
-											if (*photoList)[photoidx].Info.Index == setting.Index {
-												(*photoList)[photoidx].Info.Member.Phone = newPhone.Phone
-											}
-											logging.Log(fmt.Sprintf("##AppNewPhotoPendingList[%d],%s",
-												imei, (*proto.AppNewPhotoPendingList[imei])[photoidx].Info.Member.Phone))
-										}
-									}
-									proto.AppNewPhotoPendingListLock.Unlock()
-
-									break
-								}
-							} else { //之前有号码，那么这里是修改号码，需要匹配之前的号码
-								if deviceInfo.Family[i].Phone == curPhone.Phone &&
-									deviceInfo.Family[i].Index == curPhone.Index {
-									bkAvatar := deviceInfo.Family[i].Avatar
-									deviceInfo.Family[i] = newPhone
-									deviceInfo.Family[i].Avatar = bkAvatar
-									//非管理员不保存username
-									//if deviceInfo.Family[i].IsAdmin == 1{
-									//	deviceInfo.Family[i].Username = "0"
-									//}
-									if deviceInfo.Family[i].Username == "undefined" {
-										deviceInfo.Family[i].Username = "0"
-									}
-
-									//chenqw,20180116,更新下发图片和语音发送对应的亲情号码
-									proto.AppNewPhotoPendingListLock.Lock()
-									photoList, ok := proto.AppNewPhotoPendingList[imei]
-									if ok {
-										for photoidx, _ := range *photoList {
-											logging.Log(fmt.Sprintf("AppNewPhotoPendingList[%d],%s",
-												imei, (*proto.AppNewPhotoPendingList[imei])[photoidx].Info.Member.Phone))
-											//号码要做相应的改变
-											if (*photoList)[photoidx].Info.Member.Phone == curPhone.Phone {
-												(*photoList)[photoidx].Info.Member.Phone = newPhone.Phone
-											}
-											logging.Log(fmt.Sprintf("AppNewPhotoPendingList[%d],%s",
-												imei, (*proto.AppNewPhotoPendingList[imei])[photoidx].Info.Member.Phone))
-										}
-									}
-									proto.AppNewPhotoPendingListLock.Unlock()
-
-									proto.AppSendChatListLock.Lock()
-									chatList, ok := proto.AppSendChatList[imei]
-									if ok {
-										for chatidx, _ := range *chatList {
-											logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
-												imei, (*proto.AppSendChatList[imei])[chatidx].Info.Sender))
-											if (*chatList)[chatidx].Info.Sender != newPhone.Phone {
-												(*chatList)[chatidx].Info.Sender = newPhone.Phone
-											}
-											logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
-												imei, (*proto.AppSendChatList[imei])[chatidx].Info.Sender))
-										}
-									}
-									proto.AppSendChatListLock.Unlock()
-
-									break
-								}
-							}
-						} else if setting.Index == 0xff {
-							if i >= 3{
-
-								if len(curPhone.Phone) == 0 { //之前没有号码，直接寻找一个空位就可以了
-									if len(deviceInfo.Family[i].Phone) == 0 {
-										bkAvatar := deviceInfo.Family[i].Avatar
-										deviceInfo.Family[i] = newPhone
-										deviceInfo.Family[i].Avatar = bkAvatar
-										deviceInfo.Family[i].Index = i + 1
-										setting.Index = i + 1
-										//非管理员不保存username
-										//if deviceInfo.Family[i].IsAdmin == 1{
-										//	deviceInfo.Family[i].Username = "0"
-										//}
-										if deviceInfo.Family[i].Username == "undefined" {
-											deviceInfo.Family[i].Username = "0"
-										}
-
-										//chenqw,20180116,更新下发图片和语音发送对应的亲情号码
-										proto.AppNewPhotoPendingListLock.Lock()
-										photoList, ok := proto.AppNewPhotoPendingList[imei]
-										if ok {
-											for photoidx, _ := range *photoList {
-												logging.Log(fmt.Sprintf("##AppNewPhotoPendingList[%d],%s",
-													imei, (*proto.AppNewPhotoPendingList[imei])[photoidx].Info.Member.Phone))
-												//号码要做相应的改变
-												if (*photoList)[photoidx].Info.Index == setting.Index {
-													(*photoList)[photoidx].Info.Member.Phone = newPhone.Phone
-												}
-												logging.Log(fmt.Sprintf("##AppNewPhotoPendingList[%d],%s",
-													imei, (*proto.AppNewPhotoPendingList[imei])[photoidx].Info.Member.Phone))
-											}
-										}
-										proto.AppNewPhotoPendingListLock.Unlock()
-
-										break
-									}
-								} else { //之前有号码，那么这里是修改号码，需要匹配之前的号码
-									if deviceInfo.Family[i].Phone == curPhone.Phone {
-										bkAvatar := deviceInfo.Family[i].Avatar
-										deviceInfo.Family[i] = newPhone
-										deviceInfo.Family[i].Avatar = bkAvatar
-										deviceInfo.Family[i].Index = i + 1
-										setting.Index = i + 1
-										//非管理员不保存username
-										//if deviceInfo.Family[i].IsAdmin == 1{
-										//	deviceInfo.Family[i].Username = "0"
-										//}
-										if deviceInfo.Family[i].Username == "undefined" {
-											deviceInfo.Family[i].Username = "0"
-										}
-
-										//chenqw,20180116,更新下发图片和语音发送对应的亲情号码
-										proto.AppNewPhotoPendingListLock.Lock()
-										photoList, ok := proto.AppNewPhotoPendingList[imei]
-										if ok {
-											for photoidx, _ := range *photoList {
-												logging.Log(fmt.Sprintf("AppNewPhotoPendingList[%d],%s",
-													imei, (*proto.AppNewPhotoPendingList[imei])[photoidx].Info.Member.Phone))
-												//号码要做相应的改变
-												if (*photoList)[photoidx].Info.Member.Phone == curPhone.Phone {
-													(*photoList)[photoidx].Info.Member.Phone = newPhone.Phone
-												}
-												logging.Log(fmt.Sprintf("AppNewPhotoPendingList[%d],%s",
-													imei, (*proto.AppNewPhotoPendingList[imei])[photoidx].Info.Member.Phone))
-											}
-										}
-										proto.AppNewPhotoPendingListLock.Unlock()
-
-										proto.AppSendChatListLock.Lock()
-										chatList, ok := proto.AppSendChatList[imei]
-										if ok {
-											for chatidx, _ := range *chatList {
-												logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
-													imei, (*proto.AppSendChatList[imei])[chatidx].Info.Sender))
-												if (*chatList)[chatidx].Info.Sender != newPhone.Phone {
-													(*chatList)[chatidx].Info.Sender = newPhone.Phone
-												}
-												logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
-													imei, (*proto.AppSendChatList[imei])[chatidx].Info.Sender))
-											}
-										}
-										proto.AppSendChatListLock.Unlock()
-
-										break
-									}
-								}
-
-
-							}
-						}
-					}*/
-
-
 					proto.Mapimei2PhoneLock.Lock()
-					/*if len(proto.Mapimei2Phone[imei]) == 0 {
-						logging.Log(fmt.Sprintf("add new phone :%s", newPhone.Phone))
-						proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei], newPhone.Phone)
-					}else {
-						bFoundphone := false
-						for i := 0; i < len(proto.Mapimei2Phone[imei]); i++ {
-							if proto.Mapimei2Phone[imei][i] == newPhone.Phone {
-								logging.Log(fmt.Sprintf("addDeviceByUser add new phone 2 :%s", newPhone.Phone))
-								bFoundphone = true
-								break
-							}
-						}
-						if !bFoundphone {
-							if setting.Index <= len(proto.Mapimei2Phone[imei]) {
-								logging.Log(fmt.Sprintf("addDeviceByUser add new phone 4 :%s", newPhone.Phone))
-								proto.Mapimei2Phone[imei][setting.Index - 1] = ""
-								proto.Mapimei2Phone[imei][setting.Index - 1] = newPhone.Phone
-							}else {
-								logging.Log(fmt.Sprintf("addDeviceByUser add new phone 1 :%s", newPhone.Phone))
-								proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei], newPhone.Phone)
-							}
-						}
-					}*/
 
 					proto.Mapimei2Phone[imei] = []string{}
 					for i := 0;i < len(deviceInfo.Family);i++ {
@@ -2335,13 +2105,6 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 	proto.DeviceInfoListLock.Unlock()
 
 	//更新数据库,添加亲情号码时,username设置成管理员的username,但数据库存储不变
-	/*returnSettings := settings
-	for index, setting := range settings {
-		if setting.FieldName ==  proto.PhoneNumbersFieldName && ok{
-			phoneNumbers = proto.MakeFamilyPhoneNumbersEx(&deviceInfo.Family)
-			settings[index].NewValue = phoneNumbers
-		}
-	}*/
 	ret := UpdateDeviceSettingInDB(imei, settings, valulesIsString)
 	fmt.Println("UpdateDeviceSettingInDB:",settings,"\n")
 	return ret,settings
@@ -2437,7 +2200,7 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 	ret := true
 	//var settings []proto.SettingParam
 	if isAddDevice == false {
-		ret,_ = SaveDeviceSettings(imei, params.Settings, valulesIsString)
+		ret,_ = SaveDeviceSettings(imei, params.Settings, valulesIsString,params)
 	}
 
 	result := proto.HttpAPIResult{
@@ -2449,10 +2212,6 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 	if ret {
 		for _, isNeed := range isNeedNotifyDevice {
 			if isNeed {
-				//msgNotify := &proto.MsgData{}
-				//msgNotify.Header.Header.Version = proto.MSG_HEADER_VER
-				//msgNotify.Header.Header.Imei = imei
-				//msgNotify.Data = proto.MakeSetDeviceConfigReplyMsg(imei, params)
 				msgNotifyDataList := proto.MakeSetDeviceConfigReplyMsg(imei, params)
 				for _, msgNotify := range msgNotifyDataList  {
 					svrctx.Get().TcpServerChan <- msgNotify
@@ -2471,17 +2230,6 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 		result.ErrCode = 500
 		result.ErrMsg = "save device setting in db failed"
 	}else {
-		//concatStr := ""
-		//for i, setting := range settingResult.Settings {
-		//	strJson, _ := json.Marshal(&setting)
-		//	if i == 0 {
-		//		concatStr += fmt.Sprintf("\"v%d\": %s ", i, strJson)
-		//	}else{
-		//		concatStr += fmt.Sprintf(" , \"v%d\": %s ", i, strJson)
-		//	}
-		//}
-		//settingResultJson := fmt.Sprintf("{\"count\": \"%d\", %s}", len(settingResult.Settings), concatStr)
-		//result.Data = string(base64Encode([]byte(settingResultJson)))
 		if isAddDevice{
 			proto.DeviceInfoListLock.Lock()
 			deviceInfo, ok := (*proto.DeviceInfoList)[imei]
@@ -2557,6 +2305,64 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 				logging.Log(fmt.Sprintf("[%d] update %s into db failed, %s", imei, FieldNames, err.Error()))
 				return false
 			}
+
+			//修改的SimID号码如果是对方好友，要及时推送
+
+			proto.DeviceInfoListLock.Lock()
+			deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+			proto.DeviceInfoListLock.Unlock()
+			if ok{
+				for k,_ := range deviceInfo.Family{
+					if deviceInfo.Family[k].IsAddFriend == 1{
+						//找到好友的IMEI
+						_imei,ok1 := (*proto.MapPhone2IMEI)[deviceInfo.Family[k].Phone]
+						if ok1{
+							proto.DeviceInfoListLock.Lock()
+							dev, ok1 := (*proto.DeviceInfoList)[_imei]
+							proto.DeviceInfoListLock.Unlock()
+							if ok1{
+								for j,_ := range dev.Family{
+									//SimID变了,则好友亲情号码列表里的对应号码要更新
+									if dev.Family[j].Phone == setting.CurValue && dev.Family[j].IsAddFriend == 1{
+										dev.Family[j].Phone = setting.NewValue
+
+										newPhone := proto.MakeFamilyPhoneNumbersEx(&dev.Family)
+										strSQL = fmt.Sprintf("update watchinfo set PhoneNumbers = '%s' where IMEI = '%s'",newPhone,proto.Num2Str(_imei,10))
+										logging.Log("SQL update new SimID: " + strSQL)
+										_,err = svrctx.Get().MySQLPool.Exec(strSQL)
+										if err != nil{
+											logging.Log(fmt.Sprintf("[%d] UPDATE watchinfo SET PhoneNumbers db failed, %s", _imei, err.Error()))
+											return false
+										}
+										msg := &proto.MsgData{}
+										msg.Header.Header.Imei = _imei
+										msg.Header.Header.ID = proto.NewMsgID()
+										msg.Header.Header.Status = 0
+										setPhone := ""
+										for kk,_:= range deviceInfo.Family{
+											setPhone += fmt.Sprintf("#%s#%s#%d", deviceInfo.Family[kk].Phone, deviceInfo.Family[kk].Name, deviceInfo.Family[kk].Type)
+										}
+										body := fmt.Sprintf("%015dAP06%s,%016X)", _imei, setPhone, msg.Header.Header.ID)
+										msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+										svrctx.Get().TcpServerChan <- msg
+										proto.MapPhone2IMEILock.Lock()
+										(*proto.MapPhone2IMEI)[dev.Family[j].Phone] = _imei
+										delete(*proto.MapPhone2IMEI,setting.CurValue)
+										proto.MapPhone2IMEILock.Unlock()
+
+										break
+									}
+								}
+
+							}
+
+						}
+					}
+				}
+
+
+			}
+
 		}else if setting.FieldName == "PhoneNumbers" {
 			//chenqw,20180118,删除亲情号码时，要把对应的图片删掉
 			if len(concatValues) == 0 {

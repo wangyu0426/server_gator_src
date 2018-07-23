@@ -310,7 +310,7 @@ func AppConnManagerLoop() {
 					break
 				}
 
-			}else if msg.Cmd == proto.CmdAddFriendAck && msg.AddFriend == true{
+			}else if (msg.Cmd == proto.CmdAddFriendAck && msg.AddFriend == true) || msg.Cmd == proto.SetDeviceAckCmdName{
 				//imei add friend
 				if len(imeiAppUsers) > 0{
 					for username,_ := range imeiAppUsers{
@@ -324,6 +324,7 @@ func AppConnManagerLoop() {
 						}
 					}
 				}
+				break
 			}
 
 			if len(imeiAppUsers) >  0 && msg.AddFriend == false{
@@ -540,7 +541,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		settings[0].FieldName = fieldname
 		settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir + imei + "/" + fileName
 
-		ret,_ := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
+		ret,_ := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil,nil)
 		if ret {
 			if uploadType == "contactAvatar" {
 				photoInfo := proto.PhotoSettingInfo{}
@@ -1715,15 +1716,17 @@ LABEL_REDIS:
 					alarmItem := proto.AlarmItem{}
 					err := json.Unmarshal([]byte(alarmContent), &alarmItem)
 
-
 					proto.DeviceInfoListLock.Lock()
 					deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 					if ok{
 						for k,_ := range deviceInfo.Family{
 							//单独推送,
-							if (deviceInfo.Family[k].Phone == alarmItem.FamilyPhone || alarmItem.FamilyPhone == "" || alarmItem.FamilyPhone == "0") &&
+							if ((deviceInfo.Family[k].Phone == alarmItem.FamilyPhone ||
+								alarmItem.FamilyPhone == "" ||
+								alarmItem.FamilyPhone == "0" ) &&
 								(proto.AccessTokenMap[params.AccessToken] == deviceInfo.Family[k].Username) &&
-								(proto.MapAccessToLang[params.AccessToken] == alarmItem.Language){
+								(proto.MapAccessToLang[params.AccessToken] == alarmItem.Language)) ||
+								alarmItem.Flags == 1{
 
 									bOk = true
 							}
@@ -1737,7 +1740,7 @@ LABEL_REDIS:
 							logging.Log(fmt.Sprintf("parse json string failed for ntfy:%d, err: %s", imei, err.Error()))
 						} else {
 							if alarmItem.Time > params.LastUpdates[i] {
-								//logging.Log(fmt.Sprintf("token:%s==%s==%s==%s",proto.MapAccessToLang[params.AccessToken],alarmItem.Language,proto.AccessTokenMap[params.AccessToken],alarmItem.Alarm))
+								//ps -auxlogging.Log(fmt.Sprintf("token:%s==%s==%s==%s",proto.MapAccessToLang[params.AccessToken],alarmItem.Language,proto.AccessTokenMap[params.AccessToken],alarmItem.Alarm))
 								deviceAlarms.Alarms = append(deviceAlarms.Alarms, alarmItem)
 
 								//发送推送后删除之
