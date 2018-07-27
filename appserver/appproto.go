@@ -1255,7 +1255,7 @@ func addDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 
 	// 手表换了号码后，要把以前的好友关系清除
 	setPhone := ""
-	if deviceInfo.SimID != params.DeviceSimID{
+	if ok && deviceInfo.SimID != params.DeviceSimID{
 		for k,_:= range deviceInfo.Family{
 			if deviceInfo.Family[k].IsAddFriend == 1 {
 				deviceInfo.Family[k] = proto.FamilyMember{}
@@ -2323,7 +2323,7 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 							if ok1{
 								for j,_ := range dev.Family{
 									//SimID变了,则好友亲情号码列表里的对应号码要更新
-									if dev.Family[j].Phone == setting.CurValue && dev.Family[j].IsAddFriend == 1{
+									if dev.Family[j].IsAddFriend == 1 && setting.NewValue != setting.CurValue{
 										dev.Family[j].Phone = setting.NewValue
 
 										newPhone := proto.MakeFamilyPhoneNumbersEx(&dev.Family)
@@ -2339,14 +2339,15 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 										msg.Header.Header.ID = proto.NewMsgID()
 										msg.Header.Header.Status = 0
 										setPhone := ""
-										for kk,_:= range deviceInfo.Family{
-											setPhone += fmt.Sprintf("#%s#%s#%d", deviceInfo.Family[kk].Phone, deviceInfo.Family[kk].Name, deviceInfo.Family[kk].Type)
+										for kk,_:= range dev.Family{
+											setPhone += fmt.Sprintf("#%s#%s#%d", dev.Family[kk].Phone, dev.Family[kk].Name, dev.Family[kk].Type)
 										}
 										body := fmt.Sprintf("%015dAP06%s,%016X)", _imei, setPhone, msg.Header.Header.ID)
 										msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
 										svrctx.Get().TcpServerChan <- msg
 										proto.MapPhone2IMEILock.Lock()
-										(*proto.MapPhone2IMEI)[dev.Family[j].Phone] = _imei
+										//好友的号码对应自己的IMEI
+										(*proto.MapPhone2IMEI)[dev.Family[j].Phone] = imei
 										delete(*proto.MapPhone2IMEI,setting.CurValue)
 										proto.MapPhone2IMEILock.Unlock()
 
@@ -2407,31 +2408,37 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 						dev, ok1 := (*proto.DeviceInfoList)[Imei]
 						proto.DeviceInfoListLock.Unlock()
 						if ok1{
-							if dev.Family[k].FriendDevName != deviceInfo.OwnerName {
-								dev.Family[k].FriendDevName = deviceInfo.OwnerName
-								dev.Family[k].Name = deviceInfo.OwnerName
-								newPhone := proto.MakeFamilyPhoneNumbersEx(&dev.Family)
-								strSQL = fmt.Sprintf("update watchinfo set PhoneNumbers = '%s' where IMEI = '%s'",newPhone,proto.Num2Str(Imei,10))
-								logging.Log("SQL update new: " + strSQL)
-								_,err := svrctx.Get().MySQLPool.Exec(strSQL)
-								if err != nil{
-									logging.Log(fmt.Sprintf("[%d] UPDATE watchinfo SET PhoneNumbers db failed, %s", Imei, err.Error()))
-									return  false
-								}
+							for kk,_ := range dev.Family {
 
-								//AP06 TO devinfo set
-								msg := &proto.MsgData{}
-								msg.Header.Header.Imei = Imei
-								msg.Header.Header.ID = proto.NewMsgID()
-								msg.Header.Header.Status = 0
-								setPhone := ""
-								for k,_:= range dev.Family{
-									setPhone += fmt.Sprintf("#%s#%s#%d", dev.Family[k].Phone, dev.Family[k].Name, dev.Family[k].Type)
-								}
-								body := fmt.Sprintf("%015dAP06%s,%016X)", Imei, setPhone, msg.Header.Header.ID)
-								msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+								if dev.Family[kk].Phone == deviceInfo.SimID &&
+									dev.Family[kk].FriendDevName != deviceInfo.OwnerName {
+									dev.Family[kk].FriendDevName = deviceInfo.OwnerName
+									dev.Family[kk].Name = deviceInfo.OwnerName
+									newPhone := proto.MakeFamilyPhoneNumbersEx(&dev.Family)
+									strSQL = fmt.Sprintf("update watchinfo set PhoneNumbers = '%s' where IMEI = '%s'", newPhone, proto.Num2Str(Imei, 10))
+									logging.Log("SQL update new: " + strSQL)
+									_, err := svrctx.Get().MySQLPool.Exec(strSQL)
+									if err != nil {
+										logging.Log(fmt.Sprintf("[%d] UPDATE watchinfo SET PhoneNumbers db failed, %s", Imei, err.Error()))
+										return false
+									}
 
-								svrctx.Get().TcpServerChan <- msg
+									//AP06 TO devinfo set
+									msg := &proto.MsgData{}
+									msg.Header.Header.Imei = Imei
+									msg.Header.Header.ID = proto.NewMsgID()
+									msg.Header.Header.Status = 0
+									setPhone := ""
+									for j, _ := range dev.Family {
+										setPhone += fmt.Sprintf("#%s#%s#%d", dev.Family[j].Phone, dev.Family[j].Name, dev.Family[j].Type)
+									}
+									body := fmt.Sprintf("%015dAP06%s,%016X)", Imei, setPhone, msg.Header.Header.ID)
+									msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+
+									svrctx.Get().TcpServerChan <- msg
+
+									break
+								}
 							}
 						}
 					}
