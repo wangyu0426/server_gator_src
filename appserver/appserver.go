@@ -327,9 +327,9 @@ func AppConnManagerLoop() {
 				break
 			}
 
+			logging.Log(fmt.Sprintf("%d-imeiAppUsers len = %d",msg.Imei,len(imeiAppUsers)))
 			if len(imeiAppUsers) >  0 && msg.AddFriend == false{
 				for username, _ := range imeiAppUsers {
-					logging.Log(fmt.Sprintf("%d-imeiAppUsers %s len = %d",msg.Imei,username,len(imeiAppUsers)))
 					userConnTable := getAppConnsByUserName(username)
 					if userConnTable != nil {
 						for _, c := range userConnTable {

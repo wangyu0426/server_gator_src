@@ -557,7 +557,7 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 			proto.DeviceInfoListLock.Unlock()
 		}
 	}
-	fmt.Println("MapPhone2IMEI:",*proto.MapPhone2IMEI)
+	fmt.Println("MapPhone2IMEI:",*proto.MapPhone2IMEI,imeiList)
 	result.Minichat = tmpMinichat
 	proto.QuickSort(result.Minichat,0,len(result.Minichat) - 1)
 	//logging.Log(fmt.Sprintf("atfer sort...%s:", proto.MakeStructToJson(result)))
@@ -1059,7 +1059,7 @@ func  getDeviceInfoByImei(connid uint64, params *proto.DeviceAddParams) bool {
 		}else {
 
 			for i, _ := range deviceInfo.Family {
-				if deviceInfo.Family[i].Phone != "" {
+				if deviceInfo.Family[i].Phone != "" && len(deviceInfo.Family[i].Username) > 1 {
 					if deviceInfo.Family[i].IsAdmin == 0 {
 						isAdmin = false
 						break
@@ -1552,7 +1552,7 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 	var i int
 	bIsAdminCancel := 0
 	i = 0
-	if ok {
+	if ok && deviceInfo != nil {
 		if params.AccountType == 0{
 			inDex := 0
 			for i = 0;i < len(deviceInfo.Family);i++{
@@ -1687,7 +1687,7 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 	bAll := false
 	proto.Mapimei2PhoneLock.Lock()
 	proto.Mapimei2Phone[imei] = []string{}
-	for kk := 0; kk < len(deviceInfo.Family); kk++ {
+	for kk := 0; kk < len(deviceInfo.Family) && ok && deviceInfo != nil; kk++ {
 		phone := deviceInfo.Family[kk].Phone
 		if phone == ""{
 			phone = "0"
@@ -1718,36 +1718,38 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 		svrctx.Get().TcpServerChan <- &msg
 	}
 
-	newPhone := proto.MakeFamilyPhoneNumbersEx(&deviceInfo.Family)
-	ContactAvatar := makeContactAvatars(&deviceInfo.Family)
+	if ok {
+		newPhone := proto.MakeFamilyPhoneNumbersEx(&deviceInfo.Family)
+		ContactAvatar := makeContactAvatars(&deviceInfo.Family)
 
-	logging.Log(fmt.Sprintf("newPhone Number: %s--%s--%s",newPhone,params.DeviceToken,params.AccessToken))
-	strSQL := fmt.Sprintf("UPDATE watchinfo SET PhoneNumbers = '%s' where IMEI='%d'", newPhone, imei)
-	logging.Log("SQL: " + strSQL)
-	_,err = svrctx.Get().MySQLPool.Exec(strSQL)
-	if err != nil {
-		logging.Log(fmt.Sprintf("[%d] UPDATE watchinfo SET PhoneNumbers db failed, %s", imei, err.Error()))
-		result.ErrCode = 500
-		result.ErrMsg = "server failed to update db"
-		resultData, _ := json.Marshal(&result)
-		appServerChan <- (&proto.AppMsgData{Cmd: proto.DeleteDeviceAckCmdName, Imei: imei,
-			UserName: params.UserName, AccessToken:params.AccessToken,
-			Data: string(resultData), ConnID: connid})
-		return  false
-	}
+		logging.Log(fmt.Sprintf("newPhone Number: %s--%s--%s", newPhone, params.DeviceToken, params.AccessToken))
+		strSQL := fmt.Sprintf("UPDATE watchinfo SET PhoneNumbers = '%s' where IMEI='%d'", newPhone, imei)
+		logging.Log("SQL: " + strSQL)
+		_, err = svrctx.Get().MySQLPool.Exec(strSQL)
+		if err != nil {
+			logging.Log(fmt.Sprintf("[%d] UPDATE watchinfo SET PhoneNumbers db failed, %s", imei, err.Error()))
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to update db"
+			resultData, _ := json.Marshal(&result)
+			appServerChan <- (&proto.AppMsgData{Cmd: proto.DeleteDeviceAckCmdName, Imei: imei,
+				UserName:                            params.UserName, AccessToken: params.AccessToken,
+				Data:                                string(resultData), ConnID: connid})
+			return false
+		}
 
-	strSQL = fmt.Sprintf("UPDATE watchinfo SET ContactAvatar = '{\"ContactAvatars\": %s}' where IMEI='%d'", ContactAvatar, imei)
-	logging.Log("SQL: " + strSQL)
-	_,err = svrctx.Get().MySQLPool.Exec(strSQL)
-	if err != nil {
-		logging.Log(fmt.Sprintf("[%d] UPDATE watchinfo SET ContactAvatar db failed, %s", imei, err.Error()))
-		result.ErrCode = 500
-		result.ErrMsg = "server failed to update db"
-		resultData, _ := json.Marshal(&result)
-		appServerChan <- (&proto.AppMsgData{Cmd: proto.DeleteDeviceAckCmdName, Imei: imei,
-			UserName: params.UserName, AccessToken:params.AccessToken,
-			Data: string(resultData), ConnID: connid})
-		return  false
+		strSQL = fmt.Sprintf("UPDATE watchinfo SET ContactAvatar = '{\"ContactAvatars\": %s}' where IMEI='%d'", ContactAvatar, imei)
+		logging.Log("SQL: " + strSQL)
+		_, err = svrctx.Get().MySQLPool.Exec(strSQL)
+		if err != nil {
+			logging.Log(fmt.Sprintf("[%d] UPDATE watchinfo SET ContactAvatar db failed, %s", imei, err.Error()))
+			result.ErrCode = 500
+			result.ErrMsg = "server failed to update db"
+			resultData, _ := json.Marshal(&result)
+			appServerChan <- (&proto.AppMsgData{Cmd: proto.DeleteDeviceAckCmdName, Imei: imei,
+				UserName:                            params.UserName, AccessToken: params.AccessToken,
+				Data:                                string(resultData), ConnID: connid})
+			return false
+		}
 	}
 	//end cqw
 
@@ -2497,7 +2499,7 @@ func AppSetDeviceVoiceMonitor(connid uint64, params *proto.DeviceActiveParams) b
 	if canRequest == false {
 		return false
 	}
-	isGT06 := proto.GetDeviceModel(imei) == proto.DM_GT06
+	isGT06 := (proto.GetDeviceModel(imei) == proto.DM_GT06 || proto.GetDeviceModel(imei) == proto.DM_GT05)
 	id := proto.NewMsgID()
 	svrctx.Get().TcpServerChan <- proto.MakeReplyMsg(imei, true,
 		proto.MakeVoiceMonitorReplyMsg(imei, id, params.Phone, isGT06), id)

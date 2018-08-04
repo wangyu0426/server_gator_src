@@ -344,7 +344,7 @@ func MakeLocateNowReplyMsg(imei uint64, isGT6 bool) []byte {
 }
 
 func MakeSosReplyMsg(imei, id uint64) []byte {
-	isGT06 := GetDeviceModel(imei) == DM_GT06
+	isGT06 := (GetDeviceModel(imei) == DM_GT06 || GetDeviceModel(imei) == DM_GT05)
 	if isGT06 {
 		//(002C357593060153353AP16,1,0000000000000012)
 		body := fmt.Sprintf("%015dAP16,1,%016X)", imei, id)
@@ -604,7 +604,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 
 		service.cur.AlarmType = service.cur.OrigAlarm
 		//去掉手表上报的低电和设备脱离状态，由服务器计算是否报警
-		service.cur.AlarmType &= (^uint8(ALARM_BATTERYLOW))
+		//service.cur.AlarmType &= (^uint8(ALARM_BATTERYLOW))
 		service.cur.AlarmType &= (^uint8(ALARM_DEVICE_DETACHED))
 
 		//由于手表脱离可能是一种持续状态，手表会持续上报这个状态，所以实际报警是在第一次上报脱离的时候
@@ -1035,7 +1035,8 @@ func makeHideTimerReplyMsgString(imei, id uint64, isGT06 bool) string {
 
 func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*MsgData  {
 	if len(params.Settings) > 0 {
-		isGT06 := GetDeviceModel(imei) == DM_GT06
+		//add GT05
+		isGT06 := (GetDeviceModel(imei) == DM_GT06 || GetDeviceModel(imei) == DM_GT05)
 		msgList := []*MsgData{}
 		for _, setting := range params.Settings {
 			fmt.Println("MakeSetDeviceConfigReplyMsg:", setting)
@@ -2152,14 +2153,14 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 			//要把sender换成对方imei的电话号码
 			//newChatInfo.Sender = newChatInfo.Receiver
 			newChatInfo.Imei = imei1
-			newChatInfo.Content = fmt.Sprintf("%swatch/%d/%d.amr", service.reqCtx.DeviceMinichatBaseUrl,
+			newChatInfo.Content = fmt.Sprintf("%swatch/%d/%d.aac", service.reqCtx.DeviceMinichatBaseUrl,
 				imei1, fileId)
 
 			//自己IMEI也要保存记录
 			newChatInfo_.Sender = newChatInfo_.Receiver
 
 			newChatInfo_.Flags = 1
-			newChatInfo_.Content = fmt.Sprintf("%swatch/%d/%d.amr", service.reqCtx.DeviceMinichatBaseUrl,
+			newChatInfo_.Content = fmt.Sprintf("%swatch/%d/%d.aac", service.reqCtx.DeviceMinichatBaseUrl,
 				service.imei, fileId)
 			AddChatForApp(newChatInfo_)
 			service.NotifyAppWithNewMinichat(newChatInfo_,service.imei)
@@ -4220,7 +4221,7 @@ func (service *GT06Service) ProcessAddFriends() bool{
 
 							if deviceInfo.Family[index].Phone == "" &&
 								deviceInfo.Family[index].IsAddFriend != 1 &&
-								index >= 3 && index < 12 {
+								index >= 3 && index < 30 {
 								//当前手表发送AP06命令
 								deviceInfo.Family[index].Phone = frienddeviceInfo.SimID
 								fmt.Println("SimID," + frienddeviceInfo.SimID)
@@ -4239,6 +4240,7 @@ func (service *GT06Service) ProcessAddFriends() bool{
 								if deviceInfo.Family[index].Phone != "" {
 									//添加的好友对应IMEI
 									(*MapPhone2IMEI)[deviceInfo.Family[index].Phone] = devbluetooth.Imei
+									Mapimei2Phone[service.imei] = append(Mapimei2Phone[service.imei],deviceInfo.Family[index].Phone)
 								}
 								msg := &MsgData{}
 								msg.Header.Header.Imei = service.imei
@@ -4283,7 +4285,7 @@ func (service *GT06Service) ProcessAddFriends() bool{
 									}
 									if frienddeviceInfo.Family[k].Phone == "" &&
 										frienddeviceInfo.Family[k].IsAddFriend != 1 &&
-										k >= 3 && k < 12 {
+										k >= 3 && k < 30 {
 										fmt.Println("SimID1," + deviceInfo.SimID)
 										frienddeviceInfo.Family[k].Phone = deviceInfo.SimID
 										frienddeviceInfo.Family[k].Index = k
@@ -4301,6 +4303,7 @@ func (service *GT06Service) ProcessAddFriends() bool{
 										if frienddeviceInfo.Family[k].Phone != "" {
 											//对方IMEI
 											(*MapPhone2IMEI)[frienddeviceInfo.Family[k].Phone] = service.imei
+											Mapimei2Phone[devbluetooth.Imei] = append(Mapimei2Phone[devbluetooth.Imei],frienddeviceInfo.Family[k].Phone)
 										}
 										break
 									}

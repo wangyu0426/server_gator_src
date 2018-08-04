@@ -1318,7 +1318,8 @@ func LoadEPOFromFile() error {
 
 func ReloadEPO() error {
 	if true {
-		urlRequest := "http://service.gatorcn.com/tracker/web/download36h.php?action=down36h"
+		//urlRequest := "http://service.gatorcn.com/tracker/web/download36h.php?action=down36h"
+		urlRequest := "http://service.gatorcn.com/download36h.php?action=down36h"
 		tr := &http.Transport{
 			TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
 		}
@@ -1625,7 +1626,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		}
 	}
 
-	fmt.Println("deviceinfo list len: ", len(*tmpDeviceInfoList))
+	fmt.Println("deviceinfo list len: ", len(*tmpDeviceInfoList),(*tmpDeviceInfoList)[357593060152280])
 
 	DeviceInfoListLock.Lock()
 	DeviceInfoList = tmpDeviceInfoList

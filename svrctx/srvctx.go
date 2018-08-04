@@ -389,7 +389,7 @@ func GetDeviceData(imei uint64, pgpool *pgx.ConnPool)  proto.LocationData {
 		isQueryDB = true
 	}
 	DeviceTableLock.Unlock()
-
+	fmt.Println("device:",device)
 	if isQueryDB == false {
 		deviceData.Imei = imei
 		return deviceData

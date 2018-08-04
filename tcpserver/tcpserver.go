@@ -260,12 +260,12 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 								//对于AP11,需要加30s延迟，不能连续发送太快
 								//尽量把AP11命令发送间隔时间缩短
 								if cachedMsg.Header.Header.Cmd == proto.CMD_AP11 {
-									if (int64(cachedMsg.Header.Header.ID) - int64(c.lastPushFileNumTime)) / int64(time.Second) >= 3 {
+									//if (int64(cachedMsg.Header.Header.ID) - int64(c.lastPushFileNumTime)) / int64(time.Second) >= 3 {
 										c.responseChan <- cachedMsg
 										c.lastPushFileNumTime = int64(cachedMsg.Header.Header.ID)
-									}else {
-										logging.Log(fmt.Sprintf("[%d] AP11 cmd send too much!",msg.Header.Header.Imei))
-									}
+									//}else {
+									//	logging.Log(fmt.Sprintf("[%d] AP11 cmd send too much!",msg.Header.Header.Imei))
+									//}
 								}else{
 									c.responseChan <- cachedMsg
 								}
