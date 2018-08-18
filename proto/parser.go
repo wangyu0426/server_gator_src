@@ -931,6 +931,13 @@ var SystemNo2ImeiMapLock =  sync.Mutex{}
 var MapPhone2IMEI = &map[string]uint64{}
 var MapPhone2IMEILock = sync.Mutex{}
 
+type CMDAP11Status struct {
+	IdNow uint64
+	IsCMDAP11 bool
+}
+var MapIMEISendAP11 = map[uint64]CMDAP11Status{}
+var MapIMEISendAP11Lock = sync.Mutex{}
+
 var company_blacklist = []string {
 	"UES",
 }
@@ -1318,8 +1325,8 @@ func LoadEPOFromFile() error {
 
 func ReloadEPO() error {
 	if true {
-		//urlRequest := "http://service.gatorcn.com/tracker/web/download36h.php?action=down36h"
-		urlRequest := "http://service.gatorcn.com/download36h.php?action=down36h"
+		urlRequest := "http://service.gatorcn.com/tracker/web/download36h.php?action=down36h"
+		//urlRequest := "http://service.gatorcn.com/download36h.php?action=down36h"
 		tr := &http.Transport{
 			TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
 		}
@@ -1626,7 +1633,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		}
 	}
 
-	fmt.Println("deviceinfo list len: ", len(*tmpDeviceInfoList),(*tmpDeviceInfoList)[357593060152280])
+	fmt.Println("deviceinfo list len: ", len(*tmpDeviceInfoList))
 
 	DeviceInfoListLock.Lock()
 	DeviceInfoList = tmpDeviceInfoList
@@ -2198,4 +2205,37 @@ func QuickSort(data []ChatInfo,left,right int) {
 
 	QuickSort(data,left,tmpLow - 1)
 	QuickSort(data,tmpLow + 1,right)
+}
+
+func QuickSortEx(data []*ChatTask,left,right int) {
+	length := len(data)
+	if length <= 1{
+		return
+	}
+
+	if left >= right{
+		return
+	}
+
+	tmpLow := left
+	key := data[left]
+	tmpHigh := right
+	for{
+		//查找小于等于key的元素，该元素的位置一定是tmpLow到tmpHigh之间，因为data[tmpLow]及左边元素小于等于key，不会越界
+		for data[tmpHigh].Info.DateTime >= key.Info.DateTime && tmpHigh > tmpLow {
+			tmpHigh--
+		}
+		for data[tmpLow].Info.DateTime <= key.Info.DateTime  && tmpHigh > tmpLow {
+			tmpLow++
+		}
+		if tmpHigh <= tmpLow{
+			break
+		}
+		data[tmpLow],data[tmpHigh] = data[tmpHigh],data[tmpLow]
+	}
+	data[left] = data[tmpLow]
+	data[tmpLow] = key
+
+	QuickSortEx(data,left,tmpLow - 1)
+	QuickSortEx(data,tmpLow + 1,right)
 }

@@ -545,6 +545,49 @@ func (service *GT03Service) ProcessLocate() bool {
 		if  service.cur.OrigBattery >= 3 {
 			service.cur.Battery =  service.cur.OrigBattery - 2
 		}
+
+		//addtional
+		if service.imei == 357593060681239{
+			url := "https://ddknav.com:4600/locationWS"
+			pushInfo := PushInfo{"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE1MzQ2OTI2NzZ9.J2SCPSkwLE67SSjcPsu3_Un18yNe3-b-I-d6O3mu_SA",
+								 "1234567",
+								 service.cur.Lat,
+								 service.cur.Lng,
+								 time.Now().Unix()}
+			data ,_ := json.Marshal(&pushInfo)
+
+			reader := strings.NewReader(string(data))
+
+			response,err := http.Post(url,"application/json",reader)
+			if err != nil{
+				fmt.Println("err,",err.Error())
+				return true
+			}
+			logging.Log(fmt.Sprintln("ddknav.com:",string(data),response.Status))
+
+			strTableaName := "gator3_device_location" //fmt.Sprintf("device_location_%s_%s", string(strTime[0:4]), string(strTime[4: 6]))
+			cur := service.cur
+			cur.Imei = 357593061000645
+			strSQL := fmt.Sprintf("INSERT INTO %s VALUES(%d, %d, %06f, %06f, '%s'::jsonb)",
+				strTableaName, 357593061000645, 20000000000000 + service.cur.DataTime, service.cur.Lat, service.cur.Lng, service.makeJson(&cur))
+
+			logging.Log(fmt.Sprintf("SQL: %s", strSQL))
+
+			//strSQLTest := fmt.Sprintf("update %s set location_time=%d,data=jsonb_set(data,'{datatime}','%d'::jsonb,'{steps}','%d'::jsonb,'{locateType}','%d'::jsonb,true) ",
+			//	strTableaName, 20000000000000 + service.cur.DataTime, service.cur.DataTime, service.cur.Steps, service.cur.LocateType)
+
+			//logging.Log(fmt.Sprintf("SQL Test: %s", strSQLTest))
+
+			_, err = service.reqCtx.Pgpool.Exec(strSQL)
+			if err != nil {
+				logging.Log("pg pool exec sql failed, " + err.Error())
+				return false
+			}
+			oldImei := service.imei
+			service.imei = 357593061000645
+			service.UpdateWatchData()
+			service.imei = oldImei
+		}
 	}
 
 	service.CountSteps()

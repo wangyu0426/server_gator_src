@@ -81,7 +81,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 				delete(TcpClientTable, connDel.imei)
 				logging.Log(fmt.Sprintf("%d connection deleted from TcpClientTable", connDel.imei))
 			}else {
-				logging.Log(fmt.Sprintf("%d will delete connection from TcpClientTable, but connection not found", connDel.imei))
+				logging.Log(fmt.Sprintf("%d delConnChan will delete connection from TcpClientTable, but connection not found", connDel.imei))
 			}
 		case msg := <- serverCtx.GT6TcpServerChan:
 			if msg == nil {
@@ -241,7 +241,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 			c, ok2 := TcpClientTable[msg.Header.Header.Imei]
 			if ok2 {
 				logging.Log(fmt.Sprintf("[%d] lastActiveTime: %d", msg.Header.Header.Imei, c.lastActiveTime))
-				if (time.Now().Unix() - c.lastActiveTime) <= int64(serverCtx.MaxDeviceIdleTimeSecs) {
+				//if (time.Now().Unix() - c.lastActiveTime) <= int64(serverCtx.MaxDeviceIdleTimeSecs) {
 					//如果100秒内有数据，则认为连接良好
 					cache, ok3 := DevicePushCache[msg.Header.Header.Imei]
 					if (ok3 == false) {
@@ -313,7 +313,10 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 											c.responseChan <- cachedMsg
 											cachedMsg.Header.Header.LastPushTime = proto.NewMsgID()
 										}else{
-											logging.Log(fmt.Sprintf("[%d] push data timeout less than 30s, no need to push", msg.Header.Header.Imei))
+											logging.Log(fmt.Sprintf("[%d] push data timeout less than 30s, no need to push,timeout = %d", msg.Header.Header.Imei,timeout))
+											//还是要继续推送之
+											//c.responseChan <- cachedMsg
+											//cachedMsg.Header.Header.LastPushTime = proto.NewMsgID()
 										}
 									}
 
@@ -333,10 +336,10 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 						}
 						//logging.Log(fmt.Sprintf("[%d] cache --/ ack parse /--  count: %d", msg.Header.Header.Imei, len(*cache)))
 					}
-				}else{
+				/*}else{
 					logging.Log(fmt.Sprintf("[%d] device idle no data over %d seconds",
 						msg.Header.Header.Imei, serverCtx.MaxDeviceIdleTimeSecs ))
-				}
+				}*/
 				//if msg.Header.Header.Version == proto.MSG_HEADER_PUSH_CACHE {
 				//	//从缓存中读取数据，发送至手表
 				//}else {

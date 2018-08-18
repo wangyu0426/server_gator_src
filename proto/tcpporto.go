@@ -172,6 +172,8 @@ type ChatInfo struct {
 	CreateTime  uint64  //服务器生成时间
 
 	FilePath string
+
+	FileIndex int		//for test voice sequence
 }
 
 type PhotoSettingInfo struct {
@@ -272,6 +274,14 @@ type GT06Service struct {
 	friendtooth		[]string
 }
 
+type  PushInfo struct {
+	SessionToken string        `json:"sessionToken"`
+	RequestID    string            `json:"requestID"`
+	Latitude     float64        `json:"latitude"`
+	Longitude    float64            `json:"longitude"`
+	FixTime      int64        `json:"fixTime"`
+}
+
 const DEVICEID_BIT_NUM = 15
 const DEVICE_CMD_LENGTH = 4
 const TIME_LEN  = 6
@@ -305,7 +315,7 @@ var AppNewPhotoPendingList = map[uint64]*[]*PhotoSettingTask{}
 var AppNewPhotoPendingListLock = &sync.Mutex{}
 
 func HandleTcpRequest(reqCtx RequestContext)  bool{
-	service := &GT06Service{reqCtx: reqCtx}
+	service := &GT06Service{reqCtx: reqCtx,needSendChatNum:true}
 	ret := service.PreDoRequest()
 	if ret == false {
 		return false
@@ -417,7 +427,7 @@ func (service *GT06Service)PreDoRequest() bool  {
 	service.cur.LastZoneIndex = -1
 	service.old.LastZoneIndex = -1
 	service.needSendLocation = false
-	service.needSendChatNum = true
+	//service.needSendChatNum = true
 	service.needSendPhotoNum = true
 	service.isCmdForAck = false
 
@@ -483,7 +493,11 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	DeviceInfoListLock.Unlock()
 
 	service.GetWatchDataInfo(service.imei)
-	logging.Log(fmt.Sprintf("DoRequest msg.cmd:%d,msg.Data:%s",msg.Header.Header.Cmd,msg.Data))
+	var tagAP11 =  CMDAP11Status{IdNow:uint64(time.Now().UnixNano()),IsCMDAP11:false}
+	MapIMEISendAP11Lock.Lock()
+	MapIMEISendAP11[service.imei] = tagAP11
+	MapIMEISendAP11Lock.Unlock()
+	//logging.Log(fmt.Sprintf("DoRequest msg.cmd:%d,msg.Data:%s",msg.Header.Header.Cmd,msg.Data))
 	if service.cmd == DRT_SET_IP_PORT_ACK  ||       // 同BP01，手表设置服务器IP端口的ACK
 		service.cmd == DRT_SET_APN_ACK     ||        // 同BP02，手表设置APN的ACK
 		service.cmd == DRT_SYNC_TIME_ACK  ||   // 同BP03，手表请求对时ACK
@@ -563,6 +577,11 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			}
 
 		}
+		if service.cmd == DRT_SYNC_TIME_ACK {
+			service.DoSendCmd()
+			service.PushChatNum()
+		}
+
 	}else if service.cmd == DRT_SYNC_TIME {  //BP00 对时
 		madeData, id := service.makeSyncTimeReplyMsg()
 		resp := &ResponseItem{CMD_AP03,  service.makeReplyMsg(true, madeData, id)}
@@ -578,7 +597,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			}else {break}
 		}
 
-		logging.Log(fmt.Sprintf("%d|%s", service.imei, szVersion)) // report version
+		logging.Log(fmt.Sprintf("DRT_SYNC_TIME %d|%s", service.imei, szVersion)) // report version
 	}else if service.cmd == DRT_SEND_LOCATION {
 		//BP30 上报定位和报警等数据
 		resp := &ResponseItem{CMD_AP30, service.makeReplyMsg(false,
@@ -693,7 +712,10 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 				service.DoSendCmd()
 			}
 		}*/
-
+		tagAP11.IsCMDAP11 = true
+		MapIMEISendAP11Lock.Lock()
+		MapIMEISendAP11[service.imei] = tagAP11
+		MapIMEISendAP11Lock.Unlock()
 		logging.Log("ProcessRspFetchFile 1")
 		bufOffset++
 		ret = service.ProcessRspFetchFile(msg.Data[bufOffset: ])
@@ -840,10 +862,22 @@ func (service *GT06Service)DoResponse() []*MsgData  {
 		//ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
 	}
 
-	if service.needSendChatNum {
-		service.PushChatNum()
-	}
+	MapIMEISendAP11Lock.Lock()
+	tagcmdap11,ok := MapIMEISendAP11[service.imei]
+	MapIMEISendAP11Lock.Unlock()
+	now := uint64(time.Now().UnixNano())
+	if ok {
+		timediff := (now - tagcmdap11.IdNow) / uint64(time.Second)
+		//发了AP11命令后手表没有及时回复BP11,则再等待5分钟再发AP11命令,不要在发其他命令时又发AP11命令
+		if service.needSendChatNum && !tagcmdap11.IsCMDAP11 && timediff >= 5*60 {
+			tagcmdap11.IdNow = uint64(time.Now().UnixNano())
+			MapIMEISendAP11Lock.Lock()
+			MapIMEISendAP11[service.imei] = tagcmdap11
+			MapIMEISendAP11Lock.Unlock()
 
+			service.PushChatNum()
+		}
+	}
 	if service.needSendPhoto {
 		logging.Log(fmt.Sprint("ProcessRspFetchFile 5, ", service.needSendPhoto,
 			service.needSendPhotoNum, service.reqPhotoInfoNum))
@@ -2187,8 +2221,10 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 				AppSendChatListLock.Lock()
 				chatList, ok := AppSendChatList[imei]
 				if ok {
+					chatTask.Info.FileIndex = len(*chatList) + 1
 					*chatList = append(*chatList, &chatTask)
 				}else {
+					chatTask.Info.FileIndex = 1
 					AppSendChatList[imei] = &[]*ChatTask{}
 					*AppSendChatList[imei] = append(*AppSendChatList[imei], &chatTask)
 					logging.Log(fmt.Sprintf("%d after append AppSendChatList len: %d", imei, len(*AppSendChatList[imei])))
@@ -2218,7 +2254,9 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 						msg.Header.Header.Type = TYPE_CMD_AP11
 						resp = &ResponseItem{CMD_AP11,msg}
 						service.rspList = append(service.rspList,resp)
+						service.needSendChatNum = false
 						logging.Log(fmt.Sprintf("DM_GT06 AP11:%d",len(chatData)))
+
 					}else if model == DM_GTI3  || model == DM_GT03 {
 						msg := MakeReplyMsg(imei, false,
 							MakeFileNumReplyMsg(imei, ChatContentVoice, len(chatData), false),
@@ -2228,6 +2266,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 						msg.Header.Header.Type = TYPE_CMD_AP11
 						resp = &ResponseItem{CMD_AP11,msg}
 						service.rspList = append(service.rspList,resp)
+						service.needSendChatNum = false
 					}
 				}
 			}
@@ -2565,6 +2604,8 @@ func (service *GT06Service) ProcessPushMicChatAck(pszMsg []byte) bool {
 				blockCount, blockIndex,
 				(*chatTask)[0].Data.BlockCount, (*chatTask)[0].Data.BlockIndex))
 
+			//continue sending voice message
+			//service.needSendChatNum = true
 			return false
 		}
 
@@ -2659,6 +2700,22 @@ func (service *GT06Service) ProcessPushPhotoAck(pszMsg []byte) bool {
 	lastBlockOk := (fields[3][0] - '0')
 	if blockCount <= 0 || blockIndex <= 0 || blockCount < blockIndex {
 		logging.Log(fmt.Sprintf("[%d] block count,  index  %d is bad", service.imei, blockCount, blockIndex))
+
+		AppNewPhotoListLock.Lock()
+		appNewPhotoList, ok := AppNewPhotoList[service.imei]
+		AppNewPhotoListLock.Unlock()
+		if ok {
+			if len(*appNewPhotoList) > 1 {
+				logging.Log(fmt.Sprintf("%d AppNewPhotoList begin len: %d", service.imei, len(*appNewPhotoList)))
+				(*appNewPhotoList) = (*appNewPhotoList)[1:]
+				logging.Log(fmt.Sprintf("%d AppNewPhotoList end len: %d", service.imei, len(*appNewPhotoList)))
+			} else {
+				AppNewPhotoList[service.imei] = &[]*PhotoSettingTask{}
+				logging.Log(fmt.Sprintf("%d AppNewPhotoList begin len: %d", service.imei, len(*AppNewPhotoList[service.imei])))
+				logging.Log(fmt.Sprintf("%d AppNewPhotoList end len: %d", service.imei, len(*AppNewPhotoList[service.imei])))
+			}
+		}
+
 		return false
 	}
 
@@ -2795,8 +2852,8 @@ func (service *GT06Service) ProcessRspChat() bool {
 	//发送之前首先创建任务表，如果已存在任务表，则直接覆盖
 	if service.reqCtx.GetChatDataFunc != nil {
 		chatData := service.reqCtx.GetChatDataFunc(service.imei, 0)
-		fmt.Println("ProcessRspChat:",chatData,*MapPhone2IMEI)
 		if len(chatData) > 0 {
+			logging.Log(fmt.Sprintf("ProcessRspChat:--%d--",chatData[0].FileIndex))
 			//voiceFileName :=fmt.Sprintf("/usr/share/nginx/html/web/upload/minichat/app/%d/%s.amr",
 			//	service.imei, chatData[0].Content)
 			var voiceFileName string
@@ -2854,6 +2911,7 @@ func (service *GT06Service) PushChatNum() bool {
 					bFound = false
 					Mapimei2PhoneLock.Lock()
 					for index, _ := range Mapimei2Phone[service.imei] {
+						fmt.Println("Mapimei2Phone:",Mapimei2Phone[service.imei],(*chatList)[i].Info.Sender)
 						if Mapimei2Phone[service.imei][index] == (*chatList)[i].Info.Sender {
 							bFound = true
 							break
@@ -3612,10 +3670,10 @@ func (service *GT06Service) WatchDataUpdateDB() bool {
 
 	logging.Log(fmt.Sprintf("SQL: %s", strSQL))
 
-	strSQLTest := fmt.Sprintf("update %s set location_time=%d,data=jsonb_set(data,'{datatime}','%d'::jsonb,'{steps}','%d'::jsonb,'{locateType}','%d'::jsonb,true) ",
-		strTableaName, 20000000000000 + service.cur.DataTime, service.cur.DataTime, service.cur.Steps, service.cur.LocateType)
+	//strSQLTest := fmt.Sprintf("update %s set location_time=%d,data=jsonb_set(data,'{datatime}','%d'::jsonb,'{steps}','%d'::jsonb,'{locateType}','%d'::jsonb,true) ",
+	//	strTableaName, 20000000000000 + service.cur.DataTime, service.cur.DataTime, service.cur.Steps, service.cur.LocateType)
 
-	logging.Log(fmt.Sprintf("SQL Test: %s", strSQLTest))
+	//logging.Log(fmt.Sprintf("SQL Test: %s", strSQLTest))
 
 	_, err := service.reqCtx.Pgpool.Exec(strSQL)
 	if err != nil {

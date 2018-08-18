@@ -250,6 +250,7 @@ func GetChatData(imei uint64, index int)  []proto.ChatInfo {
 	chatList, ok := proto.AppSendChatList[imei]
 	if ok {
 		if len(*chatList) > 0 {
+			proto.QuickSortEx(*chatList,0,len(*chatList) - 1)
 			for i, chat := range *chatList {
 				if index == -1 ||  index == i {
 					chatData = append(chatData, (*chat).Info)
@@ -261,6 +262,7 @@ func GetChatData(imei uint64, index int)  []proto.ChatInfo {
 			}
 		}
 	}
+	fmt.Println("chatList:",*chatList)
 	proto.AppSendChatListLock.Unlock()
 
 	return chatData

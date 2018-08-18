@@ -1114,7 +1114,7 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 					deviceInfoResult.Avatar)
 			}
 		}
-
+		fmt.Println("ContactAvatar,",deviceInfoResult.ContactAvatar)
 		for i, ava := range deviceInfoResult.ContactAvatar{
 			if len(ava) > 0 {
 				deviceInfoResult.ContactAvatar[i] = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName,
@@ -1707,9 +1707,7 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 		body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
 			phoneNumbers, msg.Header.Header.ID)
 		msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
-		/*body := fmt.Sprintf("%015dAP25,%s,%016X)", imei,
-		deviceInfo.Family[i].Phone,   msg.Header.Header.ID)
-	msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)*/
+
 		svrctx.Get().TcpServerChan <- &msg
 	}else {
 		body := fmt.Sprintf("%015dAP07,%016X)", imei,msg.Header.Header.ID)
@@ -1762,20 +1760,20 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 	defer conn.Close()
 
 	//redis 分布式锁
-	Clock := svrctx.RedisLock{LockKey: "xxxxx"}
-LABEL_REDIS:
-	err = Clock.Lock(&conn,5)
-	if err != nil{
-		goto LABEL_REDIS
-	}
-	logging.Log("redis distribute lock success 1")
+	//Clock := svrctx.RedisLock{LockKey: "xxxxx"}
+//LABEL_REDIS:
+	//err = Clock.Lock(&conn,5)
+	//if err != nil{
+	//	goto LABEL_REDIS
+	//}
+	//logging.Log("redis distribute lock success 1")
 	_,err = conn.Do("del",fmt.Sprintf("ntfy:%d", imei))
 	if err != nil {
 		logging.Log("deleteDeviceByUser:" + err.Error())
-		Clock.Unlock(&conn)
+		//Clock.Unlock(&conn)
 		return false
 	}
-	Clock.Unlock(&conn)
+	//Clock.Unlock(&conn)
 	//end chenqw
 
 	resultData, _ := json.Marshal(&result)
@@ -1783,10 +1781,6 @@ LABEL_REDIS:
 		UserName: params.UserName, AccessToken:params.AccessToken,
 		Data: string(resultData), ConnID: connid})
 
-	//ios:deviceToken,android:accessToken
-	//if params.UUID != "" {
-	//	proto.DeleteDevieeToken(svrctx.Get().APNSServerApiBase, imei, params.UUID)
-	//}
 	if params.DeviceToken == ""{
 		//android,delete
 		proto.DeleteDevieeToken(svrctx.Get().APNSServerApiBase,imei,params.AccessToken)
@@ -2341,8 +2335,14 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 										msg.Header.Header.ID = proto.NewMsgID()
 										msg.Header.Header.Status = 0
 										setPhone := ""
+										proto.Mapimei2Phone[_imei] = []string{}
 										for kk,_:= range dev.Family{
 											setPhone += fmt.Sprintf("#%s#%s#%d", dev.Family[kk].Phone, dev.Family[kk].Name, dev.Family[kk].Type)
+											if dev.Family[kk].Phone == ""{
+												continue
+											}
+
+											proto.Mapimei2Phone[_imei] = append(proto.Mapimei2Phone[_imei],dev.Family[kk].Phone)
 										}
 										body := fmt.Sprintf("%015dAP06%s,%016X)", _imei, setPhone, msg.Header.Header.ID)
 										msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
@@ -2352,6 +2352,22 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 										(*proto.MapPhone2IMEI)[dev.Family[j].Phone] = imei
 										delete(*proto.MapPhone2IMEI,setting.CurValue)
 										proto.MapPhone2IMEILock.Unlock()
+
+										proto.AppSendChatListLock.Lock()
+										chatList, ok := proto.AppSendChatList[_imei]
+										if ok {
+											for chatidx, _ := range *chatList {
+												logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
+													_imei, (*proto.AppSendChatList[_imei])[chatidx].Info.Sender))
+												//是当前用户登录并且号码已修改了
+												if (*chatList)[chatidx].Info.Sender == setting.CurValue {
+													(*chatList)[chatidx].Info.Sender = setting.NewValue
+												}
+												logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
+													_imei, (*proto.AppSendChatList[_imei])[chatidx].Info.Sender))
+											}
+										}
+										proto.AppSendChatListLock.Unlock()
 
 										break
 									}
