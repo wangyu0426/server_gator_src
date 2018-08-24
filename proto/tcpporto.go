@@ -3776,6 +3776,35 @@ func (service *GT06Service) NotifyAlarmMsg() bool {
 	PushNotificationToApp(service.reqCtx.APNSServerBaseURL, service.imei, "",  ownerName,
 		service.cur.DataTime, service.cur.AlarmType, service.cur.ZoneName)
 
+	//
+	conn := redisPool.Get()
+	defer conn.Close()
+	alarmItem := AlarmItem{}
+	alarmItem.Time = service.cur.DataTime
+	alarmItem.FamilyPhone = ""
+	reply, err  := conn.Do("HGETALL",  service.imei) //genUUIDKey(jsonDict.UUID)))
+	if err != nil {
+		return false
+	}
+
+	array := reply.([]interface{})
+	for i,item := range array{
+		if i % 2 == 0{
+			continue
+		}else {
+			data := reportJSONData{}
+			err = json.Unmarshal([]byte(parseUint8Array(item)), &data)
+			if err != nil {
+				alarmItem.Language = data.Language
+				pushInfo := pushJSON{service.imei, "", ownerName,
+					service.cur.DataTime, service.cur.AlarmType, service.cur.ZoneName,0}
+				alarmItem.Alarm =  MakePushContent(data.Language, &pushInfo)
+				//tui song dao app
+			}
+		}
+
+	}
+
 	return true
 }
 

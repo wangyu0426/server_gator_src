@@ -372,7 +372,7 @@ type HeartbeatResult struct {
 	Alarms []LocationData`json:"alarms"`
 
 	ImeiAddFriend	map[uint64][]AddFriend	`json:"imei_add_friend"`
-
+	BAllData bool    `json:"b_all_data"`	//全部数据flag
 }
 
 type DeviceSettingResult struct {
@@ -973,17 +973,17 @@ var MapKey []string = []string{
 //chenqw,20171129,encrypted flag
 var DevConnidenc = map[uint64]bool{}
 //dev's max logining count when login with wrong password
-var LoginTimeOut = map[uint64]int64{}
+//var LoginTimeOut = map[uint64]int64{}
 var ConnidLogin = map[uint64]int{}
 type TagUserName struct{
 	Username string
 	Phone	string
 }
 var ConnidUserName = map[uint64]map[string]string{}
-var ConnidtagUserName = map[string]TagUserName{}
+//var ConnidtagUserName = map[string]TagUserName{}
 var AccessTokenMap = map[string]string{}
 var MapAccessToLang = map[string]string{}
-
+var CommonLock = sync.Mutex{}
 var (
 	redisPool *redis.Pool
 )

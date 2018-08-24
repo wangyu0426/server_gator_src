@@ -449,11 +449,10 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 			if ok && deviceInfo != nil {
 				phone = deviceInfo.Family[Index-1].Phone
 				if username != "" {
-					proto.AccessTokenMap[accessToken] = username
+					//proto.AccessTokenMap[accessToken] = username
 					//var tag proto.TagUserName
 					//tag.Username = username
 					//tag.Phone = deviceInfo.Family[Index-1].Phone
-					//proto.ConnidtagUserName[username] = tag
 				}
 			}
 		}
@@ -1719,6 +1718,7 @@ LABEL_REDIS:
 					proto.DeviceInfoListLock.Lock()
 					deviceInfo, ok := (*proto.DeviceInfoList)[imei]
 					if ok{
+						proto.CommonLock.Lock()
 						for k,_ := range deviceInfo.Family{
 							//单独推送,
 							if ((deviceInfo.Family[k].Phone == alarmItem.FamilyPhone ||
@@ -1731,6 +1731,7 @@ LABEL_REDIS:
 									bOk = true
 							}
 						}
+						proto.CommonLock.Unlock()
 					}
 					proto.DeviceInfoListLock.Unlock()
 
@@ -1740,7 +1741,10 @@ LABEL_REDIS:
 							logging.Log(fmt.Sprintf("parse json string failed for ntfy:%d, err: %s", imei, err.Error()))
 						} else {
 							if alarmItem.Time > params.LastUpdates[i] {
-								//ps -auxlogging.Log(fmt.Sprintf("token:%s==%s==%s==%s",proto.MapAccessToLang[params.AccessToken],alarmItem.Language,proto.AccessTokenMap[params.AccessToken],alarmItem.Alarm))
+								proto.CommonLock.Lock()
+								logging.Log(fmt.Sprintf("token:%s==%s==%s==%s==%d",
+									proto.MapAccessToLang[params.AccessToken],alarmItem.Language,proto.AccessTokenMap[params.AccessToken],alarmItem.Alarm,params.Devices))
+								proto.CommonLock.Unlock()
 								deviceAlarms.Alarms = append(deviceAlarms.Alarms, alarmItem)
 
 								//发送推送后删除之

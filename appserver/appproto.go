@@ -380,8 +380,10 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 	logging.Log(fmt.Sprintf("handleHeartBeat params:UserName:%s,SelectedDevice:%s,familynumber:%s,Devices:%s--%s--%s--%s--%s",
 		params.UserName,params.SelectedDevice,params.FamilyNumber,params.Devices,params.UUID,params.DeviceToken, params.Platform, params.Language))
 
+	proto.CommonLock.Lock()
 	proto.MapAccessToLang[params.AccessToken] = params.Language
 	proto.AccessTokenMap[params.AccessToken] = params.UserName
+	proto.CommonLock.Unlock()
 	for i, imei := range params.Devices {
 		if InStringArray(imei, imeiList) == false {
 			continue
@@ -417,7 +419,7 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 	}
 
 	tmpMinichat := []proto.ChatInfo{}
-	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405"),ImeiAddFriend:map[uint64][]proto.AddFriend{}}
+	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405"),ImeiAddFriend:map[uint64][]proto.AddFriend{},BAllData:true}
 	if params.SelectedDevice == "" {
 		for _, imei := range params.Devices {
 			if InStringArray(imei, imeiList) == false {
@@ -627,7 +629,7 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	if accessToken == nil {
 
 		proto.ConnidLogin[connid] += 1
-		proto.LoginTimeOut[connid] = time.Now().Unix()
+		//proto.LoginTimeOut[connid] = time.Now().Unix()
 
 	}
 
@@ -635,8 +637,9 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	logging.Log("accessToken: " + fmt.Sprint(accessToken))
 	//logging.Log("devices: " + fmt.Sprint(devices))
 	if status != nil && accessToken != nil {
+		proto.CommonLock.Lock()
 		proto.AccessTokenMap[fmt.Sprint(accessToken)] = username
-
+		proto.CommonLock.Unlock()
 		AddAccessToken(accessToken.(string))
 		if isRegister == false {
 			if devices != nil {
@@ -687,7 +690,6 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 								//var tag proto.TagUserName
 								//tag.Username = username
 								//tag.Phone = deviceInfo.Family[k].Phone
-								//proto.ConnidtagUserName[username] = tag
 								break
 							}
 						}
@@ -1100,9 +1102,9 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 	if ok && deviceInfo != nil {
 
 		//refresh.刷新时也要保存
-		//proto.ConnidUserName[params.UserName] = params.UserName
+		proto.CommonLock.Lock()
 		proto.AccessTokenMap[params.AccessToken] = params.UserName
-
+		proto.CommonLock.Unlock()
 		found = true
 		deviceInfoResult = proto.MakeDeviceInfoResult(deviceInfo)
 		if len(deviceInfo.Avatar) == 0 || (strings.Contains(deviceInfo.Avatar, ".jpg") == false &&
@@ -1935,6 +1937,17 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 					var newPhone proto.FamilyMember
 
 					newPhone = proto.ParseSinglePhoneNumberString(setting.NewValue, setting.Index)
+					oldPhone := proto.ParseSinglePhoneNumberString(setting.CurValue,setting.Index)
+					proto.MapPhone2IMEILock.Lock()
+					_,ok := (*proto.MapPhone2IMEI)[oldPhone.Phone]
+					if ok {
+						newPhone.IsAddFriend = 1
+						newPhone.FriendImei = deviceInfo.Family[setting.Index - 1].FriendImei
+						newPhone.FriendDevName = deviceInfo.Family[setting.Index - 1].FriendDevName
+						newPhone.FriendAvatar = deviceInfo.Family[setting.Index - 1].FriendAvatar
+						//修改好友的name只能推送到自己的手表,不能影响好友的OwnnerName
+					}
+					proto.MapPhone2IMEILock.Unlock()
 					//chenqw,20180119,新增白名单index=0xff,其他传正确的index
 					if setting.Index == 0xff {
 						for i := 3; i < len(deviceInfo.Family); i++ {
