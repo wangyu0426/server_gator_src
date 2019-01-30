@@ -297,6 +297,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 
 				if gt3protoVer != GT3_PROTO_V1  && gt3protoVer != GT3_PROTO_V2 {
 					logging.Log("bad proto of data packet")
+					logging.Log(fmt.Sprintf("[%d]bad proto of data packet, it must begin with ( or G,headbuf",c.imei))
 					breakLoop = true
 					break
 				}else{
@@ -341,6 +342,10 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				msg.Data = make([]byte, msgLen)
 				copy(msg.Data, packet[0: msgLen])
 
+				if c.IsClosed(){
+					logging.Log(fmt.Sprintf("[%d]gt3 requsetChan is closed",msg.Header.Header.Imei))
+					break
+				}
 				c.requestChan <- msg
 				//logging.Log("GT03 msg  " + string(msg.Data))
 				c.FlushRecvBuf(int(parseLen))
@@ -427,6 +432,7 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				SetDeviceDataFunc: svrctx.SetDeviceData,
 				GetChatDataFunc: svrctx.GetChatData,
 				AddChatDataFunc: svrctx.AddChatData,
+				GetAddressFunc:svrctx.GetAddress,
 			})
 		}
 	}

@@ -87,6 +87,7 @@ const (
 	DRT_DELETE_PHONE_PHOTO_ACK       	// 同BP25	，手表对删除亲情号图片的ACK
 	DRT_FETCH_APP_URL_ACK       	// 同BP26	，手表获取app下载页面URL的ACK
 	DRT_ADD_NEW_FRIENDS				//同BP35，向服务器发送添加好友请求
+	DRT_SET_DEVUPDATE				//同BP29,固件升级设置消息
 	DRT_MAX
 )
 
@@ -113,9 +114,30 @@ const DRT_FETCH_APP_URL = DRT_FETCH_AGPS
 	 CMD_AP30
 	 CMD_AP31
 	 CMD_AP34
-
+	 CMD_AP29
 	 CMD_ACK
 
+	 //gps
+	 CMD_GPS_SET_SYNC
+	 CMD_GPS_SET_ACTIVE_ACK
+	 CMD_GPS_HEART_ACK
+	 CMD_GPS_LOCACTION_ACK
+
+	 CMD_GPS_SETIPPORT
+	 CMD_GPS_SETAPN
+	 CMD_GPS_SETTIMEZONE
+	 CMD_GPS_READVER
+	 CMD_GPS_SETLISTEN
+	 CMD_GPS_SETPHONE
+	 CMD_GPS_CLEANPHONE
+	 CMD_GPS_SETDEVRESTART
+	 CMD_GPS_SETLOCATION
+	 CMD_GPS_SETSUMMER
+	 CMD_GPS_RECOVER
+	 CMD_GPS_SETALARM
+	 CMD_GPS_LOCATIONSTYLE
+	 CMD_GPS_SETBUZZER
+	 CMD_GPS_SETUPDATE
 	 //CMD_ACTIVE_DEVICE
 	 CMD_NONE
  )
@@ -146,7 +168,6 @@ const (
 const (
 	TYPE_CMD_AP11 = iota + 1
 )
-
 
 var gt3reply_commands = []string{
 	"AP00",
@@ -204,7 +225,55 @@ var commands = []string{
 	"BP25",
 	"BP26",
 	"BP35",
+	"BP29",
 }
+
+var gpscommands = []string{
+	"5500",
+	"553c",
+	"553d",		//短信、电话激活终端连接服务器消息
+	"553f",
+
+	"5501",		//设置服务器 IP 地址和端口ACK
+	"5502",		//设置 APN ACK
+	"5503",		//修改时区、时间 ACK
+	"5504",		//设置读取终端版本消息 ACK
+	"5505",		//设置监听命令 ACK
+	"5506",		//设备所有者号码 ACK
+	"5507",		//设置清空所有者号码 ACK
+	"5508",		//控制设备重启消息 ACK
+	"550e",		//定位数据设置消息 ACK
+	"5513",		//夏令时设置消息 ACK
+	"551d",		//设置终端恢复出厂设置 ACK
+	"5521",		//报警设置消息 ACK
+	"5522",		//设备定位模式设置消息 ACK
+	"5523",
+	"5524",		//固件升级设置
+}
+
+//Watch 上传对应的命令
+const (
+	CMD_GPS_SYNC = iota
+	CMD_GPS_LOCATION
+	CMD_GPS_ACTIVE
+	CMD_GPS_HEART
+
+	CMD_GPS_SETIPPORT_ACK
+	CMD_GPS_SETAPN_ACK
+	CMD_GPS_SETTIMEZONE_ACK
+	CMD_GPS_READVER_ACK
+	CMD_GPS_SETLISTEN_ACK
+	CMD_GPS_SETPHONE_ACK
+	CMD_GPS_CLEANPHONE_ACK
+	CMD_GPS_SETDEVRESTART_ACK
+	CMD_GPS_SETLOCATION_ACK
+	CMD_GPS_SETSUMMER_ACK
+	CMD_GPS_RECOVER_ACK
+	CMD_GPS_SETALARM_ACK
+	CMD_GPS_LOCATIONSTYLE_ACK
+	CMD_GPS_SETBUZZER_ACK
+	CMD_GPS_SETUPDATE_ACK
+)
 
 const (
 	DRT_GT3_BP00_SYNC_TIME = iota
@@ -291,7 +360,6 @@ type MsgHeader struct {
 
 	Count int   //cmd AP11
 	Type int
-
 }
 
 type MsgResumeHeader struct {
@@ -355,6 +423,7 @@ type HeartbeatParams struct {
 	Language string `json:"language"`
 	SelectedDevice string `json:"selectedDevice"`
 	FamilyNumber string `json:"familyNumber"`
+	AlarmFlag	bool	`json:"alarm_flag"`
 }
 
 type AddFriend struct{
@@ -370,14 +439,16 @@ type HeartbeatResult struct {
 	Locations []LocationData`json:"locations"`
 	Minichat []ChatInfo`json:"minichat"`
 	Alarms []LocationData`json:"alarms"`
-
 	ImeiAddFriend	map[uint64][]AddFriend	`json:"imei_add_friend"`
+	ImeiOnline		map[uint64]bool		`json:"imei_online"`
 	BAllData bool    `json:"b_all_data"`	//全部数据flag
 }
 
 type DeviceSettingResult struct {
 	Settings []SettingParam `json:"settings"`
 	MsgId uint64			`json:"msg_id"`
+	SpeedAlarm	string		`json:"speed_alarm"`
+	LocateModel	string		`json:"locate_model"`
 }
 
 type HttpAPIResult struct {
@@ -385,6 +456,13 @@ type HttpAPIResult struct {
 	ErrMsg string  			`json:"errmsg"`
 	Imei string  				`json:"imei,omitempty"`
 	Data  string  			`json:"data,omitempty"`
+}
+type HttpRecoverResult struct{
+	HttpAPIResult
+	SpeedAlarm	string
+	LocateModel,
+	DevBuzzer,
+	DevVer		string
 }
 
 type HttpResetDeviceIPPortParams struct {
@@ -398,6 +476,8 @@ type HttpFetchNotificationParams struct {
 	AccessToken string		`json:"accessToken"`
 	Devices []uint64  		`json:"devices"`
 	LastUpdates []uint64  	`json:"lastUpdates"`
+	Language	string		`json:"language"`
+	UserName	string		`json:"username"`
 }
 
 type AlarmItem struct {
@@ -406,6 +486,7 @@ type AlarmItem struct {
 	FamilyPhone string `json:"familynumber"`
 	Language	string		`json:"language"`
 	Flags	int 	`json:"flags"`
+	AccessToken	string	`json:"access_token"`
 }
 
 type DeviceAlarms struct {
@@ -489,6 +570,12 @@ type DeviceActiveParams struct {
 	AccessToken string		`json:"accessToken"`
 	Phone string			`json:"phone"`
 }
+type DeviceActiveAlarm struct{
+	Imei	string		`json:"imei"`
+	UserName string		`json:"username"`
+	AccessToken	string	`json:"access_token"`
+	Flag	int			`json:"flag"`
+}
 
 type QueryLocationsParams struct {
 	Imei string  				`json:"imei"`
@@ -548,7 +635,7 @@ type DeviceAddParams struct {
 	TimeZone  string 	`json:"timezone"`
 
 	//chenqw
-	AccountType int `json:"accountType"`
+	AccountType int `json:"accountType"`	//AccountType是根据传过去的admin再传回给服务器
 	DeviceToken string `json:"deviceToken"`
 }
 
@@ -576,8 +663,23 @@ type DeleteVoicesParams struct {
 
 type LocateIMEIParams struct{
 	Imei string `json:"imei"`
+	Username string `json:"username"`
+	AccessToken string `json:"accessToken"`
+}
+type ReadVersionParams struct{
+	Imei string `json:"imei"`
+}
+type ReadVersionResult struct{
+	Imei uint64 		`json:"imei"`
+	DevVersion string 		`json:"dev_version"`
 }
 
+type DevRecoverParams struct{
+	Imei string  				`json:"imei"`
+	UserName string		`json:"username"`
+	AccessToken string		`json:"accessToken"`
+	UserId	string	`json:"userId"`
+}
 
 type IPInfo struct {
 	StartIP uint32
@@ -597,10 +699,15 @@ const (
 	DM_GT06
 	DM_GT02
 	DM_GT05
+	DM_GT11
+	DM_GT12
+	DM_GT13
+	DM_GT14
+	DM_GTGPS
 	DM_MAX
 )
 
-var ModelNameList = []string{ "WH01", "GT03","GTI3", "GT06","GT02","GT05"}
+var ModelNameList = []string{ "WH01", "GT03","GTI3", "GT06","GT02","GT05","GT11","GT12","GT13","GT14","GTGPS"}
 
 const (
 	ALARM_INZONE = 1
@@ -609,6 +716,7 @@ const (
 	ALARM_BATTERYLOW = 8
 	ALARM_NEW_MINICHAT = uint8(16)
 	ALARM_DEVICE_DETACHED = 32
+	ALARM_SPEED				= 64
 )
 
 const (
@@ -657,6 +765,20 @@ var DisableLBSFieldName 		= "DisableLBS"
 var RedirectIPPortFieldName 	= "RedirectIPPort"
 
 var CountryCodeFieldName	= "CountryCode"
+
+//gps gator
+var LocateNow				= "GPSLocateNow"
+var ReadVersion				= "GPSReadVersion"
+var CleanAll				= "GPSCleanAll"
+var DevRestart				= "GPSDevRestart"
+var DevRecover				= "GPSDevRecover"
+var SetDevAlarmPhone		= "GPSDevAlarmPhone"
+var SetPhoneNumbers			= "GPSSetDevPhoneNumbers"
+var SetUseDST				= "GPSSetDevUseDST"
+var SetAlarmMsg				= "GPSSetDevAlarmMsg"
+var SetLocateModel			= "GPSSetDevLocateModel"
+var SetDevBuzzer			= "GPSSetDevBuzzer"
+var DevActive				= "GPSDevActive"
 
 var CmdOKTail 				= "-ok"
 var CmdAckTail 				= "-ack"
@@ -713,6 +835,9 @@ var ActiveDeviceSosAckCmdName  	= ActiveDeviceSosCmdName + CmdAckTail
 var SetDeviceVoiceMonitorCmdName  		= "voice-monitor"
 var SetDeviceVoiceMonitorAckCmdName  		= SetDeviceVoiceMonitorCmdName + CmdAckTail
 
+var ActiveAlarmCmdName					= "active-alarm"
+var ActiveAlarmCmdAckName				= ActiveAlarmCmdName + CmdAckTail
+
 var GetLocationsCmdName  			= "get-locations"
 var GetLocationsAckCmdName  		= GetLocationsCmdName + CmdAckTail
 
@@ -733,6 +858,16 @@ var CmdLocationAck				= CmdLocation + CmdAckTail
 
 var CmdAddFriend				= "add-friend"
 var CmdAddFriendAck				= CmdAddFriend + CmdAckTail
+
+var CmdAlarmMsg					= "alarm-msg"
+var CmdAlarmMsgAck				= CmdAlarmMsg + CmdAckTail
+
+var ReadVersionAck				= ReadVersion + CmdAckTail
+var LocateNowAck				= LocateNow + CmdAckTail
+var DevRestartAck				= DevRestart + CmdAckTail
+var DevRecoverAck				= DevRecover + CmdAckTail
+var SetDevBuzzerAck				= SetDevBuzzer + CmdAckTail
+var DevActiveAck				= DevActive + CmdAckTail
 
 type SafeZone struct {
 	ZoneID int32
@@ -819,6 +954,10 @@ type DeviceInfo struct {
 	Family [MAX_FAMILY_MEMBER_NUM]FamilyMember
 	HideTimerOn bool
 	HideTimerList [MAX_HIDE_TIMER_NUM]HideiTimer
+	SpeedAlarm string
+	LocateModel string
+	DevBuzzer string
+	DevVer	string
 }
 
 type DeviceInfoResult struct {
@@ -869,6 +1008,10 @@ type DeviceInfoResult struct {
 	ApnSms string
 
 	AccountType int		//0:管理员,1:非管理员
+	SpeedAlarm string
+	LocateModel string
+	DevBuzzer	string
+	DevVer	string
 }
 
 type WIFIInfo  struct  {
@@ -892,6 +1035,16 @@ type WatchStatus struct {
 	Step uint64
 	AlarmType uint8
 	Battery uint8
+}
+
+type WatchGPSStatus struct {
+	i64DeviceID uint64
+	iLocateType uint8
+	i64Time uint64
+	Speed int32
+	AlarmType uint8
+	Battery uint8
+	LocateModel string
 }
 
 type Getdeviceinfoimei struct {
@@ -927,8 +1080,8 @@ var DeviceInfoListLock =  sync.Mutex{}
 var SystemNo2ImeiMap = map[uint64]uint64{}
 var SystemNo2ImeiMapLock =  sync.Mutex{}
 
-//
-var MapPhone2IMEI = &map[string]uint64{}
+//自己的亲情号码下对应的好友关系
+var MapPhone2IMEI = &map[uint64]map[string]uint64{}
 var MapPhone2IMEILock = sync.Mutex{}
 
 type CMDAP11Status struct {
@@ -970,30 +1123,25 @@ var MapKey []string = []string{
 	"14ac4c6f29b4e4a99aceff95425d3cd1",
 }
 
-//chenqw,20171129,encrypted flag
-var DevConnidenc = map[uint64]bool{}
-//dev's max logining count when login with wrong password
-//var LoginTimeOut = map[uint64]int64{}
+
 var ConnidLogin = map[uint64]int{}
 type TagUserName struct{
 	Username string
 	Phone	string
 }
 var ConnidUserName = map[uint64]map[string]string{}
-//var ConnidtagUserName = map[string]TagUserName{}
-var AccessTokenMap = map[string]string{}
-var MapAccessToLang = map[string]string{}
+var AccessTokenMap = sync.Map{}
+var MapAccessToLang = sync.Map{}
 var CommonLock = sync.Mutex{}
 var (
-	redisPool *redis.Pool
+	RedisPool *redis.Pool
 )
-
 
 func InitRedisPool(redisURI string) {
 	if redisURI == "" {
 		redisURI =  ":6379"
 	}
-	redisPool = &redis.Pool{
+	RedisPool = &redis.Pool{
 		MaxIdle:   100,
 		MaxActive: 12000,
 		Dial: func() (redis.Conn, error) {
@@ -1507,7 +1655,10 @@ func MakeDeviceInfoResult(deviceInfo *DeviceInfo) DeviceInfoResult {
 	result.ApnSms = deviceInfo.ApnSms
 	result.DisableWiFi = Bool2UInt8(deviceInfo.DisableWiFi)
 	result.DisableLBS = Bool2UInt8(deviceInfo.DisableLBS)
-
+	result.SpeedAlarm = deviceInfo.SpeedAlarm
+	result.LocateModel = deviceInfo.LocateModel
+	result.DevBuzzer = deviceInfo.DevBuzzer
+	result.DevVer 	 = deviceInfo.DevVer
 	return result
 }
 
@@ -1516,7 +1667,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		" w.ChildPowerOff, w.UseDST, w.SocketModeOff, w.Volume, w.Lang, w.VerifyCode, w.Fence1,w.Fence2, w.Fence3," +
 		" w.Fence4,w.Fence5,w.Fence6,w.Fence7,w.Fence8,w.Fence9,w.Fence10, w.WatchAlarm0, w.WatchAlarm1, " +
 		" w.WatchAlarm2,w.WatchAlarm3, w.WatchAlarm4,w.HideSelf,w.HideTimer0,w.HideTimer1,w.HideTimer2," +
-		" w.HideTimer3, w.DisableWiFi,w.DisableLBS,w.RedirectIPPort,w.LocateInterval, pm.model, c.name, c.host, c.port, c.Redirect, c.APN  from watchinfo w join device d on w.recid=d.recid join productmodel pm  " +
+		" w.HideTimer3, w.DisableWiFi,w.DisableLBS,w.RedirectIPPort,w.LocateInterval,w.SpeedAlarm,w.LocateModel,w.DevBuzzer,w.DevVer,pm.model, c.name, c.host, c.port, c.Redirect, c.APN  from watchinfo w join device d on w.recid=d.recid join productmodel pm  " +
 		" on d.modelid=pm.recid join companies c on d.companyid=c.recid where pm.model != 'WH01' ")
 	if err != nil {
 		logging.Log(fmt.Sprintf("LoadDeviceInfoFromDB failed,", err.Error()))
@@ -1557,6 +1708,10 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		DisableLBS interface{}
 		RedirectIPPort interface{}
 		LocateInterval interface{}
+		SpeedAlarm	interface{}
+		LocateModel	interface{}
+		DevBuzzer	interface{}
+		DevVer		interface{}
 	)
 
 	var imeiunit64 uint64
@@ -1570,7 +1725,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 			&ChildPowerOff, &UseDST, &SocketModeOff, &Volume, &Lang, &VerifyCode, &Fences[0], &Fences[1], &Fences[2],
 			&Fences[3], &Fences[4], &Fences[5], &Fences[6], &Fences[7], &Fences[8], &Fences[9], &WatchAlarms[0], &WatchAlarms[1],
 			&WatchAlarms[2], &WatchAlarms[3], &WatchAlarms[4], &HideSelf, &HideTimers[0], &HideTimers[1], &HideTimers[2],
-			&HideTimers[3], &DisableWiFi, &DisableLBS, &RedirectIPPort,&LocateInterval, &Model, &Company, &CompanyHost,
+			&HideTimers[3], &DisableWiFi, &DisableLBS, &RedirectIPPort,&LocateInterval, &SpeedAlarm,&LocateModel,&DevBuzzer,&DevVer,&Model, &Company, &CompanyHost,
 			&CompanyPort, &RedirectServer, &ApnSms)
 		if err != nil {
 			fmt.Println("row scan err: ", err.Error())
@@ -1584,7 +1739,11 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		//
 		for k,_ := range deviceInfo.Family{
 			if deviceInfo.Family[k].IsAddFriend == 1{
-				(*MapPhone2IMEI)[deviceInfo.Family[k].Phone] = deviceInfo.Family[k].FriendImei
+				_,ok := (*MapPhone2IMEI)[imeiunit64]
+				if !ok{
+					(*MapPhone2IMEI)[imeiunit64] = map[string]uint64{}
+				}
+				(*MapPhone2IMEI)[imeiunit64][deviceInfo.Family[k].Phone] = deviceInfo.Family[k].FriendImei
 			}
 		}
 		deviceInfo.TimeZone  = ParseTimeZone(parseUint8Array(TimeZone))
@@ -1608,10 +1767,33 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 		deviceInfo.RedirectServer = parseUint8Array(RedirectServer) == "1"
 		deviceInfo.HideVoiceMonitor = IsHideVoiceMonitor(deviceInfo.Company)
 		deviceInfo.ApnSms = parseUint8Array(ApnSms)
+		if deviceInfo.ApnSms != ""{
+			//set device apns modified by steven 20190107
+			var apn string = "#APN#"
+			apn += deviceInfo.ApnSms
+			if deviceInfo.Model == DM_GT03 {
+				apn += "#000000#"
+			}else if deviceInfo.Model == DM_GTI3 {
+				apn += "#091230#"
+			}else if deviceInfo.Model == DM_GTGPS ||
+				deviceInfo.Model == DM_GT11 ||
+				deviceInfo.Model == DM_GT12 ||
+				deviceInfo.Model == DM_GT13 ||
+				deviceInfo.Model == DM_GT14{
+				apn += "#"
+				apn += Num2Str(imeiunit64 % 1000000,10)
+				apn += "#"
+			}
+			deviceInfo.ApnSms = apn
+		}
 		deviceInfo.DisableWiFi = parseUint8Array(DisableWiFi) == "1"
 		deviceInfo.DisableLBS = parseUint8Array(DisableLBS) == "1"
 		deviceInfo.RedirectIPPort = parseUint8Array(RedirectIPPort) == "1"
 		deviceInfo.LocateInterval = int(Str2Num(parseUint8Array(LocateInterval), 10))
+		deviceInfo.SpeedAlarm =  parseUint8Array(SpeedAlarm)
+		deviceInfo.LocateModel = parseUint8Array(LocateModel)
+		deviceInfo.DevBuzzer = parseUint8Array(DevBuzzer)
+		deviceInfo.DevVer = parseUint8Array(DevVer)
 		(*tmpDeviceInfoList)[deviceInfo.Imei] = deviceInfo
 
 		tmpSystemNo2ImeiMap[deviceInfo.Imei % 100000000000] = deviceInfo.Imei
@@ -1631,6 +1813,8 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 			}
 			ConnidUserName[imeiunit64][deviceInfo.Family[i].Phone] = deviceInfo.Family[i].Username
 		}
+
+		//Mapimeib12[imeiunit64] = true
 	}
 
 	fmt.Println("deviceinfo list len: ", len(*tmpDeviceInfoList))
@@ -1765,7 +1949,7 @@ func ParseContactAvatars(contactAvatars string, familyMemberList *[MAX_FAMILY_ME
 	}
 	err := json.Unmarshal([]byte(contactAvatars), &avatars)
 	if err != nil {
-		logging.Log(fmt.Sprintf("parse contact avatars failed,contactAvatars = %s,err = %s ",contactAvatars,err.Error()))
+		//logging.Log(fmt.Sprintf("parse contact avatars failed,contactAvatars = %s,err = %s ",contactAvatars,err.Error()))
 		return
 	}
 
@@ -1896,6 +2080,20 @@ func IntCmd(cmd string) uint16 {
 
 func StringCmd(cmd uint16) string {
 	return commands[cmd]
+}
+
+func IntGpsCmd(cmd string) uint16  {
+	for i,c := range (gpscommands)  {
+		if c == cmd{
+			return uint16(i)
+		}
+	}
+
+	return 0
+}
+
+func StringGpsCmd(cmd uint16) string {
+	return gpscommands[cmd]
 }
 
 func Gt3StringCmd(cmd uint16) string {

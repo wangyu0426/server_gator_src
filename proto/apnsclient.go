@@ -76,10 +76,9 @@ func PushNotificationToAppEx(apiBaseURL string, imei uint64, ownerName string, c
 			}
 
 			if (chat.Receiver == deviceInfo.Family[i].Phone &&
-				chat.Receiver != "0") ||
+				chat.Receiver != "0" && chat.Flags != 1) ||
 				len(chat.Receiver) == 0 ||
-				chat.Receiver == "0" ||
-				chat.Flags == 1 {
+				chat.Receiver == "0"{
 
 				urlRequest := apiBaseURL + "/push"
 				pushInfo := pushJSON{imei, chat.Receiver, ownerName, chat.DateTime, alarmType, zoneName,chat.Flags}

@@ -227,7 +227,6 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 								(*DevicePushCache[msg.Header.Header.Imei])[index] = msg
 							}
 						}
-
 					} else {
 						*DevicePushCache[msg.Header.Header.Imei] = append(*DevicePushCache[msg.Header.Header.Imei], msg)
 					}
@@ -254,7 +253,8 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 								tempCache = append(tempCache, cachedMsg)
 								continue
 							}
-
+							logging.Log(fmt.Sprintf("[%d] tempcache:%d,%t,%d,%d",
+								msg.Header.Header.Imei,cachedMsg.Header.Header.Cmd,isPushCache,cachedMsg.Header.Header.Status,len(*cache)))
 							if cachedMsg.Header.Header.Status == 0 {
 								//0， 不需要手表回复确认，直接发送完并删除
 								//对于AP11,需要加30s延迟，不能连续发送太快
@@ -300,6 +300,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 									}
 								}else{ //未收到确认，如果当前消息是通知继续推送数据并且时间已经超过30s，才会发送
 									if isPushCache {
+										logging.Log(fmt.Sprintf("[%d] pushcache msg:%d",cachedMsg.Header.Header.Imei,cachedMsg.Header.Header.Cmd))
 										timeout := (proto.NewMsgID() - cachedMsg.Header.Header.LastPushTime) / uint64(time.Second)
 										if timeout >=  uint64(serverCtx.MaxPushDataTimeSecs) {
 											logging.Log(fmt.Sprintf("[%d] push data timeout more than one day, need to remove/delete", msg.Header.Header.Imei))
@@ -319,7 +320,7 @@ func ConnManagerLoop(serverCtx *svrctx.ServerContext) {
 											//cachedMsg.Header.Header.LastPushTime = proto.NewMsgID()
 										}
 									}
-
+									//tempCache每次都初始化了，所以这里也要加上AP03和AP14消息,实时推送
 									tempCache = append(tempCache, cachedMsg)
 								}
 							}else{
@@ -361,7 +362,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 	defer logging.PanicLogAndExit("ConnReadLoop")
 
 	defer func() {
-		logging.Log(fmt.Sprintf("client %d connection closed",c.connid))
+		logging.Log(fmt.Sprintf("[%d] client %d connection closed",c.imei,c.connid))
 		delConnChan <- c
 	}()
 
@@ -391,7 +392,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		//首先判断是加密协议还是明文协议
 		protoVer := preparseMsgHeader(string(headerBuf))
 		if protoVer != GT6_PROTO_V1 && protoVer != GT6_PROTO_V2 { //headerBuf[0] != '(' {
-			logging.Log("bad format of data packet, it must begin with ( or G")
+			logging.Log(fmt.Sprintf("[%d]bad format of data packet, it must begin with ( or G,headbuf:%s",c.imei,headerBuf))
 			break
 		}
 
@@ -420,7 +421,7 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 			c.conn.SetReadDeadline(time.Now().Add(time.Second * serverCtx.RecvTimeout))
 		}
 		n, err := io.ReadFull(c.conn, dataBuf)
-		//logging.Log(fmt.Sprintf("dataBuf:%s,len(dataBuf):%d,n = %d",dataBuf,len(dataBuf),n))
+		logging.Log(fmt.Sprintf("dataBuf:%s,len(dataBuf):%d,n = %d",dataBuf,len(dataBuf),n))
 		if err == nil && n == len(dataBuf) {
 			full = true
 		}else {
@@ -506,6 +507,10 @@ func ConnReadLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 		// 包可能接收未完整，但此时可以开始进行业务逻辑处理
 		// 目前所有头部信息都已准备好，业务处理模块只需处理与断点续传相关逻辑
 		// 以及命令的实际逻辑
+		if c.IsClosed(){
+			logging.Log(fmt.Sprintf("[%d] requsetChan is closed",msg.Header.Header.Imei))
+			break
+		}
 		c.requestChan <- msg
 
 		//业务逻辑只处理完整的请求和不完整的微聊请求，处理完请求以后，
@@ -523,11 +528,11 @@ func ConnWriteLoop(c *Connection) {
 	for   {
 		select {
 		case <-c.closeChan:
-			logging.Log("write goroutine exit")
+			logging.Log(fmt.Sprintf("[%d] write goroutine exit",c.imei))
 			return
 		case data := <-c.responseChan:
 			if data == nil ||  c.IsClosed() { //连接关闭了，这里需要将响应数据推入续传队列
-				logging.Log("connection closed, write goroutine exit")
+				logging.Log(fmt.Sprintf("[%d] connection closed, write goroutine exit",c.imei))
 
 				//连接关闭了，这里需要将响应数据推入续传队列
 				return
@@ -567,11 +572,11 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 	for {
 		select {
 		case <-c.closeChan:
-			logging.Log("business goroutine exit")
+			logging.Log(fmt.Sprintf("[%d] business goroutine exit",c.imei))
 			return
 		case data := <-c.requestChan:
 			if data == nil {
-				logging.Log("gt06 connection closed, business goroutine exit")
+				logging.Log(fmt.Sprintf("[%d] gt06 connection closed, business goroutine exit",c.imei))
 				return
 			}
 
@@ -592,6 +597,8 @@ func BusinessHandleLoop(c *Connection, serverCtx *svrctx.ServerContext) {
 				SetDeviceDataFunc: svrctx.SetDeviceData,
 				GetChatDataFunc: svrctx.GetChatData,
 				AddChatDataFunc: svrctx.AddChatData,
+				GetAddressFunc:svrctx.GetAddress,
+				FriendAvatar:serverCtx.FriendAvatar,
 			})
 		}
 	}
@@ -640,7 +647,7 @@ func TcpServerRunLoop(serverCtx *svrctx.ServerContext)  {
 			}
 		}
 
-		c := newConn(conn)
+		c := NewConn(conn)
 		c.lastActiveTime = time.Now().Unix()
 
 		//for reading

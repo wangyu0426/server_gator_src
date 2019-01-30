@@ -19,6 +19,7 @@ import (
 	_"net/http/pprof"
 	"bytes"
 	"image/jpeg"
+	"crypto/x509"
 )
 
 // go get github.com/golang/net
@@ -140,7 +141,7 @@ func LocalAPIServerRunLoop(serverCtx *svrctx.ServerContext) {
 
 	addr := fmt.Sprintf("%s:%d", serverCtx.LocalAPIBindAddr, 18016)
 	go http.ListenAndServeTLS(addr,
-		"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.cer",
+		"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.crt",
 		"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.key",nil)
 
 	addr = fmt.Sprintf("%s:%d", serverCtx.LocalAPIBindAddr, serverCtx.LocalAPIPort)
@@ -187,7 +188,7 @@ func AppServerRunLoop(serverCtx *svrctx.ServerContext)  {
 
 		go http.ListenAndServe(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSPort), nil)
 		err := http.ListenAndServeTLS(fmt.Sprintf("%s:%d", serverCtx.BindAddr, serverCtx.WSSPort),
-			"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.cer",
+			"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.crt",
 			"/home/ec2-user/work/codes/https_test/watch.gatorcn.com/watch.gatorcn.com.key",nil)
 		logging.Log("http.ListenAndServeTLS return error: " + err.Error())
 	}else{
@@ -310,7 +311,12 @@ func AppConnManagerLoop() {
 					break
 				}
 
-			}else if (msg.Cmd == proto.CmdAddFriendAck && msg.AddFriend == true) || msg.Cmd == proto.SetDeviceAckCmdName{
+			}else if (msg.Cmd == proto.CmdAddFriendAck && msg.AddFriend == true) ||
+				msg.Cmd == proto.SetDeviceAckCmdName ||
+				msg.Cmd == proto.CmdAlarmMsgAck ||
+				msg.Cmd == proto.ReadVersionAck ||
+			    msg.Cmd == proto.SetDevBuzzerAck ||
+				msg.Cmd == proto.DevActiveAck {
 				//imei add friend
 				if len(imeiAppUsers) > 0{
 					for username,_ := range imeiAppUsers{
@@ -334,22 +340,26 @@ func AppConnManagerLoop() {
 					if userConnTable != nil {
 						for _, c := range userConnTable {
 							if c != nil  && c.responseChan != nil {
-								for _,chat := range param.Minichat{
-									if len(chat.Receiver) > 1 && chat.SenderType != 1 && chat.Flags != 1{
-										//对于手机端发送的微聊，修改set-device 命令对应的键值对
-										phone2name,ok := proto.ConnidUserName[msg.Imei]
-										logging.Log(fmt.Sprintf("receiver from watch:%s--%s--%s", chat.Receiver,phone2name[chat.Receiver],c.user.Name))
-										if ok {
-											if phone2name[chat.Receiver] == c.user.Name {
-												logging.Log(fmt.Sprintf("receiver from watch:%s", c.user.Name))
-												c.responseChan <- msg
-												break
+								if len(param.Minichat) > 0 {
+									for _, chat := range param.Minichat {
+										if len(chat.Receiver) > 1 && chat.SenderType != proto.ChatFromAppToDevice && chat.Flags != proto.FriendChat {
+											//对于手机端发送的微聊，修改set-device 命令对应的键值对
+											phone2name, ok := proto.ConnidUserName[msg.Imei]
+											logging.Log(fmt.Sprintf("receiver from watch:%s--%s--%s", chat.Receiver, phone2name[chat.Receiver], c.user.Name))
+											if ok {
+												if phone2name[chat.Receiver] == c.user.Name {
+													logging.Log(fmt.Sprintf("receiver from watch:%s", c.user.Name))
+													c.responseChan <- msg
+													break
+												}
 											}
+										} else {
+											c.responseChan <- msg
+											break
 										}
-									}else {
-										c.responseChan <- msg
-										break
 									}
+								}else {
+									c.responseChan <- msg
 								}
 							}
 
@@ -376,8 +386,12 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 
 	//设置图片时不传index,由我来查找phone
 	//phone := r.FormValue("phone")
-	logging.Log(fmt.Sprintf( "HandleUploadFile imei %s username %s fieldname %s msgId %s phone %s",
-		imei,username,fieldname,r.FormValue("msgId"),phone))
+	logging.Log(fmt.Sprintf( "HandleUploadFile imei %s username %s accesstoken %s fieldname %s msgId %s",
+		imei,username,accessToken,fieldname,r.FormValue("msgId")))
+	if len(imei) < 6 || len(username) < 6 || len(accessToken) < 6{
+		logging.Log("HandleUploadFile:imei length is less than 6!")
+		return
+	}
 	if imei[:6] != "GTS01:" || username[:6] != "GTS01:" || accessToken[:6] != "GTS01:" {
 		logging.Log("HandleUploadFile:not encrypted!")
 		return
@@ -397,6 +411,11 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	logging.Log(fmt.Sprint( "imeiList 0 :", r.FormValue("username"), r.FormValue("accessToken"), imeiList))
 	if valid == false{
 		logging.Log("HandleUploadFile:access token is not found")
+		return
+	}
+	//判断imei是否在username的登录列表里
+	if !InStringArray(imei,imeiList) {
+		logging.Log(fmt.Sprintf("imei [%s] is not in the imeilist [%s]",imei,imeiList))
 		return
 	}
 
@@ -540,7 +559,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		settings[0].FieldName = fieldname
 		settings[0].NewValue = svrctx.Get().HttpStaticAvatarDir + imei + "/" + fileName
 
-		ret,_ := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil,nil)
+		ret,_ := SaveDeviceSettings(proto.Str2Num(imei, 10), settings, nil)
 		if ret {
 			if uploadType == "contactAvatar" {
 				photoInfo := proto.PhotoSettingInfo{}
@@ -635,7 +654,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		chat.CreateTime = proto.NewMsgID()
 		chat.Imei = imeiUint64
 		chat.Sender = phone
-		chat.SenderType = 1
+		chat.SenderType = proto.ChatFromAppToDevice
 		chat.SenderUser = username
 		chat.VoiceMilisecs = int(proto.Str2Num(r.FormValue("duration"), 10))
 		chat.ContentType = proto.ChatContentVoice
@@ -655,6 +674,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		err9, _ := proto.ExecCmd("ffmpeg", strings.Split(args, " ")...)
 		if err9 != nil {
 			logging.Log(fmt.Sprintf("[%d] ffmpeg %s failed, %s", imeiUint64, args, err9.Error()))
+			return
 		}
 
 		if !bFound {
@@ -670,7 +690,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 		proto.AddChatForApp(chat)
 
 		//这里应该通知APP，微聊列表有新的项
-		proto.NotifyAppWithNewMinichat("", imeiUint64, appServerChan, chat)
+		proto.NotifyAppWithNewMinichat("", imeiUint64, appServerChan, chat,svrctx.Get().FriendAvatar)
 		//result.Data = fmt.Sprintf("%s:%d%s", svrctx.Get().HttpServerName, svrctx.Get().WSPort,svrctx.Get().HttpStaticURL +
 		//svrctx.Get().HttpStaticMinichatDir +  imei + "/" +  fileName)
 
@@ -830,60 +850,34 @@ func AppConnWriteLoop(c *AppConnection) {
 			}
 
 			sendData := proto.MakeStructToJson(data)
-			if proto.DevConnidenc[c.ID] == true {
-				//sendData = strings.Replace(sendData, "\\", "", -1)
-				//logging.Log(fmt.Sprintf("sendData: %s", sendData))
-				//chenqw,20171124
-				pos := strings.Index(sendData, "data")
-				if pos == -1 {
-					return
-				}
-				/*commondata := sendData[:pos]
-				//pos += len("data:")
+			//sendData = strings.Replace(sendData, "\\", "", -1)
+			//logging.Log(fmt.Sprintf("sendData: %s", sendData))
+			//chenqw,20171124
+			pos := strings.Index(sendData, "data")
+			if pos == -1 {
+				return
+			}
 
-				//commondata   {"cmd":"login-ack","data":
-				logging.Log(fmt.Sprintf("sendData[:pos + 1]: %s\n\n", commondata))
-				//pos -= len("data:")
-				byteToenc := sendData[pos:]
-				//byteToenc = byteToenc[1:len(byteToenc) - 1]
-				pos = strings.Index(byteToenc, "\"{")
-				if pos == -1 {
-					return
-				}
-				Data := byteToenc[:pos]
-				Data += byteToenc[pos+1:]
-				pos = strings.Index(Data, "}\"")
-				if pos == -1 {
-					return
-				}
-				encrytSendData := Data[:pos+1]
-				encrytSendData += Data[pos+2:]
-				commondata += encrytSendData*/
-				logging.Log(fmt.Sprintf("the new enc data: %s\n\n", sendData))
-				encrytSendData, err := proto.AppserAesEncrypt(sendData)
-				if err != nil {
-					return
-				}
-				/*-------------------------------------------------------------------*/
+			logging.Log(fmt.Sprintf("the new enc data: %s\n\n", sendData))
+			encrytSendData, err := proto.AppserAesEncrypt(sendData)
+			if err != nil {
+				return
+			}
+			/*-------------------------------------------------------------------*/
 
-				fmt.Printf("sendData: %s\n", encrytSendData)
+			fmt.Printf("sendData: %s\n", encrytSendData)
 
-				theDataToApp := "{\"GTA01\":"
-				theDataToApp += "\"" + encrytSendData + "\"}"
+			theDataToApp := "{\"GTA01\":"
+			theDataToApp += "\"" + encrytSendData + "\"}"
 
-				/*-------------------------------------------------------------------*/
-				if n, err := c.conn.Write([]byte(theDataToApp)); err != nil {
-					logging.Log(fmt.Sprintf("send commondata to client failed: %s,  %d bytes sent", err.Error(), n))
-				} else {
-					//logging.Log(fmt.Sprintf("send commondata to client: %s,  %d bytes sent", theDataToApp, n))
-				}
+			/*-------------------------------------------------------------------*/
+			if n, err := c.conn.Write([]byte(theDataToApp)); err != nil {
+				logging.Log(fmt.Sprintf("send commondata to client failed: %s,  %d bytes sent", err.Error(), n))
+				//if !c.IsClosed() {
+				//	close(c.responseChan)
+				//}
 			} else {
-				//send data with no encrypt
-				if n, err := c.conn.Write([]byte(sendData)); err != nil {
-					logging.Log(fmt.Sprintf("send data to client failed: %s,  %d bytes sent", err.Error(), n))
-				} else {
-					//logging.Log(fmt.Sprintf("send data to client: %s,  %d bytes sent", sendData, n))
-				}
+				//logging.Log(fmt.Sprintf("send commondata to client: %s,  %d bytes sent", theDataToApp, n))
 			}
 
 		}
@@ -1039,7 +1033,7 @@ func GetLocationsByURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	datatype := r.FormValue("datatype")
-	var locations *[]proto.LocationData
+	var locations *svrctx.Location_data
 	if datatype == "1"{
 		dataResult := proto.PhpQueryLocationsResult{Result: 0, ResultStr: "",  Systemno: systemno}
 		data := svrctx.GetDeviceData(imei, svrctx.Get().PGPool)
@@ -1140,7 +1134,7 @@ func GetLocationsByURLfromPHP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	datatype := r.FormValue("datatype")
-	var locations *[]proto.LocationData
+	var locations *svrctx.Location_data
 	if datatype == "1"{
 		dataResult := proto.PhpQueryLocationsResult{Result: 0, ResultStr: "",  Systemno: systemno}
 		data := svrctx.GetDeviceData(imei, svrctx.Get().PGPool)
@@ -1229,7 +1223,7 @@ func GetAppVersionOnline(w http.ResponseWriter, r *http.Request) {
 	if platform=="android" {
 		pos := strings.Index(string(body), "softwareVersion")
 		if pos < 0 {
-			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
+			logging.Log("get app verion from online store response has err, softwareVersion" + " , " + reqUrl)
 			JSON2(w, 500, (&result))
 			return
 		}
@@ -1253,7 +1247,7 @@ func GetAppVersionOnline(w http.ResponseWriter, r *http.Request) {
 	}else{
 		pos := strings.Index(string(body), "softwareVersion")
 		if pos < 0 {
-			logging.Log("get app verion from online store response has err, " + err.Error() + " , " + reqUrl)
+			logging.Log("get app verion from online store response has err, 2" +  " , " + reqUrl)
 			JSON2(w, 500, (&result))
 			return
 		}
@@ -1464,10 +1458,21 @@ func ValidAccessTokenFromService(AccessToken string)  (bool, []string) {
 	}
 	}
 
-
-	tr := &http.Transport{
-		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	pool := x509.NewCertPool()
+	caCertPath := "/home/ec2-user/work/codes/https_test/watch.gatorcn.com/gd_bundle-g2-g1.crt"
+	caCrt,err := ioutil.ReadFile(caCertPath)
+	if err != nil{
+		logging.Log("ReadFile gd_bundle-g2-g1.crt failed, " + err.Error())
+		return false,nil
 	}
+	pool.AppendCertsFromPEM(caCrt)
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{RootCAs:pool},
+	}
+
+	//tr := &http.Transport{
+	//	TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	//}
 	client := &http.Client{Transport: tr}
 
 
@@ -1633,6 +1638,16 @@ func TcpServerBridgeRunLoop(serverCtx *svrctx.ServerContext) {
 				fallthrough
 			case proto.DM_GT02:
 				serverCtx.GT3TcpServerChan <- msg
+			case proto.DM_GT11:
+				fallthrough
+			case proto.DM_GT12:
+				fallthrough
+			case proto.DM_GT13:
+				fallthrough
+			case proto.DM_GT14:
+				fallthrough
+			case proto.DM_GTGPS:
+				serverCtx.GTGPSTcpServerChan <- msg
 			case proto.DM_WH01:
 			default:
 
@@ -1658,7 +1673,7 @@ func GetNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//logging.Log("GetNotifications Params: " + proto.MakeStructToJson(&params))
+	//fmt.Println("GetNotifications Params: " + proto.MakeStructToJson(&params))
 
 	if params.AccessToken == "" || len(params.Devices) == 0 || len(params.LastUpdates) == 0 || (len(params.Devices)  != len(params.LastUpdates)){
 		result.ErrCode = -1
@@ -1691,7 +1706,8 @@ LABEL_REDIS:
 	if err != nil {
 		goto LABEL_REDIS
 	}
-	fmt.Println("redis distribute lock success:",params.Devices,params.LastUpdates)
+	//fmt.Println("redis distribute lock success:",params.Devices,params.LastUpdates,"1:",
+	//	proto.AccessTokenMap[params.AccessToken],"2:",proto.MapAccessToLang[params.AccessToken])
 	for i, imei := range params.Devices {
 		if imei != 0 && InStringArray(proto.Num2Str(imei, 10), imeiList){
 			deviceAlarms := proto.DeviceAlarms{}
@@ -1715,44 +1731,52 @@ LABEL_REDIS:
 					alarmItem := proto.AlarmItem{}
 					err := json.Unmarshal([]byte(alarmContent), &alarmItem)
 
-					proto.DeviceInfoListLock.Lock()
-					deviceInfo, ok := (*proto.DeviceInfoList)[imei]
-					if ok{
-						proto.CommonLock.Lock()
-						for k,_ := range deviceInfo.Family{
-							//单独推送,
-							if ((deviceInfo.Family[k].Phone == alarmItem.FamilyPhone ||
-								alarmItem.FamilyPhone == "" ||
-								alarmItem.FamilyPhone == "0" ) &&
-								(proto.AccessTokenMap[params.AccessToken] == deviceInfo.Family[k].Username) &&
-								(proto.MapAccessToLang[params.AccessToken] == alarmItem.Language)) ||
-								alarmItem.Flags == 1{
+					if len(params.Language) == 0 || len(params.UserName) == 0 {
+						proto.DeviceInfoListLock.Lock()
+						deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+						if ok {
+							userName,_ := proto.AccessTokenMap.Load(params.AccessToken)
+							language,_ := proto.MapAccessToLang.Load(params.AccessToken)
+							//proto.CommonLock.Lock()
+							for k, _ := range deviceInfo.Family {
+								//单独推送,
+								if ((deviceInfo.Family[k].Phone == alarmItem.FamilyPhone ||
+									alarmItem.FamilyPhone == "" ||
+									alarmItem.FamilyPhone == "0" ) &&
+									(userName == deviceInfo.Family[k].Username) &&
+									(language == alarmItem.Language)) ||
+									alarmItem.Flags == 1 {
 
 									bOk = true
+									break
+								}
 							}
+							//proto.CommonLock.Unlock()
 						}
-						proto.CommonLock.Unlock()
+						proto.DeviceInfoListLock.Unlock()
+
+					}else {
+						if params.AccessToken == alarmItem.AccessToken && params.Language == alarmItem.Language {
+							bOk = true
+						}
 					}
-					proto.DeviceInfoListLock.Unlock()
-
-
+					//logging.Log(fmt.Sprintf("alarmItem:%t--%d--%s--%s--%s--%s--%s",bOk,imei,
+					//	params.AccessToken,alarmItem.AccessToken,alarmItem.Language,params.Language,params.UserName))
 					if bOk {
 						if err != nil {
 							logging.Log(fmt.Sprintf("parse json string failed for ntfy:%d, err: %s", imei, err.Error()))
 						} else {
-							if alarmItem.Time > params.LastUpdates[i] {
-								proto.CommonLock.Lock()
+							//好友微聊不推送
+							if alarmItem.Time > params.LastUpdates[i] && alarmItem.Flags != 1{
+								//proto.CommonLock.Lock()
+								lang,_ := proto.MapAccessToLang.Load(params.AccessToken)
+								userName,_ := proto.AccessTokenMap.Load(params.AccessToken)
 								logging.Log(fmt.Sprintf("token:%s==%s==%s==%s==%d",
-									proto.MapAccessToLang[params.AccessToken],alarmItem.Language,proto.AccessTokenMap[params.AccessToken],alarmItem.Alarm,params.Devices))
-								proto.CommonLock.Unlock()
+									lang,alarmItem.Language,userName,alarmItem.Alarm,params.Devices))
+								//proto.CommonLock.Unlock()
 								deviceAlarms.Alarms = append(deviceAlarms.Alarms, alarmItem)
-
-								//发送推送后删除之
-								//response,err := conn.Do("RPOP",fmt.Sprintf("ntfy:%d",imei))
-								//if err != nil{
-								//	logging.Log(fmt.Sprintf("RPOP ntfy:%d error %s",imei,err.Error()))
-								//}
-								//logging.Log(fmt.Sprintf("RPOP ntfy:%d %s",imei,parseUint8Array(response)))
+							}else {
+								break
 							}
 						}
 					}

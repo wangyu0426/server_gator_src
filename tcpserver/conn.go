@@ -25,7 +25,7 @@ type Connection struct {
 	responseChan chan  *proto.MsgData
 }
 
-func newConn(conn *net.TCPConn)  *Connection{
+func NewConn(conn *net.TCPConn)  *Connection{
 	addr,  _:= net.ResolveTCPAddr("tcp", conn.RemoteAddr().String())
 	return &Connection{
 		connid: proto.NewMsgID(),
@@ -33,8 +33,8 @@ func newConn(conn *net.TCPConn)  *Connection{
 		IP:  binary.BigEndian.Uint32(addr.IP.To4()),
 		Port: addr.Port,
 		closeChan: make(chan struct{}),
-		requestChan: make(chan *proto.MsgData, 16),
-		responseChan: make(chan *proto.MsgData, 16),
+		requestChan: make(chan *proto.MsgData, 20*1024),
+		responseChan: make(chan *proto.MsgData, 20*1024),
 	}
 }
 

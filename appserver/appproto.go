@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"../proto"
 	"../svrctx"
+	"../tracetcpserver"
+	"../tcpserver"
 	"fmt"
 	"time"
 	"strconv"
@@ -25,6 +27,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"image/gif"
+	"crypto/x509"
 )
 
 const (
@@ -78,10 +81,8 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 
 	var itf interface{}
 	header := data[:6]
-	proto.DevConnidenc[connid] = false
+
 	if string(header) == "GTS01:" {
-		//logging.Log(fmt.Sprintf("handle connid:%d\n\n",connid))
-		proto.DevConnidenc[connid] = true
 		ens := data[6:len(data)]
 		//logging.Log("ens: " + string(ens))
 		desc := proto.AppserDecrypt(string(ens))
@@ -365,6 +366,47 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		if InStringArray(params.Imei,imeiList) == false{
 			return false
 		}
+	case proto.ActiveAlarmCmdName:
+		datas := msg["data"].(map[string]interface{})
+		params := proto.DeviceActiveAlarm{Imei: datas["imei"].(string),
+			UserName: datas["username"].(string),
+			Flag:datas["flag"].(int)}
+		if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}
+		return AppActiveDeviceAlarm(connid,&params)
+
+	case proto.ReadVersion:
+		data := msg["data"].(map[string]interface{})
+		params := proto.ReadVersionParams{Imei:data["imei"].(string)}
+		if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}
+		return AppReadVersion(&params)
+	case proto.LocateNow:
+		data := msg["data"].(map[string]interface{})
+		params := proto.LocateIMEIParams{Imei:data["imei"].(string),
+			Username:data["username"].(string),AccessToken:data["accessToken"].(string)}
+		if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}
+		return AppLocateNow(connid,&params)
+	case proto.DevRestart:
+		data := msg["data"].(map[string]interface{})
+		params := proto.DeviceBaseParams{Imei:data["imei"].(string),
+			UserName:data["username"].(string),AccessToken:data["accessToken"].(string)}
+		if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}
+		return AppDevRestart(connid,&params)
+	case proto.DevRecover:
+		data := msg["data"].(map[string]interface{})
+		params := proto.DevRecoverParams{Imei:data["imei"].(string),
+			UserName:data["username"].(string),AccessToken:data["accessToken"].(string),UserId:data["userId"].(string)}
+		if InStringArray(params.Imei, imeiList) == false {
+			return false
+		}
+		return AppDevRecover(connid,&params)
 	default:
 		break
 	}
@@ -377,13 +419,15 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 		logging.Log("no AccessToken," + params.UserName)
 		return true
 	}
-	logging.Log(fmt.Sprintf("handleHeartBeat params:UserName:%s,SelectedDevice:%s,familynumber:%s,Devices:%s--%s--%s--%s--%s",
-		params.UserName,params.SelectedDevice,params.FamilyNumber,params.Devices,params.UUID,params.DeviceToken, params.Platform, params.Language))
+	logging.Log(fmt.Sprintf("handleHeartBeat params:UserName:%s,SelectedDevice:%s,familynumber:%s,Devices:%s--%s--%s--%s--%s--%d",
+		params.UserName,params.SelectedDevice,params.FamilyNumber,params.Devices,params.UUID,params.DeviceToken, params.Platform, params.Language,params.Timestamp))
 
-	proto.CommonLock.Lock()
-	proto.MapAccessToLang[params.AccessToken] = params.Language
-	proto.AccessTokenMap[params.AccessToken] = params.UserName
-	proto.CommonLock.Unlock()
+	//proto.CommonLock.Lock()
+	//proto.MapAccessToLang[params.AccessToken] = params.Language
+	//proto.AccessTokenMap[params.AccessToken] = params.UserName
+	proto.AccessTokenMap.Store(params.AccessToken,params.UserName)
+	proto.MapAccessToLang.Store(params.AccessToken,params.Language)
+	//proto.CommonLock.Unlock()
 	for i, imei := range params.Devices {
 		if InStringArray(imei, imeiList) == false {
 			continue
@@ -408,18 +452,19 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 			}
 		}
 
-		_,ok1 := proto.ConnidUserName[imeiUint64]
+		/*_,ok1 := proto.ConnidUserName[imeiUint64]
 		if !ok1{
 			proto.ConnidUserName[imeiUint64] = map[string]string{}
 		}
 		_,ok2 := proto.ConnidUserName[imeiUint64][params.FamilyNumber]
 		if !ok2 {
 			proto.ConnidUserName[imeiUint64][params.FamilyNumber] = params.UserName
-		}
+		}*/
 	}
 
 	tmpMinichat := []proto.ChatInfo{}
-	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405"),ImeiAddFriend:map[uint64][]proto.AddFriend{},BAllData:true}
+	result := proto.HeartbeatResult{Timestamp: time.Now().Format("20060102150405"),
+		ImeiAddFriend:map[uint64][]proto.AddFriend{},ImeiOnline:map[uint64]bool{},BAllData:true}
 	if params.SelectedDevice == "" {
 		for _, imei := range params.Devices {
 			if InStringArray(imei, imeiList) == false {
@@ -429,7 +474,14 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 			imeiUint64 := proto.Str2Num(imei, 10)
 			result.Locations = append(result.Locations, svrctx.GetDeviceData(imeiUint64, svrctx.Get().PGPool))
 			result.Minichat = append(result.Minichat, proto.GetChatListForApp(imeiUint64, params.UserName)...)
-
+			//device online check
+			_,ok1 := tracetcpserver.TcpGpsClientTable[imeiUint64]
+			_,ok2 := tcpserver.TcpClientTable[imeiUint64]
+			if ok1 || ok2 {
+				result.ImeiOnline[imeiUint64] = true
+			}else {
+				result.ImeiOnline[imeiUint64] = false
+			}
 			for k, _ := range result.Minichat {
 				/*if result.Minichat[k].Receiver == deviceInfo.Family[j].Phone && len(result.Minichat[k].Receiver) > 1 ||
 					len(result.Minichat[k].Receiver) == 0 {
@@ -465,19 +517,17 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 						addfriend.FriendPhone = deviceInfo.Family[index].Phone
 						addfriend.FriendDevName = deviceInfo.Family[index].FriendDevName
 						if deviceInfo.Family[index].FriendAvatar != "" {
-							if svrctx.Get().UseHttps {
-								addfriend.FriendAvatar = fmt.Sprintf("%s:%d", svrctx.Get().HttpServerName, svrctx.Get().WSSPort) +
-									deviceInfo.Family[index].FriendAvatar
-							} else {
-								addfriend.FriendAvatar = fmt.Sprintf("%s:%d", svrctx.Get().HttpServerName, svrctx.Get().WSPort) +
-									deviceInfo.Family[index].FriendAvatar
-							}
+							addfriend.FriendAvatar = fmt.Sprintf("%s:%d", svrctx.Get().HttpServerName, svrctx.Get().WSPort) +
+								deviceInfo.Family[index].FriendAvatar
 						}
 
 						proto.MapPhone2IMEILock.Lock()
-						_imei,ok1 := (*proto.MapPhone2IMEI)[deviceInfo.Family[index].Phone]
-						if ok1{
-							addfriend.FriendIMEI = _imei
+						phone2imei,ok3 := (*proto.MapPhone2IMEI)[imeiUint64]
+						if ok3 {
+							_imei, ok1 := phone2imei[deviceInfo.Family[index].Phone]
+							if ok1 {
+								addfriend.FriendIMEI = _imei
+							}
 						}
 						proto.MapPhone2IMEILock.Unlock()
 
@@ -490,11 +540,18 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 	}else{
 		if InStringArray(params.SelectedDevice, imeiList) {
 			imeiUint64 := proto.Str2Num(params.SelectedDevice, 10)
-			endTime := uint64(params.Timestamp)
-			beginTime := endTime - endTime % 1000000
 			result.Locations = append(result.Locations, svrctx.GetDeviceData(imeiUint64, svrctx.Get().PGPool))
 			result.Minichat = append(result.Minichat, proto.GetChatListForApp(imeiUint64, params.UserName)...)
-
+			//device online check
+			_,ok1 := tracetcpserver.TcpGpsClientTable[imeiUint64]
+			_,ok2 := tcpserver.TcpClientTable[imeiUint64]
+			if ok1 || ok2 {
+				result.ImeiOnline[imeiUint64] = true
+			}else {
+				result.ImeiOnline[imeiUint64] = false
+			}
+			endTime := uint64(params.Timestamp)
+			beginTime := endTime - endTime%1000000
 			alarms := svrctx.QueryLocations(imeiUint64, svrctx.Get().PGPool, beginTime, endTime, false, true)
 			if alarms != nil {
 				result.Alarms = append(result.Alarms, (*alarms)...)
@@ -530,25 +587,22 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 			deviceInfo, ok := (*proto.DeviceInfoList)[imeiUint64]
 			if ok{
 				for index,_ := range deviceInfo.Family {
-					fmt.Println("AAAA",deviceInfo.Family[index].IsAddFriend)
 					if deviceInfo.Family[index].IsAddFriend == 1{
 						var addfriend = proto.AddFriend{}
 						//对应好友的
 						addfriend.FriendPhone = deviceInfo.Family[index].Phone
 						addfriend.FriendDevName = deviceInfo.Family[index].FriendDevName
 						if deviceInfo.Family[index].FriendAvatar != "" {
-							if svrctx.Get().UseHttps {
-								addfriend.FriendAvatar = fmt.Sprintf("%s:%d", svrctx.Get().HttpServerName, svrctx.Get().WSSPort) +
-									deviceInfo.Family[index].FriendAvatar
-							} else {
-								addfriend.FriendAvatar = fmt.Sprintf("%s:%d", svrctx.Get().HttpServerName, svrctx.Get().WSPort) +
-									deviceInfo.Family[index].FriendAvatar
-							}
+							addfriend.FriendAvatar = fmt.Sprintf("%s:%d", svrctx.Get().HttpServerName, svrctx.Get().WSPort) +
+								deviceInfo.Family[index].FriendAvatar
 						}
 						proto.MapPhone2IMEILock.Lock()
-						_imei,ok1 := (*proto.MapPhone2IMEI)[deviceInfo.Family[index].Phone]
-						if ok1{
-							addfriend.FriendIMEI = _imei
+						phone2imei,ok2 := (*proto.MapPhone2IMEI)[imeiUint64]
+						if ok2 {
+							_imei, ok1 := phone2imei[deviceInfo.Family[index].Phone]
+							if ok1 {
+								addfriend.FriendIMEI = _imei
+							}
 						}
 						proto.MapPhone2IMEILock.Unlock()
 
@@ -587,9 +641,22 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 
 	urlRequest += reqType
 
-	tr := &http.Transport{
-		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	pool := x509.NewCertPool()
+	caCertPath := "/home/ec2-user/work/codes/https_test/watch.gatorcn.com/gd_bundle-g2-g1.crt"
+	caCrt,err := ioutil.ReadFile(caCertPath)
+	if err != nil{
+		logging.Log("ReadFile gd_bundle-g2-g1.crt failed, " + err.Error())
+		return false
 	}
+	pool.AppendCertsFromPEM(caCrt)
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{RootCAs:pool},
+	}
+
+
+	//tr := &http.Transport{
+	//	TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	//}
 	client := &http.Client{Transport: tr}
 
 
@@ -609,7 +676,6 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 
 	var itf interface{}
 	err = json.Unmarshal(body, &itf)
-	//re,_ := json.Marshal(itf)
 	logging.Log(fmt.Sprintf("parse login format :%s", string(body)))
 	if err != nil {
 		logging.Log("login parse  " + reqType + " response as json failed, " + err.Error())
@@ -629,17 +695,16 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	if accessToken == nil {
 
 		proto.ConnidLogin[connid] += 1
-		//proto.LoginTimeOut[connid] = time.Now().Unix()
-
 	}
 
 	logging.Log("status: " + fmt.Sprint(status))
 	logging.Log("accessToken: " + fmt.Sprint(accessToken))
 	//logging.Log("devices: " + fmt.Sprint(devices))
 	if status != nil && accessToken != nil {
-		proto.CommonLock.Lock()
-		proto.AccessTokenMap[fmt.Sprint(accessToken)] = username
-		proto.CommonLock.Unlock()
+		//proto.CommonLock.Lock()
+		//proto.AccessTokenMap[fmt.Sprint(accessToken)] = username
+		proto.AccessTokenMap.Store(fmt.Sprint(accessToken),username)
+		//proto.CommonLock.Unlock()
 		AddAccessToken(accessToken.(string))
 		if isRegister == false {
 			if devices != nil {
@@ -655,7 +720,6 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 					imei, _ := strconv.ParseUint(device["IMEI"].(string), 0, 0)
 
 					locations = append(locations, svrctx.GetDeviceData(imei, svrctx.Get().PGPool))
-
 					deviceInfoResult := proto.DeviceInfoResult{}
 					//json.Unmarshal([]byte(proto.MakeStructToJson(d)), &deviceInfoResult)
 					//fmt.Println("deviceinfoResult: ", deviceInfoResult)
@@ -676,9 +740,6 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 							}
 						}
 
-						//deviceInfoResult.FamilyNumber = loginData["devices"].([]interface{})[i].(map[string]interface{})["FamilyNumber"].(string)
-						//deviceInfoResult.Name = loginData["devices"].([]interface{})[i].(map[string]interface{})["Name"].(string)
-
 						k := 0
 						//default not root manager
 						deviceInfoResult.AccountType = 1
@@ -687,9 +748,6 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 								deviceInfoResult.Name = deviceInfo.Family[k].Name
 								deviceInfoResult.FamilyNumber = deviceInfo.Family[k].Phone
 								deviceInfoResult.AccountType = deviceInfo.Family[k].IsAdmin
-								//var tag proto.TagUserName
-								//tag.Username = username
-								//tag.Phone = deviceInfo.Family[k].Phone
 								break
 							}
 						}
@@ -705,6 +763,19 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 							deviceInfoResult.FamilyNumber = deviceInfo.Family[0].Phone
 							deviceInfoResult.Name = loginData["devices"].([]interface{})[i].(map[string]interface{})["Name"].(string)
 							deviceInfoResult.AccountType = 0
+							//车载追踪器管理员判断,chenqw,20181114
+							if deviceInfo.Model == proto.DM_GT11 || deviceInfo.Model == proto.DM_GT12 ||
+								deviceInfo.Model == proto.DM_GT13 || deviceInfo.Model == proto.DM_GT14 ||
+								deviceInfo.Model == proto.DM_GTGPS {
+								isAdmin, _, _, err := queryIsAdmin(device["IMEI"].(string), username)
+								if err != nil {
+									if isAdmin {
+										deviceInfoResult.AccountType = 0
+									} else {
+										deviceInfoResult.AccountType = 1
+									}
+								}
+							}
 							loginData["devices"].([]interface{})[i] = deviceInfoResult
 							logging.Log(fmt.Sprintf("new loginData devices: %s\n",proto.MakeStructToJson(deviceInfoResult)))
 						}
@@ -717,22 +788,6 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 					UserName: username,
 					Data: (fmt.Sprintf("{\"user\": %s, \"location\": %s}",
 						proto.MakeStructToJson(&loginData), string(jsonLocations))), ConnID: connid})
-
-				//logging.Log("devicesLocationURL: " + devicesLocationURL)
-				//
-				//respLocation, err := http.Get(devicesLocationURL)
-				//if err != nil {
-				//	logging.Log("get devicesLocationURL failed" + err.Error())
-				//}
-				//
-				//defer respLocation.Body.Close()
-
-				//bodyLocation, err := ioutil.ReadAll(respLocation.Body)
-				//if err != nil {
-				//	logging.Log("response has err, " + err.Error())
-				//}
-				//
-				//logging.Log("bodyLocation: " +  string(bodyLocation))
 			} else {
 				appServerChan <- (&proto.AppMsgData{Cmd: proto.LoginAckCmdName,
 					UserName: username,
@@ -1053,7 +1108,13 @@ func  getDeviceInfoByImei(connid uint64, params *proto.DeviceAddParams) bool {
 	isAdmin := true		//true表示是管理员
 	var err error
 	if found {
-		if deviceInfo.Model == proto.DM_GT02 {
+		//DM_GT11:宠物追踪器,20180919
+		if deviceInfo.Model == proto.DM_GT02 ||
+			deviceInfo.Model == proto.DM_GT11 ||
+			deviceInfo.Model == proto.DM_GT12 ||
+			deviceInfo.Model == proto.DM_GT13 ||
+			deviceInfo.Model == proto.DM_GT14 ||
+			deviceInfo.Model == proto.DM_GTGPS {
 			isAdmin, _, _, err = queryIsAdmin(params.Imei, params.UserName)
 			if err != nil {
 				return false
@@ -1102,9 +1163,10 @@ func refreshDevice(connid uint64, params *proto.DeviceBaseParams) bool {
 	if ok && deviceInfo != nil {
 
 		//refresh.刷新时也要保存
-		proto.CommonLock.Lock()
-		proto.AccessTokenMap[params.AccessToken] = params.UserName
-		proto.CommonLock.Unlock()
+		//proto.CommonLock.Lock()
+		//proto.AccessTokenMap[params.AccessToken] = params.UserName
+		proto.AccessTokenMap.Store(params.AccessToken,params.UserName)
+		//proto.CommonLock.Unlock()
 		found = true
 		deviceInfoResult = proto.MakeDeviceInfoResult(deviceInfo)
 		if len(deviceInfo.Avatar) == 0 || (strings.Contains(deviceInfo.Avatar, ".jpg") == false &&
@@ -1243,7 +1305,7 @@ func addDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 				continue
 			}
 			//only one root user
-			if deviceInfo.Family[ii].IsAdmin == 0{
+			if deviceInfo.Family[ii].IsAdmin == 0 && len(deviceInfo.Family[ii].Username) > 1{
 				isAdmin = false
 			}
 
@@ -1258,12 +1320,13 @@ func addDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 	// 手表换了号码后，要把以前的好友关系清除
 	setPhone := ""
 	if ok && deviceInfo.SimID != params.DeviceSimID{
-		for k,_:= range deviceInfo.Family{
+		/*for k,_:= range deviceInfo.Family{
 			if deviceInfo.Family[k].IsAddFriend == 1 {
 				deviceInfo.Family[k] = proto.FamilyMember{}
 			}
 			setPhone += fmt.Sprintf("#%s#%s#%d", deviceInfo.Family[k].Phone, deviceInfo.Family[k].Name, deviceInfo.Family[k].Type)
-		}
+		}*/
+		setPhone = proto.MakeDeviceFamilyPhoneNumbersEx(&deviceInfo.Family,imei,deviceInfo.Model)
 		phoneNumbers = proto.MakeFamilyPhoneNumbersEx(&deviceInfo.Family)
 		strSQL := fmt.Sprintf("update watchinfo set PhoneNumbers='%s' where IMEI = '%s'",phoneNumbers,params.Imei)
 		logging.Log("delete friend SQL :" + strSQL)
@@ -1365,25 +1428,47 @@ func addDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 				newVerifycode := makerRandomVerifyCode()
 				proto.DeviceInfoListLock.Lock()
 				deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+				proto.DeviceInfoListLock.Unlock()
+				//关注手表时要根据设备型号判断亲情号码是否已满,20180918
 				if ok && deviceInfo != nil {
-					for i := 0; i < len(deviceInfo.Family); i++ {
-						if len(deviceInfo.Family[i].Phone) == 0 {//空号码，没有被使用
-							deviceInfo.Family[i].Phone = params.MySimID
-							deviceInfo.Family[i].CountryCode = params.MySimCountryCode
-							deviceInfo.Family[i].Name = params.MyName
-							deviceInfo.Family[i].Type = params.PhoneType
-							deviceInfo.Family[i].Index = i + 1
+					model := deviceInfo.Model
+					if model == proto.DM_GT05 {
+						for i := 0; i < len(deviceInfo.Family); i++ {
+							if len(deviceInfo.Family[i].Phone) == 0 { //空号码，没有被使用
+								deviceInfo.Family[i].Phone = params.MySimID
+								deviceInfo.Family[i].CountryCode = params.MySimCountryCode
+								deviceInfo.Family[i].Name = params.MyName
+								deviceInfo.Family[i].Type = params.PhoneType
+								deviceInfo.Family[i].Index = i + 1
 
-							//chenqw,add
-							deviceInfo.Family[i].IsAdmin = int(proto.Bool2UInt8(!isAdmin))
-							deviceInfo.Family[i].Username = params.UserName
-							//chenqw
+								//chenqw,add
+								deviceInfo.Family[i].IsAdmin = int(proto.Bool2UInt8(!isAdmin))
+								deviceInfo.Family[i].Username = params.UserName
+								//chenqw
 
-							isFound = true
-							break
+								isFound = true
+								break
+							}
+						}
+					}else {
+						for i := 0; i < 13; i++ {
+							if len(deviceInfo.Family[i].Phone) == 0 { //空号码，没有被使用
+								deviceInfo.Family[i].Phone = params.MySimID
+								deviceInfo.Family[i].CountryCode = params.MySimCountryCode
+								deviceInfo.Family[i].Name = params.MyName
+								deviceInfo.Family[i].Type = params.PhoneType
+								deviceInfo.Family[i].Index = i + 1
+
+								//chenqw,add
+								deviceInfo.Family[i].IsAdmin = int(proto.Bool2UInt8(!isAdmin))
+								deviceInfo.Family[i].Username = params.UserName
+								//chenqw
+
+								isFound = true
+								break
+							}
 						}
 					}
-
 					family = deviceInfo.Family
 
 					if isAdmin{
@@ -1393,7 +1478,6 @@ func addDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 						deviceInfo.TimeZone = proto.DeviceTimeZoneInt(params.TimeZone)
 					}
 				}
-				proto.DeviceInfoListLock.Unlock()
 				if isFound {
 					phoneNumbers = proto.MakeFamilyPhoneNumbersEx(&family)
 					if isAdmin {
@@ -1532,22 +1616,6 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 		return  false
 	}
 
-	/*strSqlDeleteDeviceUser = fmt.Sprintf("update users u join vehiclesinuser viu on u.recid = viu.UserID" +
-		" join watchinfo w on w.recid = viu.VehId set u.LoginName = '' WHERE w.IMEI = '%s' and viu.UserID='%s'",params.Imei,params.UserId)
-	logging.Log("SQL: " + strSqlDeleteDeviceUser)
-	_, err = svrctx.Get().MySQLPool.Exec(strSqlDeleteDeviceUser)
-	if err != nil {
-		logging.Log(fmt.Sprintf("[%d] delete  from vehiclesinuser db failed, %s", imei, err.Error()))
-		result.ErrCode = 500
-		result.ErrMsg = "server failed to update db"
-		resultData,_ := json.Marshal(&result)
-		appServerChan <- (&proto.AppMsgData{Cmd: proto.DeleteDeviceAckCmdName, Imei: imei,
-			UserName: params.UserName, AccessToken:params.AccessToken,
-			Data: string(resultData), ConnID: connid})
-		return  false
-	}*/
-
-
 	//cqw,20180108
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
@@ -1563,14 +1631,20 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 				if (params.UserName == deviceInfo.Family[i].Username || params.MySimID == deviceInfo.Family[i].Phone) &&
 					deviceInfo.Family[i].Phone != ""{
 					//chenqw,20180118,删除该号码对应的图片,兼容老版本
-					msg := proto.MsgData{}
-					msg.Header.Header.Imei = imei
-					msg.Header.Header.ID = proto.NewMsgID()
-					msg.Header.Header.Status = 0
-					body := fmt.Sprintf("%015dAP25,%s,%016X)", imei,
-						deviceInfo.Family[i].Phone,   msg.Header.Header.ID)
-					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-					svrctx.Get().TcpServerChan <- &msg
+					if !(deviceInfo.Model == proto.DM_GTGPS ||
+						deviceInfo.Model == proto.DM_GT11 ||
+						deviceInfo.Model == proto.DM_GT12 ||
+						deviceInfo.Model == proto.DM_GT13 ||
+						deviceInfo.Model == proto.DM_GT14){
+						msg := proto.MsgData{}
+						msg.Header.Header.Imei = imei
+						msg.Header.Header.ID = proto.NewMsgID()
+						msg.Header.Header.Status = 0
+						body := fmt.Sprintf("%015dAP25,%s,%016X)", imei,
+							deviceInfo.Family[i].Phone, msg.Header.Header.ID)
+						msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+						svrctx.Get().TcpServerChan <- &msg
+					}
 
 					newPhone := proto.ParseSinglePhoneNumberString("",-1)
 					deviceInfo.Family[i] = newPhone
@@ -1606,14 +1680,20 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 				if (params.UserName == deviceInfo.Family[i].Username || params.MySimID == deviceInfo.Family[i].Phone) &&
 					deviceInfo.Family[i].Phone != ""{
 					//chenqw,20180118,删除该号码对应的图片,兼容老版本
-					msg := proto.MsgData{}
-					msg.Header.Header.Imei = imei
-					msg.Header.Header.ID = proto.NewMsgID()
-					msg.Header.Header.Status = 0
-					body := fmt.Sprintf("%015dAP25,%s,%016X)", imei,
-						deviceInfo.Family[i].Phone,   msg.Header.Header.ID)
-					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-					svrctx.Get().TcpServerChan <- &msg
+					if !(deviceInfo.Model == proto.DM_GTGPS ||
+						deviceInfo.Model == proto.DM_GT11 ||
+						deviceInfo.Model == proto.DM_GT12 ||
+						deviceInfo.Model == proto.DM_GT13 ||
+						deviceInfo.Model == proto.DM_GT14) {
+						msg := proto.MsgData{}
+						msg.Header.Header.Imei = imei
+						msg.Header.Header.ID = proto.NewMsgID()
+						msg.Header.Header.Status = 0
+						body := fmt.Sprintf("%015dAP25,%s,%016X)", imei,
+							deviceInfo.Family[i].Phone, msg.Header.Header.ID)
+						msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+						svrctx.Get().TcpServerChan <- &msg
+					}
 
 					newPhone := proto.ParseSinglePhoneNumberString("",-1)
 					deviceInfo.Family[i] = newPhone
@@ -1621,62 +1701,6 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 				}
 			}
 		}
-
-
-		//管理员取消关注手表，判断phonenumbers里的username 是不是非0,
-		// 如果都是0下次不管哪个账号关注这个手表就是管理员,如果非0就把na个非0的设置成管理员
-		/*bCheckAdmin := false
-		inDex := 0
-		if bIsAdminCancel {
-			for i := 0; i < len(deviceInfo.Family); i++ {
-				if len(deviceInfo.Family[i].Username) > 1 {
-					logging.Log(fmt.Sprintf("bIsAdminCancel: i = %d",i))
-					inDex = i
-					bCheckAdmin = true
-					break
-				}
-			}
-			for idx,_ := range deviceInfo.Family{
-				deviceInfo.Family[idx].IsAdmin = 1
-			}
-			if bCheckAdmin{
-				//IsAdmin = 0 means root manager
-				//把管理员移到首位
-				//modify:不用移到首位
-				logging.Log(fmt.Sprintf("bCheckAdmin:%d,%s i = %d",deviceInfo.Family[inDex].IsAdmin,deviceInfo.Family[i].Username,inDex))
-				deviceInfo.Family[inDex].IsAdmin = 0
-				/*tmp := deviceInfo.Family[0]
-				deviceInfo.Family[0] = deviceInfo.Family[inDex]
-				deviceInfo.Family[inDex] = tmp
-				logging.Log(fmt.Sprintf("###bCheckAdmin:%d,%s",deviceInfo.Family[0].IsAdmin,deviceInfo.Family[0].Username))*/
-		//	}
-
-		//}else {
-			//deviceInfo.Family[0].IsAdmin = 0
-		//}
-
-		//管理员取消关注但添加了几个亲情号码的情况,并且还有其他用户关注
-		//不需要移动
-		/*if bCheckAdmin {
-			newContacts := [proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember{}
-			count := 0
-			for i := 0; i < 3; i++ {
-				if deviceInfo.Family[i].Phone != "" {
-					newContacts[count] = deviceInfo.Family[i]
-					count++
-				}
-			}
-			//白名单位置只能从第四个位置开始
-			count = 3
-			for i := 3; i < len(deviceInfo.Family); i++ {
-				if deviceInfo.Family[i].Phone != "" {
-					newContacts[count] = deviceInfo.Family[i]
-					count++
-				}
-			}
-			deviceInfo.Family = newContacts
-		}*/
-
 	}
 	proto.DeviceInfoListLock.Unlock()
 
@@ -1689,33 +1713,40 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 	bAll := false
 	proto.Mapimei2PhoneLock.Lock()
 	proto.Mapimei2Phone[imei] = []string{}
+	model := deviceInfo.Model
 	for kk := 0; kk < len(deviceInfo.Family) && ok && deviceInfo != nil; kk++ {
 		phone := deviceInfo.Family[kk].Phone
-		if phone == ""{
+		if phone == "" {
 			phone = "0"
-		}else {
+		} else {
 			bAll = true
 		}
-		phoneNumbers += fmt.Sprintf("#%s#%s#%d", phone, deviceInfo.Family[kk].Name, deviceInfo.Family[kk].Type)
+		//phoneNumbers += fmt.Sprintf("#%s#%s#%d", phone, deviceInfo.Family[kk].Name, deviceInfo.Family[kk].Type)
 
-		if deviceInfo.Family[kk].Phone == ""{
+		if deviceInfo.Family[kk].Phone == "" {
 			continue
 		}
-		proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei],deviceInfo.Family[kk].Phone)
+		proto.Mapimei2Phone[imei] = append(proto.Mapimei2Phone[imei], deviceInfo.Family[kk].Phone)
 	}
 	proto.Mapimei2PhoneLock.Unlock()
+	phoneNumbers = proto.MakeDeviceFamilyPhoneNumbersEx(&deviceInfo.Family,imei,model)
+	if !(deviceInfo.Model == proto.DM_GTGPS ||
+		deviceInfo.Model == proto.DM_GT11 ||
+		deviceInfo.Model == proto.DM_GT12 ||
+		deviceInfo.Model == proto.DM_GT13 ||
+		deviceInfo.Model == proto.DM_GT14) {
+		if bAll {
+			body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
+				phoneNumbers, msg.Header.Header.ID)
+			msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
 
-	if bAll {
-		body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
-			phoneNumbers, msg.Header.Header.ID)
-		msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+			svrctx.Get().TcpServerChan <- &msg
+		} else {
+			body := fmt.Sprintf("%015dAP07,%016X)", imei, msg.Header.Header.ID)
+			msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
 
-		svrctx.Get().TcpServerChan <- &msg
-	}else {
-		body := fmt.Sprintf("%015dAP07,%016X)", imei,msg.Header.Header.ID)
-		msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
-
-		svrctx.Get().TcpServerChan <- &msg
+			svrctx.Get().TcpServerChan <- &msg
+		}
 	}
 
 	if ok {
@@ -1814,7 +1845,7 @@ func AddDeviceManagerLoop()  {
 	}
 }
 
-func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsString []bool,params *proto.DeviceSettingParams)  (bool,[]proto.SettingParam) {
+func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsString []bool)  (bool,[]proto.SettingParam) {
 	phoneNumbers := ""
 	proto.DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*proto.DeviceInfoList)[imei]
@@ -1855,6 +1886,9 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 				deviceInfo.Volume = uint8(proto.Str2Num(setting.NewValue, 10))
 			case proto.LangFieldName:
 				deviceInfo.Lang = setting.NewValue
+				//gps trace
+			case proto.SetUseDST:
+				fallthrough
 			case proto.UseDSTFieldName:
 				deviceInfo.UseDST = (proto.Str2Num(setting.NewValue, 10)) != 0
 			case proto.ChildPowerOffFieldName:
@@ -1863,6 +1897,23 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 				deviceInfo.SocketModeOff = (proto.Str2Num(setting.NewValue, 10)) != 0
 			case proto.CountryCodeFieldName:
 				deviceInfo.CountryCode = setting.NewValue
+				//gps trace
+			case proto.SetAlarmMsg:
+				strAlarmSet := strings.Split(setting.NewValue,"|")
+				if len(strAlarmSet) == 2 {
+					deviceInfo.SpeedAlarm = setting.NewValue
+				}
+			case proto.SetLocateModel:
+				strModel := strings.Split(setting.NewValue,"|")
+				if len(strModel) == 2{
+					deviceInfo.LocateModel =  setting.NewValue
+				}
+				deviceData := proto.LocationData{LocateModel:deviceInfo.LocateModel}
+				svrctx.SetDeviceData(imei,proto.DEVICE_DATA_GPSSTATUS,deviceData)
+			case proto.SetDevBuzzer:
+				deviceInfo.DevBuzzer = setting.NewValue
+			case proto.SetPhoneNumbers:
+				fallthrough
 			case proto.PhoneNumbersFieldName:
 				logging.Log(fmt.Sprintf("setting.CurValue :%s,setting.NewValue:%s,setting.Index:%d",
 					setting.CurValue,setting.NewValue,setting.Index))
@@ -1939,13 +1990,16 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 					newPhone = proto.ParseSinglePhoneNumberString(setting.NewValue, setting.Index)
 					oldPhone := proto.ParseSinglePhoneNumberString(setting.CurValue,setting.Index)
 					proto.MapPhone2IMEILock.Lock()
-					_,ok := (*proto.MapPhone2IMEI)[oldPhone.Phone]
-					if ok {
-						newPhone.IsAddFriend = 1
-						newPhone.FriendImei = deviceInfo.Family[setting.Index - 1].FriendImei
-						newPhone.FriendDevName = deviceInfo.Family[setting.Index - 1].FriendDevName
-						newPhone.FriendAvatar = deviceInfo.Family[setting.Index - 1].FriendAvatar
-						//修改好友的name只能推送到自己的手表,不能影响好友的OwnnerName
+					phone2imei,ok1 := (*proto.MapPhone2IMEI)[imei]
+					if ok1 {
+						_, ok := phone2imei[oldPhone.Phone]
+						if ok {
+							newPhone.IsAddFriend = 1
+							newPhone.FriendImei = deviceInfo.Family[setting.Index-1].FriendImei
+							newPhone.FriendDevName = deviceInfo.Family[setting.Index-1].FriendDevName
+							newPhone.FriendAvatar = deviceInfo.Family[setting.Index-1].FriendAvatar
+							//修改好友的name只能推送到自己的手表,不能影响好友的OwnnerName
+						}
 					}
 					proto.MapPhone2IMEILock.Unlock()
 					//chenqw,20180119,新增白名单index=0xff,其他传正确的index
@@ -2089,6 +2143,7 @@ func SaveDeviceSettings(imei uint64, settings []proto.SettingParam, valulesIsStr
 			case proto.DisableLBSFieldName:
 				deviceInfo.DisableLBS =  (proto.Str2Num(setting.NewValue, 10)) == 1
 			case proto.RedirectIPPortFieldName:
+				//包括gator gps
 				deviceInfo.RedirectIPPort =  (proto.Str2Num(setting.NewValue, 10)) == 1
 			case proto.HideTimer0FieldName:
 				fallthrough
@@ -2131,7 +2186,6 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 	if isAddDevice {
 		cmdAck = proto.AddDeviceOKAckCmdName
 	}
-
 	for i, setting := range params.Settings {
 		fieldName :=  setting.FieldName
 		//newValue := setting.NewValue
@@ -2201,6 +2255,15 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 		case proto.DisableWiFiFieldName:
 		case proto.DisableLBSFieldName:
 			isNeedNotifyDevice[i] = false
+
+		//gps gator
+		case proto.CleanAll:
+		case proto.SetDevAlarmPhone:
+		case proto.SetPhoneNumbers:
+		case proto.SetUseDST:
+		case proto.SetAlarmMsg:
+		case proto.SetLocateModel:
+		case proto.SetDevBuzzer:
 		default:
 			return false
 		}
@@ -2209,7 +2272,7 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 	ret := true
 	//var settings []proto.SettingParam
 	if isAddDevice == false {
-		ret,_ = SaveDeviceSettings(imei, params.Settings, valulesIsString,params)
+		ret,_ = SaveDeviceSettings(imei, params.Settings, valulesIsString)
 	}
 
 	result := proto.HttpAPIResult{
@@ -2280,7 +2343,7 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 		}else{
 			settingResult := proto.DeviceSettingResult{Settings: params.Settings,MsgId:params.MsgId}
 			settingResultJson, _ := json.Marshal(settingResult)
-			fmt.Printf("Settings:%s---%s",params.Settings[0].NewValue,settingResultJson)
+			//fmt.Printf("Settings:%s---%s",params.Settings[0].NewValue,settingResultJson)
 			result.Data = string([]byte(settingResultJson))
 		}
 	}
@@ -2324,70 +2387,78 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 				for k,_ := range deviceInfo.Family{
 					if deviceInfo.Family[k].IsAddFriend == 1{
 						//找到好友的IMEI
-						_imei,ok1 := (*proto.MapPhone2IMEI)[deviceInfo.Family[k].Phone]
-						if ok1{
-							proto.DeviceInfoListLock.Lock()
-							dev, ok1 := (*proto.DeviceInfoList)[_imei]
-							proto.DeviceInfoListLock.Unlock()
-							if ok1{
-								for j,_ := range dev.Family{
-									//SimID变了,则好友亲情号码列表里的对应号码要更新
-									if dev.Family[j].IsAddFriend == 1 && setting.NewValue != setting.CurValue{
-										dev.Family[j].Phone = setting.NewValue
+						phone2imei,ok2 := (*proto.MapPhone2IMEI)[imei]
+						if ok2 {
+							_imei, ok1 := phone2imei[deviceInfo.Family[k].Phone]
+							if ok1 {
+								proto.DeviceInfoListLock.Lock()
+								dev, ok1 := (*proto.DeviceInfoList)[_imei]
+								proto.DeviceInfoListLock.Unlock()
+								if ok1 {
+									for j, _ := range dev.Family {
+										//SimID变了,则好友亲情号码列表里的对应号码要更新
+										if dev.Family[j].IsAddFriend == 1 && setting.NewValue != setting.CurValue {
+											dev.Family[j].Phone = setting.NewValue
 
-										newPhone := proto.MakeFamilyPhoneNumbersEx(&dev.Family)
-										strSQL = fmt.Sprintf("update watchinfo set PhoneNumbers = '%s' where IMEI = '%s'",newPhone,proto.Num2Str(_imei,10))
-										logging.Log("SQL update new SimID: " + strSQL)
-										_,err = svrctx.Get().MySQLPool.Exec(strSQL)
-										if err != nil{
-											logging.Log(fmt.Sprintf("[%d] UPDATE watchinfo SET PhoneNumbers db failed, %s", _imei, err.Error()))
-											return false
-										}
-										msg := &proto.MsgData{}
-										msg.Header.Header.Imei = _imei
-										msg.Header.Header.ID = proto.NewMsgID()
-										msg.Header.Header.Status = 0
-										setPhone := ""
-										proto.Mapimei2Phone[_imei] = []string{}
-										for kk,_:= range dev.Family{
-											setPhone += fmt.Sprintf("#%s#%s#%d", dev.Family[kk].Phone, dev.Family[kk].Name, dev.Family[kk].Type)
-											if dev.Family[kk].Phone == ""{
-												continue
+											newPhone := proto.MakeFamilyPhoneNumbersEx(&dev.Family)
+											strSQL = fmt.Sprintf("update watchinfo set PhoneNumbers = '%s' where IMEI = '%s'", newPhone, proto.Num2Str(_imei, 10))
+											logging.Log("SQL update new SimID: " + strSQL)
+											_, err = svrctx.Get().MySQLPool.Exec(strSQL)
+											if err != nil {
+												logging.Log(fmt.Sprintf("[%d] UPDATE watchinfo SET PhoneNumbers db failed, %s", _imei, err.Error()))
+												return false
 											}
+											msg := &proto.MsgData{}
+											msg.Header.Header.Imei = _imei
+											msg.Header.Header.ID = proto.NewMsgID()
+											msg.Header.Header.Status = 0
+											setPhone := ""
+											proto.Mapimei2Phone[_imei] = []string{}
+											for kk, _ := range dev.Family {
+												/*setPhone += fmt.Sprintf("#%s#%s#%d", dev.Family[kk].Phone, dev.Family[kk].Name, dev.Family[kk].Type)
+												if dev.Family[kk].Phone == "" {
+													continue
+												}*/
 
-											proto.Mapimei2Phone[_imei] = append(proto.Mapimei2Phone[_imei],dev.Family[kk].Phone)
-										}
-										body := fmt.Sprintf("%015dAP06%s,%016X)", _imei, setPhone, msg.Header.Header.ID)
-										msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
-										svrctx.Get().TcpServerChan <- msg
-										proto.MapPhone2IMEILock.Lock()
-										//好友的号码对应自己的IMEI
-										(*proto.MapPhone2IMEI)[dev.Family[j].Phone] = imei
-										delete(*proto.MapPhone2IMEI,setting.CurValue)
-										proto.MapPhone2IMEILock.Unlock()
+												proto.Mapimei2Phone[_imei] = append(proto.Mapimei2Phone[_imei], dev.Family[kk].Phone)
+											}
+											setPhone = proto.MakeDeviceFamilyPhoneNumbersEx(&dev.Family,_imei,dev.Model)
+											body := fmt.Sprintf("%015dAP06%s,%016X)", _imei, setPhone, msg.Header.Header.ID)
+											msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+											svrctx.Get().TcpServerChan <- msg
+											proto.MapPhone2IMEILock.Lock()
+											//好友的号码对应自己的IMEI
+											_,ok3 := (*proto.MapPhone2IMEI)[_imei]
+											if !ok3{
+												(*proto.MapPhone2IMEI)[_imei] = map[string]uint64{}
+											}
+											(*proto.MapPhone2IMEI)[_imei][dev.Family[j].Phone] = imei
+											delete((*proto.MapPhone2IMEI)[_imei], setting.CurValue)
+											proto.MapPhone2IMEILock.Unlock()
 
-										proto.AppSendChatListLock.Lock()
-										chatList, ok := proto.AppSendChatList[_imei]
-										if ok {
-											for chatidx, _ := range *chatList {
-												logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
-													_imei, (*proto.AppSendChatList[_imei])[chatidx].Info.Sender))
-												//是当前用户登录并且号码已修改了
-												if (*chatList)[chatidx].Info.Sender == setting.CurValue {
-													(*chatList)[chatidx].Info.Sender = setting.NewValue
+											proto.AppSendChatListLock.Lock()
+											chatList, ok := proto.AppSendChatList[_imei]
+											if ok {
+												for chatidx, _ := range *chatList {
+													logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
+														_imei, (*proto.AppSendChatList[_imei])[chatidx].Info.Sender))
+													//是当前用户登录并且号码已修改了
+													if (*chatList)[chatidx].Info.Sender == setting.CurValue {
+														(*chatList)[chatidx].Info.Sender = setting.NewValue
+													}
+													logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
+														_imei, (*proto.AppSendChatList[_imei])[chatidx].Info.Sender))
 												}
-												logging.Log(fmt.Sprintf("AppSendChatList[%d],%s",
-													_imei, (*proto.AppSendChatList[_imei])[chatidx].Info.Sender))
 											}
-										}
-										proto.AppSendChatListLock.Unlock()
+											proto.AppSendChatListLock.Unlock()
 
-										break
+											break
+										}
 									}
+
 								}
 
 							}
-
 						}
 					}
 				}
@@ -2395,12 +2466,16 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 
 			}
 
-		}else if setting.FieldName == "PhoneNumbers" {
+		}else if setting.FieldName == "PhoneNumbers" || setting.FieldName == proto.SetPhoneNumbers {
 			//chenqw,20180118,删除亲情号码时，要把对应的图片删掉
+			FieldName := setting.FieldName
+			if setting.FieldName == proto.SetPhoneNumbers{
+				FieldName = "PhoneNumbers"
+			}
 			if len(concatValues) == 0 {
-				concatValues += fmt.Sprintf(" %s=%s ", setting.FieldName, newValue)
+				concatValues += fmt.Sprintf(" %s=%s ", FieldName, newValue)
 			}else{
-				concatValues += fmt.Sprintf(", %s=%s ", setting.FieldName, newValue)
+				concatValues += fmt.Sprintf(", %s=%s ", FieldName, newValue)
 			}
 			proto.DeviceInfoListLock.Lock()
 			deviceInfo, ok := (*proto.DeviceInfoList)[imei]
@@ -2420,10 +2495,28 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 
 
 		}else{
+			//兼顾gator gps
+			FieldName := setting.FieldName
+			if setting.FieldName == proto.SetUseDST{
+				FieldName= proto.UseDSTFieldName
+			}
+			if setting.FieldName == proto.SetAlarmMsg{
+				FieldName = "SpeedAlarm"
+			}
+			if setting.FieldName == proto.SetLocateModel{
+				FieldName = "LocateModel"
+			}
+			if setting.FieldName == proto.SetDevBuzzer{
+				FieldName = "DevBuzzer"
+			}
+			//
+			if strings.Contains(FieldName,"GPS"){
+				continue
+			}
 			if len(concatValues) == 0 {
-				concatValues += fmt.Sprintf(" %s=%s ", setting.FieldName, newValue)
+				concatValues += fmt.Sprintf(" %s=%s ", FieldName, newValue)
 			}else{
-				concatValues += fmt.Sprintf(", %s=%s ", setting.FieldName, newValue)
+				concatValues += fmt.Sprintf(", %s=%s ", FieldName, newValue)
 			}
 
 			//好友修改ownername时要及时更新name
@@ -2434,41 +2527,46 @@ func UpdateDeviceSettingInDB(imei uint64,settings []proto.SettingParam, valulesI
 				for k,_ := range deviceInfo.Family{
 					if deviceInfo.Family[k].IsAddFriend == 1{
 						fmt.Println("MapPhone2IMEI:",*proto.MapPhone2IMEI)
-						Imei := (*proto.MapPhone2IMEI)[deviceInfo.Family[k].Phone]
-						proto.DeviceInfoListLock.Lock()
-						dev, ok1 := (*proto.DeviceInfoList)[Imei]
-						proto.DeviceInfoListLock.Unlock()
-						if ok1{
-							for kk,_ := range dev.Family {
+						phone2imei,ok2 :=  (*proto.MapPhone2IMEI)[imei]
+						if ok2 {
+							Imei := phone2imei[deviceInfo.Family[k].Phone]
+							proto.DeviceInfoListLock.Lock()
+							dev, ok1 := (*proto.DeviceInfoList)[Imei]
+							proto.DeviceInfoListLock.Unlock()
+							if ok1 {
+								for kk, _ := range dev.Family {
+									//修改的本人头像和OwnerName要推送给好友,20180916
+									if dev.Family[kk].Phone == deviceInfo.SimID &&
+										(dev.Family[kk].FriendDevName != deviceInfo.OwnerName || FieldName == proto.AvatarFieldName) {
+										dev.Family[kk].FriendDevName = deviceInfo.OwnerName
+										dev.Family[kk].Name = deviceInfo.OwnerName
+										dev.Family[kk].FriendAvatar = deviceInfo.Avatar
+										newPhone := proto.MakeFamilyPhoneNumbersEx(&dev.Family)
+										strSQL = fmt.Sprintf("update watchinfo set PhoneNumbers = '%s' where IMEI = '%s'", newPhone, proto.Num2Str(Imei, 10))
+										logging.Log("SQL update new: " + strSQL)
+										_, err := svrctx.Get().MySQLPool.Exec(strSQL)
+										if err != nil {
+											logging.Log(fmt.Sprintf("[%d] UPDATE watchinfo SET PhoneNumbers db failed, %s", Imei, err.Error()))
+											return false
+										}
 
-								if dev.Family[kk].Phone == deviceInfo.SimID &&
-									dev.Family[kk].FriendDevName != deviceInfo.OwnerName {
-									dev.Family[kk].FriendDevName = deviceInfo.OwnerName
-									dev.Family[kk].Name = deviceInfo.OwnerName
-									newPhone := proto.MakeFamilyPhoneNumbersEx(&dev.Family)
-									strSQL = fmt.Sprintf("update watchinfo set PhoneNumbers = '%s' where IMEI = '%s'", newPhone, proto.Num2Str(Imei, 10))
-									logging.Log("SQL update new: " + strSQL)
-									_, err := svrctx.Get().MySQLPool.Exec(strSQL)
-									if err != nil {
-										logging.Log(fmt.Sprintf("[%d] UPDATE watchinfo SET PhoneNumbers db failed, %s", Imei, err.Error()))
-										return false
+										//AP06 TO devinfo set
+										msg := &proto.MsgData{}
+										msg.Header.Header.Imei = Imei
+										msg.Header.Header.ID = proto.NewMsgID()
+										msg.Header.Header.Status = 0
+										setPhone := ""
+										/*for j, _ := range dev.Family {
+											setPhone += fmt.Sprintf("#%s#%s#%d", dev.Family[j].Phone, dev.Family[j].Name, dev.Family[j].Type)
+										}*/
+										setPhone = proto.MakeDeviceFamilyPhoneNumbersEx(&dev.Family,Imei,dev.Model)
+										body := fmt.Sprintf("%015dAP06%s,%016X)", Imei, setPhone, msg.Header.Header.ID)
+										msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
+
+										svrctx.Get().TcpServerChan <- msg
+
+										break
 									}
-
-									//AP06 TO devinfo set
-									msg := &proto.MsgData{}
-									msg.Header.Header.Imei = Imei
-									msg.Header.Header.ID = proto.NewMsgID()
-									msg.Header.Header.Status = 0
-									setPhone := ""
-									for j, _ := range dev.Family {
-										setPhone += fmt.Sprintf("#%s#%s#%d", dev.Family[j].Phone, dev.Family[j].Name, dev.Family[j].Type)
-									}
-									body := fmt.Sprintf("%015dAP06%s,%016X)", Imei, setPhone, msg.Header.Header.ID)
-									msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
-
-									svrctx.Get().TcpServerChan <- msg
-
-									break
 								}
 							}
 						}
@@ -2513,6 +2611,120 @@ func AppActiveDeviceSos(connid uint64, params *proto.DeviceActiveParams) bool {
 	return true
 }
 
+func AppActiveDeviceAlarm(connid uint64,params *proto.DeviceActiveAlarm) bool{
+	imei := proto.Str2Num(params.Imei, 10)
+	id := proto.NewMsgID()
+	flag := params.Flag
+	svrctx.Get().TcpServerChan <- proto.MakeReplyMsg(imei,false,proto.MakeActiveAlarmMsg(imei,id,flag),id)
+	return true
+}
+
+func AppReadVersion(params *proto.ReadVersionParams) bool{
+	imei := proto.Str2Num(params.Imei, 10)
+	protcol := uint16(0x4404)
+	length := uint16(0x16)
+	msgData,id := proto.MakeReplyGPSMsg(imei,protcol,length)
+	msg := proto.MakeReplyMsg(imei,true,msgData,id)
+	msg.Header.Header.Version = proto.MsgFromAppServerToTcpServer
+	svrctx.Get().TcpServerChan <- msg
+	return  true
+}
+
+func AppLocateNow(connid uint64,params *proto.LocateIMEIParams) bool{
+	imei := proto.Str2Num(params.Imei, 10)
+	protcol := uint16(0x4400)
+	length := uint16(0x16)
+	msgData,id := proto.MakeReplyGPSMsg(imei,protcol,length)
+	msg := proto.MakeReplyMsg(imei,true,msgData,id)
+	msg.Header.Header.Version = proto.MsgFromAppServerToTcpServer
+	svrctx.Get().TcpServerChan <- msg
+	_,ok := tracetcpserver.TcpGpsClientTable[imei]
+	var result = proto.HttpAPIResult{ErrCode:0,ErrMsg:"",Imei:params.Imei,Data:""}
+	if !ok{
+		result.ErrCode = 1
+		result.ErrMsg = "out of service"
+	}
+
+	str,_ := json.Marshal(result)
+	appServerChan <- &proto.AppMsgData{Imei:imei,Cmd:proto.LocateNowAck,Data:string(str),
+		UserName:params.Username,AccessToken:params.AccessToken,ConnID:connid}
+	return true
+}
+
+func AppDevRestart(connid uint64,params *proto.DeviceBaseParams) bool {
+	imei := proto.Str2Num(params.Imei, 10)
+	protcol := uint16(0x4408)
+	length := uint16(0x16)
+	msgData,id := proto.MakeReplyGPSMsg(imei,protcol,length)
+	msg := proto.MakeReplyMsg(imei,true,msgData,id)
+	msg.Header.Header.Version = proto.MsgFromAppServerToTcpServer
+	svrctx.Get().TcpServerChan <- msg
+	_,ok := tracetcpserver.TcpGpsClientTable[imei]
+	var result = proto.HttpAPIResult{ErrCode:0,ErrMsg:"",Imei:params.Imei,Data:""}
+	if !ok{
+		result.ErrCode = 1
+		result.ErrMsg = "out of service"
+	}
+	str ,_ := json.Marshal(result)
+	appServerChan <- &proto.AppMsgData{Imei:imei,Cmd:proto.DevRestartAck,Data:string(str),
+		UserName:params.UserName,AccessToken:params.AccessToken,ConnID:connid}
+	return  true
+}
+
+func AppDevRecover(connid uint64,params *proto.DevRecoverParams) bool{
+	imei := proto.Str2Num(params.Imei, 10)
+	protcol := uint16(0x441D)
+	length := uint16(0x16)
+	msgData,id := proto.MakeReplyGPSMsg(imei,protcol,length)
+	msg := proto.MakeReplyMsg(imei,true,msgData,id)
+	msg.Header.Header.Version = proto.MsgFromAppServerToTcpServer
+	svrctx.Get().TcpServerChan <- msg
+	_,ok := tracetcpserver.TcpGpsClientTable[imei]
+	var result = proto.HttpRecoverResult{}
+	if !ok{
+		result.ErrCode = 1
+		result.ErrMsg = "out of service"
+	}
+	if result.ErrCode == 0{
+		strSQL := fmt.Sprintf("update watchinfo set SpeedAlarm = '',LocateModel = '',DevBuzzer = '' " +
+			"where IMEI = '%s'",params.Imei)
+		_,err := svrctx.Get().MySQLPool.Exec(strSQL)
+		if err != nil{
+			logging.Log(fmt.Sprintf("[%d] gpsRecover update PhoneNumbers into db failed, %s", imei, err.Error()))
+			return false
+		}
+		proto.DeviceInfoListLock.Lock()
+		deviceInfo, ok := (*proto.DeviceInfoList)[imei]
+		if ok && deviceInfo != nil{
+			deviceInfo.Family = [proto.MAX_FAMILY_MEMBER_NUM]proto.FamilyMember{}
+			deviceInfo.SpeedAlarm = ""
+			deviceInfo.LocateModel = ""
+			deviceInfo.DevBuzzer = ""
+			deviceInfo.DevVer = ""
+		}
+		proto.DeviceInfoListLock.Unlock()
+		deviceData := proto.LocationData{}
+		svrctx.SetDeviceData(imei,proto.DEVICE_DATA_GPSSTATUS,deviceData)
+		result.SpeedAlarm = ""
+		result.LocateModel = ""
+		result.DevVer = ""
+		result.DevBuzzer = ""
+		logging.Log("SQL: " + strSQL)
+		/*strSqlDeleteDeviceUser := fmt.Sprintf("delete v  from vehiclesinuser as v left join watchinfo as w on v.VehId=w.recid "+
+			" where w.imei='%s' and v.UserID='%s' ", params.Imei, params.UserId)
+		logging.Log("SQL: " + strSqlDeleteDeviceUser)
+		_,err = svrctx.Get().MySQLPool.Exec(strSqlDeleteDeviceUser)
+		if err != nil{
+			logging.Log(fmt.Sprintf("[%d] gpsRecover delete v from vehiclesinuser into db failed, %s", imei, err.Error()))
+			return false
+		}*/
+	}
+	str ,_ := json.Marshal(result)
+	appServerChan <- &proto.AppMsgData{Imei:imei,Cmd:proto.DevRecoverAck,Data:string(str),
+		UserName:params.UserName,AccessToken:params.AccessToken,ConnID:connid}
+	return  true
+}
+
 func AppSetDeviceVoiceMonitor(connid uint64, params *proto.DeviceActiveParams) bool {
 	//return AppActiveDevice(proto.ActiveDeviceSosCmdName, proto.CMD_AP16, params)
 	imei := proto.Str2Num(params.Imei, 10)
@@ -2528,7 +2740,8 @@ func AppSetDeviceVoiceMonitor(connid uint64, params *proto.DeviceActiveParams) b
 	if canRequest == false {
 		return false
 	}
-	isGT06 := (proto.GetDeviceModel(imei) == proto.DM_GT06 || proto.GetDeviceModel(imei) == proto.DM_GT05)
+	isGT06 := (proto.GetDeviceModel(imei) == proto.DM_GT06 ||
+		proto.GetDeviceModel(imei) == proto.DM_GT05)
 	id := proto.NewMsgID()
 	svrctx.Get().TcpServerChan <- proto.MakeReplyMsg(imei, true,
 		proto.MakeVoiceMonitorReplyMsg(imei, id, params.Phone, isGT06), id)
@@ -2545,7 +2758,7 @@ func  AppQueryLocations(connid uint64, params *proto.QueryLocationsParams) bool 
 	imei := proto.Str2Num(params.Imei, 10)
 	locations := svrctx.QueryLocations(imei, svrctx.Get().PGPool, params.BeginTime, params.EndTime, params.Lbs, params.AlarmOnly)
 	if locations == nil || len(*locations) == 0 {
-		locations = &[]proto.LocationData{}
+		locations = &(svrctx.Location_data{})
 	}
 
 	result := proto.QueryLocationsResult{Imei: params.Imei, BeginTime: params.BeginTime, EndTime: params.EndTime, Locations: *locations}
@@ -2553,7 +2766,7 @@ func  AppQueryLocations(connid uint64, params *proto.QueryLocationsParams) bool 
 	//
 	for index,data := range result.Locations{
 		if data.Lat <= 53.33 && data.Lat >= 3.51 && data.Lng <= 135.05 && data.Lng >= 73.33 {
-			addr := GetAddress(data.Lat,data.Lng,imei)
+			addr := svrctx.GetAddress(data.Lat,data.Lng)
 			result.Locations[index].Address = addr
 		}
 	}
@@ -2564,110 +2777,6 @@ func  AppQueryLocations(connid uint64, params *proto.QueryLocationsParams) bool 
 		Data: proto.MakeStructToJson(result), ConnID: connid})
 
 	return true
-}
-
-func GetAddress(Lat,Lng float64,imei  uint64) string {
-	var address string
-	var itf interface{}
-	var itfconv interface{}
-	var weburl= "http://restapi.amap.com/v3/geocode/regeo"
-	var index uint64
-	var key,amapPos string
-	var lng string
-	var conn redis.Conn
-	conn = redisPool.Get()
-	if conn == nil {
-		return ""
-	}
-	defer conn.Close()
-	lat := strconv.FormatFloat(Lat, 'f', -1, 64)
-	lng = strconv.FormatFloat(Lng, 'f', -1, 64)
-	lng += ","
-	lng += lat
-	reply,errall := conn.Do("hget","latlngconv",lng)
-	if errall != nil {
-		logging.Log(fmt.Sprintf("hget latlngconv:%s",errall.Error()))
-		return ""
-	}
-	if reply != nil{
-		newlng := fmt.Sprintf("%s",reply)
-		logging.Log("lng conv:" + newlng)
-		reply,err := conn.Do("hget","imeipos",newlng)
-		if err != nil {
-			logging.Log(fmt.Sprintf("hget imeipos:%s",err.Error()))
-			return ""
-		}
-		if reply != nil{
-			address = fmt.Sprintf("%s",reply)
-		}
-		logging.Log("address conv:" + address)
-	}else {
-		var converturl = "http://restapi.amap.com/v3/assistant/coordinate/convert?"
-		var locations = "locations="
-
-		locations += lng
-		converturl += locations
-		converturl += "&coordsys=gps&output=json&key="
-		rand.Seed(time.Now().UnixNano())
-		index = rand.Uint64() % uint64(len(proto.MapKey))
-		key = proto.MapKey[index]
-		converturl += key
-		logging.Log("converturl" + converturl)
-		respconv, err := http.Get(converturl)
-		bodyconv, err := ioutil.ReadAll(respconv.Body)
-		if err != nil {
-			fmt.Println("ioutil.ReadAll errr: " + err.Error())
-			return ""
-		}
-		json.Unmarshal(bodyconv, &itfconv)
-		convdata := itfconv.(map[string]interface{})
-		if convdata == nil {
-			return ""
-		}
-		amapPos = convdata["locations"].(string)
-
-		_, err = conn.Do("hset", "latlngconv", lng,amapPos)
-		if err != nil {
-			logging.Log(fmt.Sprintf("sadd %d failed:%s", imei, err.Error()))
-			return ""
-		}
-
-		rand.Seed(time.Now().UnixNano())
-		index = rand.Uint64() % uint64(len(proto.MapKey))
-		key = proto.MapKey[index]
-		resp, err := http.PostForm(weburl, url.Values{"output": {"json"}, "location": {amapPos}, "batch": {"true"},
-			"key":{key}, "radius": {"100000"}, "extensions": {"all"}})
-		defer resp.Body.Close()
-		if err != nil {
-			logging.Log("errr: " + err.Error())
-			return ""
-		}
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			logging.Log("ioutil.ReadAll errr: " + err.Error())
-			return ""
-		}
-		json.Unmarshal(body, &itf)
-		mapdata := itf.(map[string]interface{})
-		if mapdata == nil {
-			return ""
-		}
-		logging.Log(fmt.Sprintf("mapdata:%s",mapdata["regeocodes"]))
-		if mapdata["regeocodes"] == nil{
-			return ""
-		}
-		for _, data := range mapdata["regeocodes"].([]interface{}) {
-			location := data.(map[string]interface{})
-			address = location["formatted_address"].(string)
-		}
-
-		_,err = conn.Do("hset","imeipos",amapPos,address)
-		if err != nil{
-			logging.Log(fmt.Sprintf("hset imeipos failed:%s",err.Error()))
-			return ""
-		}
-	}
-	return address
 }
 
 func AppDeleteAlarms(connid uint64, params *proto.QueryLocationsParams) bool {

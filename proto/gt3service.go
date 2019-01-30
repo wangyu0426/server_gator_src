@@ -43,7 +43,7 @@ func parseMsgString(bufMsg []byte, out *GT03Service) {
 	out.reqChatInfoNum = int(gt3result.m_shReqChatInfoNum)
 	out.cur.OrigBattery = uint8(gt3result.m_cBattery_orig)
 	out.cur.AlarmType = uint8(gt3result.m_iAlarmStatu)
-	out.cur.Steps = uint64(gt3result.m_stDataInfo.m_iSpeed)
+	//out.cur.Steps = uint64(gt3result.m_stDataInfo.m_iSpeed)
 	out.cur.DataTime = uint64(gt3result.m_stDataInfo.m_uiDataTime)
 	out.cur.LocateType = uint8(gt3result.m_stDataInfo.m_cStationType)
 	if out.cur.LocateType == LBS_GPS {

@@ -1,4 +1,4 @@
-package gt3tcpserver
+package tracetcpserver
 
 import (
 	"net"
@@ -19,14 +19,13 @@ type Connection struct {
 	lastPushFileNumTime int64
 	conn *net.TCPConn
 	buf []byte
-	recvEndPosition int
 	closeOnce sync.Once
 	closeChan chan struct{}
 	requestChan chan  *proto.MsgData
 	responseChan chan  *proto.MsgData
 }
 
-func newConn(conn *net.TCPConn)  *Connection{
+func NewConn(conn *net.TCPConn)  *Connection{
 	addr,  _:= net.ResolveTCPAddr("tcp", conn.RemoteAddr().String())
 	return &Connection{
 		connid: proto.NewMsgID(),
@@ -34,8 +33,8 @@ func newConn(conn *net.TCPConn)  *Connection{
 		IP:  binary.BigEndian.Uint32(addr.IP.To4()),
 		Port: addr.Port,
 		closeChan: make(chan struct{}),
-		requestChan: make(chan *proto.MsgData, 20*1024),
-		responseChan: make(chan *proto.MsgData, 20*1024),
+		requestChan: make(chan *proto.MsgData, 16),
+		responseChan: make(chan *proto.MsgData, 16),
 	}
 }
 

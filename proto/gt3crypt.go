@@ -86,6 +86,19 @@ func Gt3AesDecrypt(encrypted string) ([]byte, error) {
 	return (decrypted), nil
 }
 
+func GPSAesDecrypt(encrypted []byte) ([]byte, error) {
+	var err error
+	decrypted := make([]byte, len(encrypted))
+	var block cipher.Block
+	block, err = aes.NewCipher([]byte(key))
+	if err != nil {
+		return nil, err
+	}
+	decrypter := cipher.NewCTR(block, iv)
+	decrypter.XORKeyStream(decrypted, encrypted)
+	return (decrypted), nil
+}
+
 func AppserAesEncrypt(data string) (string, error) {
 	block, err := aes.NewCipher(key_app)
 	if err != nil {

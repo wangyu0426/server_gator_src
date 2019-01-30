@@ -43,6 +43,7 @@ const (
 	DEVICE_DATA_LOCATION = iota
 	DEVICE_DATA_STATUS
 	DEVICE_DATA_BATTERY
+	DEVICE_DATA_GPSSTATUS
 )
 
 type RequestContext struct {
@@ -64,6 +65,8 @@ type RequestContext struct {
 	SetDeviceDataFunc  func (imei uint64, updateType int, deviceData LocationData)
 	GetChatDataFunc  func (imei uint64, index int)  []ChatInfo
 	AddChatDataFunc  func (imei uint64, chatData ChatInfo)
+	GetAddressFunc	func(Lat,Lng float64) string
+	FriendAvatar	string
 }
 
 type GmapWifi struct {
@@ -141,6 +144,9 @@ type LocationData struct {
 	LastZoneIndex int32 	`json:"lastZoneIndex"`
 
 	Address	string			`json:"address"`
+	//for trace gator
+	Speed	int32			`json:"speed"`
+	LocateModel	string		`json:"locate_model"`	//0:被动,1:主动
 }
 
 const (
@@ -154,7 +160,10 @@ const (
 	ChatContentText
 	ChatContentHyperLink
 )
-
+const (
+	NormalChat = iota
+	FriendChat
+)
 
 type ChatInfo struct {
 	Imei  uint64 		`json:"imei"`
@@ -314,6 +323,8 @@ var AppNewPhotoListLock = &sync.Mutex{}
 var AppNewPhotoPendingList = map[uint64]*[]*PhotoSettingTask{}
 var AppNewPhotoPendingListLock = &sync.Mutex{}
 
+var Mapimeib12 = map[uint64]bool{}
+
 func HandleTcpRequest(reqCtx RequestContext)  bool{
 	service := &GT06Service{reqCtx: reqCtx,needSendChatNum:true}
 	ret := service.PreDoRequest()
@@ -354,7 +365,8 @@ func MakeLocateNowReplyMsg(imei uint64, isGT6 bool) []byte {
 }
 
 func MakeSosReplyMsg(imei, id uint64) []byte {
-	isGT06 := (GetDeviceModel(imei) == DM_GT06 || GetDeviceModel(imei) == DM_GT05)
+	isGT06 := (GetDeviceModel(imei) == DM_GT06 ||
+		GetDeviceModel(imei) == DM_GT05)
 	if isGT06 {
 		//(002C357593060153353AP16,1,0000000000000012)
 		body := fmt.Sprintf("%015dAP16,1,%016X)", imei, id)
@@ -367,6 +379,12 @@ func MakeSosReplyMsg(imei, id uint64) []byte {
 
 		return []byte(body)
 	}
+}
+
+func MakeActiveAlarmMsg(imei,id uint64,flag int) []byte{
+	body := fmt.Sprintf("%015dAP28,%d,%016X)",imei,flag,id)
+	size := fmt.Sprintf("(%04X",5 + len(body))
+	return []byte(size + body)
 }
 
 func MakeVoiceMonitorReplyMsg(imei, id uint64, phone string, isGT6 bool)  []byte {
@@ -442,13 +460,14 @@ func (service *GT06Service) DoSendCmd() bool {
 	DeviceInfoListLock.Lock()
 	deviceInfo, ok := (*DeviceInfoList)[service.imei]
 	if ok && deviceInfo != nil {
+		model := deviceInfo.Model
 		body := fmt.Sprintf("%015dAP06%s,%016X)", service.imei,
-			makeDeviceFamilyPhoneNumbers(&deviceInfo.Family, true), msg.Header.Header.ID)
+			MakeDeviceFamilyPhoneNumbersEx(&deviceInfo.Family, service.imei,model), msg.Header.Header.ID)
 		msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
 
 		resp := &ResponseItem{CMD_AP06, msg}
 		service.rspList = append(service.rspList, resp)
-		logging.Log(fmt.Sprintf("AP06body:%s", body))
+		logging.Log(fmt.Sprintf("AP06body:%s", string(msg.Data)))
 	}
 	DeviceInfoListLock.Unlock()
 	return  true
@@ -493,10 +512,10 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 	DeviceInfoListLock.Unlock()
 
 	service.GetWatchDataInfo(service.imei)
-	var tagAP11 =  CMDAP11Status{IdNow:uint64(time.Now().UnixNano()),IsCMDAP11:false}
+	/*var tagAP11 =  CMDAP11Status{IdNow:uint64(time.Now().UnixNano()),IsCMDAP11:false}
 	MapIMEISendAP11Lock.Lock()
 	MapIMEISendAP11[service.imei] = tagAP11
-	MapIMEISendAP11Lock.Unlock()
+	MapIMEISendAP11Lock.Unlock()*/
 	//logging.Log(fmt.Sprintf("DoRequest msg.cmd:%d,msg.Data:%s",msg.Header.Header.Cmd,msg.Data))
 	if service.cmd == DRT_SET_IP_PORT_ACK  ||       // 同BP01，手表设置服务器IP端口的ACK
 		service.cmd == DRT_SET_APN_ACK     ||        // 同BP02，手表设置APN的ACK
@@ -579,6 +598,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		}
 		if service.cmd == DRT_SYNC_TIME_ACK {
 			service.DoSendCmd()
+			//手表开机时服务器要把未发送的微聊推送过去
 			service.PushChatNum()
 		}
 
@@ -623,7 +643,7 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 
 		service.cur.AlarmType = service.cur.OrigAlarm
 		//去掉手表上报的低电和设备脱离状态，由服务器计算是否报警
-		//service.cur.AlarmType &= (^uint8(ALARM_BATTERYLOW))
+		service.cur.AlarmType &= (^uint8(ALARM_BATTERYLOW))
 		service.cur.AlarmType &= (^uint8(ALARM_DEVICE_DETACHED))
 
 		//由于手表脱离可能是一种持续状态，手表会持续上报这个状态，所以实际报警是在第一次上报脱离的时候
@@ -712,10 +732,6 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 				service.DoSendCmd()
 			}
 		}*/
-		tagAP11.IsCMDAP11 = true
-		MapIMEISendAP11Lock.Lock()
-		MapIMEISendAP11[service.imei] = tagAP11
-		MapIMEISendAP11Lock.Unlock()
 		logging.Log("ProcessRspFetchFile 1")
 		bufOffset++
 		ret = service.ProcessRspFetchFile(msg.Data[bufOffset: ])
@@ -762,8 +778,6 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 			service.cur.OrigAlarm = uint8(Str2Num(string(alarmBuf), 16))
 		}
 
-		fmt.Println(string(alarmBuf), service.cur.OrigAlarm)
-
 		service.cur.AlarmType = service.cur.OrigAlarm
 		//去掉手表上报的低电和设备脱离状态，由服务器计算是否报警
 		service.cur.AlarmType &= (^uint8(ALARM_BATTERYLOW))
@@ -782,6 +796,15 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		//battery
 		service.cur.OrigBattery = msg.Data[bufOffset] - '0'
 		bufOffset += 2
+
+		fmt.Println("alarmBuf:", service.cur.OrigAlarm,service.old.DataTime,service.old.OrigBattery)
+		//第一步，先来计算是否低电报警
+		/*if  service.old.DataTime == 0 && service.cur.OrigBattery <= 2 || //上次没有数据，这次电量低于2，报低电
+			service.old.DataTime > 0 && service.old.OrigBattery >=3  && service.cur.OrigBattery <= 2 {
+			//上次有数据，上次电量大于等于3，而这次电量小于等于2，报低电
+			service.cur.AlarmType |= ALARM_BATTERYLOW
+		}*/
+
 
 		//main base station
 		//接下来解析"46000024820000DE127,"
@@ -826,7 +849,15 @@ func (service *GT06Service)DoRequest(msg *MsgData) bool  {
 		MapDevBluetoothLock.Unlock()
 
 		service.ProcessAddFriends()
-	}else {
+	}else if service.cmd == DRT_SET_DEVUPDATE{
+		msgIdForAck := Str2Num(string(msg.Data[0: 16]), 16)
+		service.msgAckId = msgIdForAck
+		lastAckOK := Str2Num(string(msg.Data[16: 17]), 10)
+		if lastAckOK == 0{
+			resp := &ResponseItem{CMD_ACK,  service.makeAckParsedMsg(msgIdForAck)}
+			service.rspList = append(service.rspList,resp)
+		}
+	} else {
 		logging.Log(fmt.Sprintf("Error Device CMD(%d, %s)", service.imei, StringCmd(service.cmd)))
 	}
 
@@ -862,22 +893,10 @@ func (service *GT06Service)DoResponse() []*MsgData  {
 		//ioutil.WriteFile("/home/work/Documents/test2.txt", data[0: offset], 0666)
 	}
 
-	MapIMEISendAP11Lock.Lock()
-	tagcmdap11,ok := MapIMEISendAP11[service.imei]
-	MapIMEISendAP11Lock.Unlock()
-	now := uint64(time.Now().UnixNano())
-	if ok {
-		timediff := (now - tagcmdap11.IdNow) / uint64(time.Second)
-		//发了AP11命令后手表没有及时回复BP11,则再等待5分钟再发AP11命令,不要在发其他命令时又发AP11命令
-		if service.needSendChatNum && !tagcmdap11.IsCMDAP11 && timediff >= 5*60 {
-			tagcmdap11.IdNow = uint64(time.Now().UnixNano())
-			MapIMEISendAP11Lock.Lock()
-			MapIMEISendAP11[service.imei] = tagcmdap11
-			MapIMEISendAP11Lock.Unlock()
-
-			service.PushChatNum()
-		}
+	if service.needSendChatNum {
+		service.PushChatNum()
 	}
+
 	if service.needSendPhoto {
 		logging.Log(fmt.Sprint("ProcessRspFetchFile 5, ", service.needSendPhoto,
 			service.needSendPhotoNum, service.reqPhotoInfoNum))
@@ -1036,6 +1055,51 @@ func makeDeviceFamilyPhoneNumbers(family *[MAX_FAMILY_MEMBER_NUM]FamilyMember, i
 	return phoneNumbers
 }
 
+func MakeDeviceFamilyPhoneNumbersEx(family *[MAX_FAMILY_MEMBER_NUM]FamilyMember,imei uint64,model int) string{
+	phoneNumbers := ""
+	if model == DM_GT05{
+		for i := 0; i < len(family); i++{
+			phone := family[i].Phone
+			if phone == "" {
+				phone = "0"
+			}
+			phoneNumbers += fmt.Sprintf("#%s#%s#%d", phone, family[i].Name, family[i].Type)
+		}
+	}else if model == DM_GT06{
+		for i := 0; i < 13; i++{
+			phone := family[i].Phone
+			name := family[i].Name
+			if phone == "" {
+				phone = "0"
+				name = "0"
+			}
+			phoneNumbers += fmt.Sprintf("#%s#%s#%d", phone, name, family[i].Type)
+		}
+	}else if model == DM_GTGPS || model == DM_GT11 || model == DM_GT12 || model == DM_GT13 || model == DM_GT14{
+		for i := 0;i < 3;i++{
+			phone := family[i].Phone
+			if phone == ""{
+				phone = "0"
+			}
+			phoneNumbers += fmt.Sprintf("%s#",phone)
+		}
+	} else{
+		for i := 0; i < 13; i++{
+			phone := family[i].Phone
+			if phone == "" {
+				phone = "0"
+			}
+			if family[i].Name == "" {
+				phoneNumbers += fmt.Sprintf("#%s#%s#%d", phone, "Test", 1)
+			}else{
+				phoneNumbers += fmt.Sprintf("#%s#%s#%d", phone, family[i].Name, family[i].Type)
+			}
+		}
+	}
+
+	return phoneNumbers
+}
+
 func makeHideTimerReplyMsgString(imei, id uint64, isGT06 bool) string {
 	//(006A357593060153353AP22,1,1,0900,1000,127,1,1032,1100,127,1,1400,1500,62,1,1530,1600,62,0000000000000017)
 	body, tail := "", ""
@@ -1070,7 +1134,9 @@ func makeHideTimerReplyMsgString(imei, id uint64, isGT06 bool) string {
 func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*MsgData  {
 	if len(params.Settings) > 0 {
 		//add GT05
-		isGT06 := (GetDeviceModel(imei) == DM_GT06 || GetDeviceModel(imei) == DM_GT05)
+		model := GetDeviceModel(imei)
+		isGT06 := (model == DM_GT06 ||
+			model == DM_GT05)
 		msgList := []*MsgData{}
 		for _, setting := range params.Settings {
 			fmt.Println("MakeSetDeviceConfigReplyMsg:", setting)
@@ -1078,13 +1144,13 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 			msg.Header.Header.Imei = imei
 			msg.Header.Header.ID = NewMsgID()
 			msg.Header.Header.Status = 1
-
+			var id uint64
 			switch setting.FieldName {
 			case OwnerNameFieldName:
 				if isGT06 {
 					body := fmt.Sprintf("%015dAP18,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
 					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-				}else{
+				}else if model == DM_GT03 || model == DM_GTI3 {
 					//(357593060153353AP22,0,BAOBAO)
 					body := fmt.Sprintf("(%015dAP22,0,%s)", imei, setting.NewValue)
 					msg.Data = []byte(body)
@@ -1092,7 +1158,7 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 			case SocketModeOffFieldName:
 				if isGT06 {
 					//不支持此设置
-				}else{
+				}else if model == DM_GT03 || model == DM_GTI3 {
 					//(357593060153353AP23,0)
 					value := 0
 					if setting.NewValue == "0" {
@@ -1103,13 +1169,20 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 					msg.Data = []byte(body)
 				}
 			case TimeZoneFieldName:
-				msg.Data = MakeTimeZoneReplyMsg(imei, msg.Header.Header.ID,
-					deviceTimeZoneString(setting.NewValue), isGT06)
+				if model <= DM_GT05 {
+					msg.Data = MakeTimeZoneReplyMsg(imei, msg.Header.Header.ID,
+						deviceTimeZoneString(setting.NewValue), isGT06)
+				}else if model == DM_GT11 || model == DM_GT12 ||
+					model == DM_GT13 || model == DM_GT14 ||
+					model == DM_GTGPS{
+					msg.Data,id = MakeSetTimeZoneMsg(imei)
+					msg.Header.Header.ID = id
+				}
 			case VolumeFieldName:
 				if isGT06 {
 					body := fmt.Sprintf("%015dAP21,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
 					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-				}else{
+				}else if model == DM_GT03 || model == DM_GTI3 {
 					body := fmt.Sprintf("(%015dAP26,%s)", imei, setting.NewValue)
 					msg.Data = []byte(body)
 				}
@@ -1117,7 +1190,7 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 				if isGT06 {
 					body := fmt.Sprintf("%015dAP20,%04d,%016X)", imei, Str2Num(setting.NewValue, 10), msg.Header.Header.ID)
 					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-				}else{
+				}else if model == DM_GT03 || model == DM_GTI3 {
 					//(357593060153353AP25,0044)
 					body := fmt.Sprintf("(%015dAP25,%04d)", imei, Str2Num(setting.NewValue, 10))
 					msg.Data = []byte(body)
@@ -1126,7 +1199,7 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 				if isGT06 {
 					body := fmt.Sprintf("%015dAP19,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
 					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-				}else{
+				}else {
 					//(357593060153353AP24,0)
 					body := fmt.Sprintf("(%015dAP24,%s)", imei, setting.NewValue)
 					msg.Data = []byte(body)
@@ -1135,7 +1208,7 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 				if isGT06 {
 					body := fmt.Sprintf("%015dAP15,%s,%016X)", imei, setting.NewValue, msg.Header.Header.ID)
 					msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
-				}else{
+				}else if model == DM_GT03 || model == DM_GTI3  {
 					//(357593060153353AP19,1)
 					body := fmt.Sprintf("(%015dAP19,%s)", imei, setting.NewValue)
 					msg.Data = []byte(body)
@@ -1152,8 +1225,9 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 					DeviceInfoListLock.Lock()
 					deviceInfo, ok := (*DeviceInfoList)[imei]
 					if ok && deviceInfo != nil {
+						model := deviceInfo.Model
 						body := fmt.Sprintf("%015dAP06%s,%016X)", imei,
-							makeDeviceFamilyPhoneNumbers(&deviceInfo.Family, true), msgId)
+							MakeDeviceFamilyPhoneNumbersEx(&deviceInfo.Family, imei,model), msgId)
 						msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
 						logging.Log(fmt.Sprintf("---body:%s",body))
 
@@ -1163,13 +1237,14 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 					if ok == false {
 						return nil
 					}
-				}else{
+				}else if model == DM_GT03 || model == DM_GTI3  {
 					DeviceInfoListLock.Lock()
 					deviceInfo, ok := (*DeviceInfoList)[imei]
 					if ok && deviceInfo != nil {
+						model := deviceInfo.Model
 						//(357593060153353AP06#0#number1#name1#type1#numbe....)
 						body := fmt.Sprintf("(%015dAP06#0%s)", imei,
-							makeDeviceFamilyPhoneNumbers(&deviceInfo.Family, false))
+							MakeDeviceFamilyPhoneNumbersEx(&deviceInfo.Family, imei,model))
 						msg.Data = []byte(body)
 					}
 					DeviceInfoListLock.Unlock()
@@ -1249,7 +1324,33 @@ func MakeSetDeviceConfigReplyMsg(imei  uint64, params *DeviceSettingParams)  []*
 			case HideTimer3FieldName:
 				msg.Data = []byte(makeHideTimerReplyMsgString(imei, msg.Header.Header.ID, isGT06))
 				logging.Log(fmt.Sprintf("send hide timer to [%d]:  %s", imei, string(msg.Data)))
-
+			//gator gps
+			case CleanAll:
+				protcol := uint16(0x4407)
+				length := uint16(0x16)
+				msg.Data,id = MakeReplyGPSMsg(imei,protcol,length)
+				msg.Header.Header.ID = id
+				logging.Log(fmt.Sprintf("[%d] gps read version:%x",imei,msg.Data))
+			case SetDevAlarmPhone:
+				phone := setting.NewValue
+				msg.Data,id = MakeSetListenMsg(imei,phone)
+				msg.Header.Header.ID = id
+			case SetPhoneNumbers:
+				msg.Data,id = MakeSetPhoneNumbers(imei)
+				msg.Header.Header.ID = id
+			case SetUseDST:
+				protcol := uint16(0x4413)
+				msg.Data,id = MakeSetUseDSTMsg(imei,protcol,setting.NewValue)
+				msg.Header.Header.ID = id
+			case SetAlarmMsg:
+				msg.Data,id = MakeSetAlarmMsg(imei,setting.NewValue)
+				msg.Header.Header.ID = id
+			case SetLocateModel:
+				msg.Data,id = MakeSetLocatModelMsg(imei,setting.NewValue)
+				msg.Header.Header.ID = id
+			case SetDevBuzzer:
+				msg.Data,id = MakeSetBuzzerMsg(imei,setting.NewValue)
+				msg.Header.Header.ID = id
 			default:
 				//if strings.Contains(setting.FieldName,  FenceFieldName) {
 				//	//(0035357593060571398AP27,3C:46:D8:27:2E:63,48:3C:0C:F5:56:48,0000000000000021)
@@ -1381,6 +1482,13 @@ func (service *GT06Service)makeDeviceChatAckMsg(phone, datatime, milisecs,
 	size := fmt.Sprintf("(%04X", 5 + len(body))
 
 	return []byte(size + body)
+}
+
+func (service *GT06Service) MakeDevUpdateReplyMsg() ([]byte,uint64) {
+	id := makeId()
+	body := fmt.Sprintf("%015dAP29,1,%016X)",service.imei,id)
+	size := fmt.Sprintf("(%04X",5 + len(body))
+	return []byte(size + body),id
 }
 
 
@@ -1516,8 +1624,19 @@ func makeId()  (uint64) {
 
 func MakeTimestampIdString()  string {
 	now := time.Now()
-	id := fmt.Sprintf("%s%d", now.Format("20060102150405"), now.Nanosecond())
-	return id[2:18]
+	id := fmt.Sprintf("%s%d%s", now.Format("20060102150405"), now.Nanosecond(),GetRandomString(6))
+	return id[2:]
+}
+
+func GetRandomString( length int) string{
+	var str string = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIGKLMNOPQRSTUVWXYZ"
+	strbyte := []byte(str)
+	result := []byte{}
+	rand.Seed(time.Now().Unix())
+	for i := 0;i < length;i++{
+		result = append(result,strbyte[rand.Intn(len(str))])
+	}
+	return string(result)
 }
 
 func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool {
@@ -1614,7 +1733,7 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 		service.cur.Lng >= 73.33 &&
 		service.cur.Lng <= 135.05{
 
-		addr := service.GetAddress()
+		addr := service.reqCtx.GetAddressFunc(service.cur.Lat,service.cur.Lng)
 		service.cur.Address = addr
 	}
 
@@ -1717,7 +1836,7 @@ func (service *GT06Service) GetAddress() string {
 	var key,amapPos string
 	var lng string
 	var conn redis.Conn
-	conn = redisPool.Get()
+	conn = RedisPool.Get()
 	if conn == nil {
 		return ""
 	}
@@ -1756,11 +1875,16 @@ func (service *GT06Service) GetAddress() string {
 		converturl += key
 		logging.Log("converturl:" + converturl)
 		respconv, err := http.Get(converturl)
+		if err != nil{
+			logging.Log(fmt.Sprintf("httpget converturl:%s",err.Error()))
+			return ""
+		}
 		bodyconv, err := ioutil.ReadAll(respconv.Body)
 		if err != nil {
 			fmt.Println("ioutil.ReadAll errr: " + err.Error())
 			return ""
 		}
+		defer respconv.Body.Close()
 		json.Unmarshal(bodyconv, &itfconv)
 		convdata := itfconv.(map[string]interface{})
 		if convdata == nil {
@@ -1778,12 +1902,13 @@ func (service *GT06Service) GetAddress() string {
 		index = rand.Uint64() % uint64(len(MapKey))
 		key = MapKey[index]
 		resp, err := http.PostForm(weburl, url.Values{"output": {"json"}, "location": {amapPos}, "batch": {"true"},
-			"key":                                              {key}, "radius": {"100000"}, "extensions": {"all"}})
-		defer resp.Body.Close()
+			"key":                                              {key}, "radius": {"1000"}, "extensions": {"all"}})
+
 		if err != nil {
 			logging.Log("errr: " + err.Error())
 			return ""
 		}
+		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			logging.Log("ioutil.ReadAll errr: " + err.Error())
@@ -1799,7 +1924,15 @@ func (service *GT06Service) GetAddress() string {
 		}
 		for _, data := range mapdata["regeocodes"].([]interface{}) {
 			location := data.(map[string]interface{})
-			address = location["formatted_address"].(string)
+			var locate interface{} = location["formatted_address"]
+			switch v := locate.(type){
+			case string:
+				address = v
+			case []interface{}:
+				logging.Log(fmt.Sprintf("formatted_address:%s",location["formatted_address"]))
+				address = v[0].(string)
+			default:
+			}
 		}
 
 		_,err = conn.Do("hset","imeipos",amapPos,address)
@@ -1824,11 +1957,11 @@ func (service *GT06Service)  NotifyAppWithNewLocation() bool  {
 }
 
 func (service *GT06Service)  NotifyAppWithNewMinichat(chat ChatInfo,oldImei uint64) bool  {
-	return NotifyAppWithNewMinichat(service.reqCtx.APNSServerBaseURL, service.imei, service.reqCtx.AppNotifyChan, chat)
+	return NotifyAppWithNewMinichat(service.reqCtx.APNSServerBaseURL, service.imei, service.reqCtx.AppNotifyChan, chat,service.reqCtx.FriendAvatar)
 }
 
 
-func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan *AppMsgData,  chat ChatInfo) bool  {
+func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan *AppMsgData,  chat ChatInfo,FriendAvatar string) bool  {
 	result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405"),ImeiAddFriend:map[uint64][]AddFriend{}}
 
 	//result.Minichat = append(result.Minichat, GetChatListForApp(imei, "")...)
@@ -1850,13 +1983,15 @@ func NotifyAppWithNewMinichat(apiBaseURL string, imei uint64, appNotifyChan chan
 				addfriend.FriendDevName = deviceInfo.Family[index].FriendDevName
 				//生产服务器要修改
 				if addfriend.FriendAvatar != "" {
-					addfriend.FriendAvatar = "http://120.25.214.188:8015" +
-						deviceInfo.Family[index].FriendAvatar
+					addfriend.FriendAvatar = FriendAvatar + deviceInfo.Family[index].FriendAvatar
 				}
 				MapPhone2IMEILock.Lock()
-				_imei, ok1 := (*MapPhone2IMEI)[deviceInfo.Family[index].Phone]
-				if ok1 {
-					addfriend.FriendIMEI = _imei
+				phone2imei,ok2 := (*MapPhone2IMEI)[imei]
+				if ok2 && phone2imei != nil {
+					_imei, ok1 := phone2imei[deviceInfo.Family[index].Phone]
+					if ok1 {
+						addfriend.FriendIMEI = _imei
+					}
 				}
 				MapPhone2IMEILock.Unlock()
 
@@ -2044,8 +2179,9 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		msg.Header.Header.Imei = service.imei
 		msg.Header.Header.ID = NewMsgID()
 		msg.Header.Header.Status = 1
+		model := deviceInfo.Model
 		body := fmt.Sprintf("%015dAP06%s,%016X)", service.imei,
-			makeDeviceFamilyPhoneNumbers(&deviceInfo.Family,  true),   msg.Header.Header.ID)
+			MakeDeviceFamilyPhoneNumbersEx(&deviceInfo.Family,  service.imei,model),   msg.Header.Header.ID)
 		msg.Data = []byte(fmt.Sprintf("(%04X", 5 + len(body)) + body)
 
 		resp = &ResponseItem{CMD_AP06, msg}
@@ -2100,7 +2236,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		chat.Info.CreateTime = NewMsgID()
 		chat.Info.Imei = service.imei
 		chat.Info.Sender = Num2Str(service.imei, 10)
-		chat.Info.SenderType = 0
+		chat.Info.SenderType = ChatFromDeviceToApp
 		chat.Info.FileID = fileId
 		chat.Info.Content = Num2Str(fileId, 10)
 		chat.Info.DateTime = timestamp
@@ -2154,9 +2290,16 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		var filePathDir_ string
 		newChatInfo_ := newChatInfo
 		MapPhone2IMEILock.Lock()
-		imei1,ok1 := (*MapPhone2IMEI)[newChatInfo.Receiver]
+		phone2imei,ok2 := (*MapPhone2IMEI)[service.imei]
+		var imei1 uint64
+		var ok1 = false
+		if ok2 {
+			imei1, ok1 = phone2imei[newChatInfo.Receiver]
+		}
 		if ok1 {
+			//filePathDir:保存在好友imei的路径
 			filePathDir = fmt.Sprintf("%s%d", service.reqCtx.MinichatUploadDir+"watch/", imei1)
+			//filePathDir_:保存在自己imei的路径
 			filePathDir_ = fmt.Sprintf("%s%d",service.reqCtx.MinichatUploadDir+"watch/", service.imei)
 
 			os.MkdirAll(filePathDir_, 0755)
@@ -2165,9 +2308,12 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 			args := fmt.Sprintf("-i %s -acodec libfaac -ab 64k -ar 44100 %s/%d.aac", filePath, filePathDir_, fileId)
 			err2,_ := ExecCmd("ffmpeg",  strings.Split(args, " ")...)
 			if err2 != nil {
+				MapPhone2IMEILock.Unlock()
 				logging.Log(fmt.Sprintf("[%d] 1 ffmpeg %s failed, %s", service.imei, args, err2.Error()))
+				return false
 			}
 		}else {
+			//普通微聊,filePathDir_:保存在自己imei的路径
 			filePathDir = fmt.Sprintf("%s%d", service.reqCtx.MinichatUploadDir+"watch/", service.imei)
 		}
 		MapPhone2IMEILock.Unlock()
@@ -2180,17 +2326,18 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		err2, _ := ExecCmd("ffmpeg",  strings.Split(args, " ")...)
 		if err2 != nil {
 			logging.Log(fmt.Sprintf("[%d] 2 ffmpeg %s failed, %s", service.imei, args, err2.Error()))
+			return false
 		}
 
 		if ok1{
 			//通知APP有新的微聊信息。。。
 			//要把sender换成对方imei的电话号码
-			//newChatInfo.Sender = newChatInfo.Receiver
+			//newChatInfo.Sender = newChatInfo.Receiver,发送给好友APP的微聊信息
 			newChatInfo.Imei = imei1
 			newChatInfo.Content = fmt.Sprintf("%swatch/%d/%d.aac", service.reqCtx.DeviceMinichatBaseUrl,
 				imei1, fileId)
 
-			//自己IMEI也要保存记录
+			//自己IMEI也要保存记录,发送给自己的APP
 			newChatInfo_.Sender = newChatInfo_.Receiver
 
 			newChatInfo_.Flags = 1
@@ -2209,11 +2356,16 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 
 			//发给好友对应的IMEI
 			MapPhone2IMEILock.Lock()
-			imei,ok := (*MapPhone2IMEI)[newChatInfo.Receiver]
+			phone2imei,ok1 = (*MapPhone2IMEI)[service.imei]
+			var imei uint64
+			var ok3 = false
+			if ok1 {
+				imei, ok3 = phone2imei[newChatInfo.Receiver]
+			}
 			MapPhone2IMEILock.Unlock()
-			if ok{
+			if ok3{
 				//Flags = 1表示好友发送微聊,要在群聊界面
-				newChatInfo.Flags = 1
+				newChatInfo.Flags = FriendChat
 				//和APP端一样，Sender表示来自哪里
 				newChatInfo.Sender = deviceInfo.SimID
 
@@ -2247,15 +2399,14 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 						msg := MakeReplyMsg(imei, false,
 							MakeFileNumReplyMsg(imei, ChatContentVoice, len(chatData), true),
 							NewMsgID())
-
-
 						msg.Header.Header.Cmd = CMD_AP11
 						msg.Header.Header.Count = len(chatData)
 						msg.Header.Header.Type = TYPE_CMD_AP11
-						resp = &ResponseItem{CMD_AP11,msg}
-						service.rspList = append(service.rspList,resp)
+
+						resp = &ResponseItem{CMD_AP11, msg}
+						service.rspList = append(service.rspList, resp)
 						service.needSendChatNum = false
-						logging.Log(fmt.Sprintf("DM_GT06 AP11:%d",len(chatData)))
+						logging.Log(fmt.Sprintf("Friend DM_GT06 AP11:%d", len(chatData)))
 
 					}else if model == DM_GTI3  || model == DM_GT03 {
 						msg := MakeReplyMsg(imei, false,
@@ -2264,6 +2415,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 						msg.Header.Header.Cmd = CMD_GT3_AP15_PUSH_CHAT_COUNT
 						msg.Header.Header.Count = len(chatData)
 						msg.Header.Header.Type = TYPE_CMD_AP11
+
 						resp = &ResponseItem{CMD_AP11,msg}
 						service.rspList = append(service.rspList,resp)
 						service.needSendChatNum = false
@@ -2274,7 +2426,7 @@ func (service *GT06Service) ProcessMicChat(pszMsg []byte) bool {
 		}
 
 		AddChatForApp(newChatInfo)
-		if newChatInfo.Flags == 1 {
+		if newChatInfo.Flags == FriendChat {
 			oldImei := service.imei
 			service.imei = imei1
 			service.NotifyAppWithNewMinichat(newChatInfo, oldImei)
@@ -2560,6 +2712,18 @@ func (service *GT06Service) ProcessPushMicChatAck(pszMsg []byte) bool {
 		logging.Log(fmt.Sprintf("AP06lastStatus:%d", lastStatus))
 		if lastStatus == -1 {
 			service.DoSendCmd()
+
+			//号码错误时,再次重头开始发送.20180915
+			DeviceInfoListLock.Lock()
+			deviceInfo, ok := (*DeviceInfoList)[service.imei]
+			DeviceInfoListLock.Unlock()
+			if ok{
+				for i,_  := range deviceInfo.Family{
+					if deviceInfo.Family[i].Phone == fields[0]{
+
+					}
+				}
+			}
 			return false
 		}
 	} else {
@@ -2616,9 +2780,10 @@ func (service *GT06Service) ProcessPushMicChatAck(pszMsg []byte) bool {
 			}else{
 				AppSendChatList[service.imei] = &[]*ChatTask{}
 			}
-			//service.needSendChatNum = true
+			//Mapimeib12[service.imei] = true
 		}else{
 			service.needSendChatNum = false
+			//Mapimeib12[service.imei] = false
 			service.rspList = append(service.rspList, service.shardData("AP12", (*chatTask)[0].Data.Phone,
 				(*chatTask)[0].Data.Time, (*chatTask)[0].Data.Data, blockIndex + 1)[0])
 			(*chatTask)[0].Data.BlockIndex = blockIndex + 1
@@ -2857,15 +3022,24 @@ func (service *GT06Service) ProcessRspChat() bool {
 			//voiceFileName :=fmt.Sprintf("/usr/share/nginx/html/web/upload/minichat/app/%d/%s.amr",
 			//	service.imei, chatData[0].Content)
 			var voiceFileName string
-			if chatData[0].Flags == 0 {
+			if chatData[0].Flags == NormalChat {
 				voiceFileName = fmt.Sprintf("%s%d/%d.amr", service.reqCtx.MinichatUploadDir,
 					service.imei, chatData[0].FileID)
 			}else {
-				imei,ok := (*MapPhone2IMEI)[chatData[0].Receiver]
-				if ok {
-					voiceFileName = fmt.Sprintf("%s%d/%d.amr", service.reqCtx.MinichatUploadDir+"watch/",
-						imei, chatData[0].FileID)
-					fmt.Println("voiceFileName:",voiceFileName)
+				phone2imei,ok1 := (*MapPhone2IMEI)[service.imei]
+				fmt.Println("phone2imei:",phone2imei,chatData[0].Receiver)
+				if ok1 {
+					DeviceInfoListLock.Lock()
+					deviceInfo, ok := (*DeviceInfoList)[service.imei]
+					DeviceInfoListLock.Unlock()
+					if ok {
+						//好友发送的接受者是本机的SimID
+						if deviceInfo.SimID == chatData[0].Receiver{
+							voiceFileName = fmt.Sprintf("%s%d/%d.amr", service.reqCtx.MinichatUploadDir+"watch/",
+								service.imei, chatData[0].FileID)
+							fmt.Println("voiceFileName:", voiceFileName)
+						}
+					}
 				}
 			}
 			voice, chatReplyMsg := service.makeChatDataReplyMsg(voiceFileName,
@@ -3083,7 +3257,7 @@ logging.Log(fmt.Sprintf("GT06 Update Watch %d, Step:%d, Battery:%d,locateType = 
 			service.cur.Lng >= 73.33 &&
 			service.cur.Lng <= 135.05{
 
-			addr := service.GetAddress()
+			addr := service.reqCtx.GetAddressFunc(service.cur.Lat,service.cur.Lng)
 			service.cur.Address = addr
 		}
 
@@ -3664,11 +3838,15 @@ func (service *GT06Service) makeJson(data *LocationData) string  {
 
 func (service *GT06Service) WatchDataUpdateDB() bool {
 	//strTime := fmt.Sprintf("20%d", service.cur.DataTime) //20170520114920
-	strTableaName := "gator3_device_location" //fmt.Sprintf("device_location_%s_%s", string(strTime[0:4]), string(strTime[4: 6]))
+	suffix := service.cur.DataTime / 100000000
+	suffixYear := suffix / 100
+	suffixMonth := suffix % 100
+	strTableaName := fmt.Sprintf("gator3_device_location_20%02d_%02d",suffixYear,suffixMonth)
+	//strTableaName := "gator3_device_location_2019_01" //fmt.Sprintf("device_location_%s_%s", string(strTime[0:4]), string(strTime[4: 6]))
 	strSQL := fmt.Sprintf("INSERT INTO %s VALUES(%d, %d, %06f, %06f, '%s'::jsonb)",
 		strTableaName, service.imei, 20000000000000 + service.cur.DataTime, service.cur.Lat, service.cur.Lng, service.makeJson(&service.cur))
 
-	logging.Log(fmt.Sprintf("SQL: %s", strSQL))
+	logging.Log(fmt.Sprintf("SQL: %s---%d", strSQL,service.cur.DataTime))
 
 	//strSQLTest := fmt.Sprintf("update %s set location_time=%d,data=jsonb_set(data,'{datatime}','%d'::jsonb,'{steps}','%d'::jsonb,'{locateType}','%d'::jsonb,true) ",
 	//	strTableaName, 20000000000000 + service.cur.DataTime, service.cur.DataTime, service.cur.Steps, service.cur.LocateType)
@@ -3777,7 +3955,7 @@ func (service *GT06Service) NotifyAlarmMsg() bool {
 		service.cur.DataTime, service.cur.AlarmType, service.cur.ZoneName)
 
 	//
-	conn := redisPool.Get()
+	/*conn := redisPool.Get()
 	defer conn.Close()
 	alarmItem := AlarmItem{}
 	alarmItem.Time = service.cur.DataTime
@@ -3789,21 +3967,32 @@ func (service *GT06Service) NotifyAlarmMsg() bool {
 
 	array := reply.([]interface{})
 	for i,item := range array{
+		fmt.Println("reply:",i,string(item.([]uint8)))
 		if i % 2 == 0{
 			continue
 		}else {
 			data := reportJSONData{}
 			err = json.Unmarshal([]byte(parseUint8Array(item)), &data)
-			if err != nil {
+			if err == nil {
 				alarmItem.Language = data.Language
 				pushInfo := pushJSON{service.imei, "", ownerName,
 					service.cur.DataTime, service.cur.AlarmType, service.cur.ZoneName,0}
 				alarmItem.Alarm =  MakePushContent(data.Language, &pushInfo)
-				//tui song dao app
+
+				result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405"),ImeiAddFriend:map[uint64][]AddFriend{},BAllData:false}
+				var alarms  = LocationData{}
+				if service.reqCtx.GetDeviceDataFunc != nil {
+					alarms = service.reqCtx.GetDeviceDataFunc(service.imei, service.reqCtx.Pgpool)
+				}
+				fmt.Println(alarms)
+				result.Alarms = append(result.Alarms,alarms)
+				service.reqCtx.AppNotifyChan<- (&AppMsgData{Cmd: CmdAlarmMsgAck,
+					Imei:service.imei,
+					Data: MakeStructToJson(result), ConnID: 0})
 			}
 		}
 
-	}
+	}*/
 
 	return true
 }
@@ -4248,6 +4437,8 @@ func  (service *GT06Service) GetLocationByAmap() bool  {
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		//获取地图失败时定位类型设置
+		service.cur.LocateType = LBS_SMARTLOCATION
 		logging.Log(fmt.Sprintf("[%d] amap response has err, %s", service.imei, err.Error()))
 		return false
 	}
@@ -4257,6 +4448,8 @@ func  (service *GT06Service) GetLocationByAmap() bool  {
 	result := AmapResult{}
 	err = json.Unmarshal(body, &result)
 	if err != nil {
+		//获取地图失败时定位类型设置
+		service.cur.LocateType = LBS_SMARTLOCATION
 		logging.Log(fmt.Sprintf("[%d] parse amap response failed, %s", service.imei, err.Error()))
 		return false
 	}
@@ -4271,6 +4464,8 @@ func  (service *GT06Service) GetLocationByAmap() bool  {
 	dLontiTude := Str2Float(latlng[0]) //经度
 	dLatitude := Str2Float(latlng[1]) //纬度
 	if dLatitude == 0 || dLontiTude == 0 {
+		//获取地图失败时定位类型设置
+		service.cur.LocateType = LBS_SMARTLOCATION
 		logging.Log(fmt.Sprintf("%d bad location :%06f, %06f", service.imei, dLatitude, dLontiTude))
 		return false
 	}
@@ -4289,7 +4484,7 @@ func (service *GT06Service) ProcessAddFriends() bool{
 	for i,_ := range service.friendtooth{
 		//好友蓝牙地址
 		devbluetooth,ok := (*MapDevBluetooth)[service.friendtooth[i]]
-		fmt.Println("devbluetooth,",devbluetooth,ok,service.friendtooth[i])
+		logging.Log(fmt.Sprintf("devbluetooth,",service.friendtooth,*MapDevBluetooth,devbluetooth,ok,service.friendtooth[i]))
 		if ok{
 			if devbluetooth.SendFlag == false{
 				DeviceInfoListLock.Lock()
@@ -4300,18 +4495,13 @@ func (service *GT06Service) ProcessAddFriends() bool{
 						//只在白名单里添加好友
 						frienddeviceInfo, ok := (*DeviceInfoList)[devbluetooth.Imei]
 						if ok {
-							//防止重复添加
-							if deviceInfo.Family[index].Phone == frienddeviceInfo.SimID {
-								fmt.Println("readd the same phone...")
-								break
-							}
-
-							if deviceInfo.Family[index].Phone == "" &&
+							if (deviceInfo.Family[index].Phone == "" &&
 								deviceInfo.Family[index].IsAddFriend != 1 &&
-								index >= 3 && index < 30 {
+								index >= 3 && index < 30) ||
+								deviceInfo.Family[index].Phone == frienddeviceInfo.SimID {
 								//当前手表发送AP06命令
 								deviceInfo.Family[index].Phone = frienddeviceInfo.SimID
-								fmt.Println("SimID," + frienddeviceInfo.SimID)
+								logging.Log(fmt.Sprintf("SimID2,",frienddeviceInfo.SimID))
 								deviceInfo.Family[index].Index = index
 								deviceInfo.Family[index].IsAdmin = 1
 								deviceInfo.Family[index].IsAddFriend = 1
@@ -4326,7 +4516,11 @@ func (service *GT06Service) ProcessAddFriends() bool{
 								deviceInfo.Family[index + 1].Type = 0*/
 								if deviceInfo.Family[index].Phone != "" {
 									//添加的好友对应IMEI
-									(*MapPhone2IMEI)[deviceInfo.Family[index].Phone] = devbluetooth.Imei
+									_,ok1 := (*MapPhone2IMEI)[service.imei]
+									if !ok1{
+										(*MapPhone2IMEI)[service.imei] = map[string]uint64{}
+									}
+									(*MapPhone2IMEI)[service.imei][deviceInfo.Family[index].Phone] = devbluetooth.Imei
 									Mapimei2Phone[service.imei] = append(Mapimei2Phone[service.imei],deviceInfo.Family[index].Phone)
 								}
 								msg := &MsgData{}
@@ -4345,8 +4539,9 @@ func (service *GT06Service) ProcessAddFriends() bool{
 										logging.Log("add friend server failed to update db" + err.Error())
 										return false
 									}
+									model := deviceInfo.Model
 									body := fmt.Sprintf("%015dAP06%s,%016X)", service.imei,
-										makeDeviceFamilyPhoneNumbers(&deviceInfo.Family, true), msg.Header.Header.ID)
+										MakeDeviceFamilyPhoneNumbersEx(&deviceInfo.Family, service.imei,model), msg.Header.Header.ID)
 									msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
 
 									resp := &ResponseItem{CMD_AP06, msg}
@@ -4366,14 +4561,12 @@ func (service *GT06Service) ProcessAddFriends() bool{
 									Imei:                                        service.imei, Data: string(resultData), AddFriend: true}
 
 								for k, _ := range frienddeviceInfo.Family {
-									if frienddeviceInfo.Family[k].Phone == deviceInfo.SimID{
-										fmt.Println("2 readd the same phone...")
-										break
-									}
-									if frienddeviceInfo.Family[k].Phone == "" &&
+									//如果添加的号码已存在,则把存在的号码变为好友
+									if (frienddeviceInfo.Family[k].Phone == "" &&
 										frienddeviceInfo.Family[k].IsAddFriend != 1 &&
-										k >= 3 && k < 30 {
-										fmt.Println("SimID1," + deviceInfo.SimID)
+										k >= 3 && k < 30) ||
+										frienddeviceInfo.Family[k].Phone == deviceInfo.SimID {
+										logging.Log(fmt.Sprintf("SimID22," + deviceInfo.SimID))
 										frienddeviceInfo.Family[k].Phone = deviceInfo.SimID
 										frienddeviceInfo.Family[k].Index = k
 										frienddeviceInfo.Family[k].IsAdmin = 1
@@ -4389,7 +4582,11 @@ func (service *GT06Service) ProcessAddFriends() bool{
 										frienddeviceInfo.Family[k + 1].Type = 0*/
 										if frienddeviceInfo.Family[k].Phone != "" {
 											//对方IMEI
-											(*MapPhone2IMEI)[frienddeviceInfo.Family[k].Phone] = service.imei
+											_,ok2 := (*MapPhone2IMEI)[devbluetooth.Imei]
+											if !ok2{
+												(*MapPhone2IMEI)[devbluetooth.Imei] = map[string]uint64{}
+											}
+											(*MapPhone2IMEI)[devbluetooth.Imei][frienddeviceInfo.Family[k].Phone] = service.imei
 											Mapimei2Phone[devbluetooth.Imei] = append(Mapimei2Phone[devbluetooth.Imei],frienddeviceInfo.Family[k].Phone)
 										}
 										break
@@ -4411,8 +4608,9 @@ func (service *GT06Service) ProcessAddFriends() bool{
 								msg.Header.Header.Imei = devbluetooth.Imei
 								msg.Header.Header.ID = NewMsgID()
 								msg.Header.Header.Status = 0
+								model := frienddeviceInfo.Model
 								body := fmt.Sprintf("%015dAP06%s,%016X)", devbluetooth.Imei,
-									makeDeviceFamilyPhoneNumbers(&frienddeviceInfo.Family, true), msg.Header.Header.ID)
+									MakeDeviceFamilyPhoneNumbersEx(&frienddeviceInfo.Family, devbluetooth.Imei,model), msg.Header.Header.ID)
 								msg.Data = []byte(fmt.Sprintf("(%04X", 5+len(body)) + body)
 								resp := &ResponseItem{CMD_AP06, msg}
 								service.rspList = append(service.rspList, resp)
@@ -4427,14 +4625,14 @@ func (service *GT06Service) ProcessAddFriends() bool{
 								service.reqCtx.AppNotifyChan <- &AppMsgData{Cmd: CmdAddFriendAck,
 									Imei:                                        devbluetooth.Imei, Data: string(resultData), AddFriend: true}
 
-								devbluetooth.SendFlag = true
+								//devbluetooth.SendFlag = true
 								break
 							}
 						}
 					}
 				}
 
-				devbluetooth.SendFlag = true
+				//devbluetooth.SendFlag = true
 			}
 
 		}

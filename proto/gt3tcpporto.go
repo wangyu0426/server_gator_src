@@ -13,9 +13,6 @@ import (
 	"io/ioutil"
 	"os"
 	"bytes"
-	"net/url"
-	"math/rand"
-	"github.com/garyburd/redigo/redis"
 )
 
 type GT03Service struct {
@@ -218,10 +215,13 @@ func (service *GT03Service)DoRequest(msg *MsgData) bool  {
 		//BP09  heart beat
 		//解析消息中的各字段数据
 		parseMsgString((msg.Data[0:]), service)
+		//logging.Log(fmt.Sprintf("parseMsgString:%s-----%d",msg.Data[0:],service.cur.DataTime))
 		length := len(string(msg.Data[0:]))
 		spliptMsg := strings.Split(string(msg.Data[1:length - 1]),",")
 		if len(spliptMsg) >= 3{
 			service.cur.LocateType = uint8(Str2Num(spliptMsg[2],10))
+			//modify by chenqw 20180903
+			service.cur.Steps = Str2Num(spliptMsg[1],10)
 		}
 
 		if service.cur.DataTime == 0 {
@@ -246,7 +246,7 @@ func (service *GT03Service)DoRequest(msg *MsgData) bool  {
 
 func (service *GT03Service)CountSteps() {
 	//170520114920
-	//logging.Log(fmt.Sprintf("gt3 CountSteps :%d--%d--%d--%d",service.cur.Steps,service.old.Steps,service.cur.DataTime,service.old.DataTime))
+	//logging.Log(fmt.Sprintf("gt3 CountSteps :%d--%d--%d--%d--%d",service.imei,service.cur.Steps,service.old.Steps,service.cur.DataTime,service.old.DataTime))
 	if service.old.DataTime == 0 || (service.cur.DataTime / 1000000 ==  service.old.DataTime / 1000000) {
 		service.cur.Steps += service.old.Steps
 	}
@@ -563,15 +563,20 @@ func (service *GT03Service) ProcessLocate() bool {
 				fmt.Println("err,",err.Error())
 				return true
 			}
+			defer response.Body.Close()
 			logging.Log(fmt.Sprintln("ddknav.com:",string(data),response.Status))
 
-			strTableaName := "gator3_device_location" //fmt.Sprintf("device_location_%s_%s", string(strTime[0:4]), string(strTime[4: 6]))
+			suffix := service.cur.DataTime / 100000000
+			suffixYear := suffix / 100
+			suffixMonth := suffix % 100
+			strTableaName := fmt.Sprintf("gator3_device_location_20%02d_%02d",suffixYear,suffixMonth)
+			//strTableaName := "gator3_device_location_2019_01" //fmt.Sprintf("device_location_%s_%s", string(strTime[0:4]), string(strTime[4: 6]))
 			cur := service.cur
 			cur.Imei = 357593061000645
 			strSQL := fmt.Sprintf("INSERT INTO %s VALUES(%d, %d, %06f, %06f, '%s'::jsonb)",
 				strTableaName, 357593061000645, 20000000000000 + service.cur.DataTime, service.cur.Lat, service.cur.Lng, service.makeJson(&cur))
 
-			logging.Log(fmt.Sprintf("SQL: %s", strSQL))
+			logging.Log(fmt.Sprintf("SQL: %s---%d", strSQL,service.cur.DataTime))
 
 			//strSQLTest := fmt.Sprintf("update %s set location_time=%d,data=jsonb_set(data,'{datatime}','%d'::jsonb,'{steps}','%d'::jsonb,'{locateType}','%d'::jsonb,true) ",
 			//	strTableaName, 20000000000000 + service.cur.DataTime, service.cur.DataTime, service.cur.Steps, service.cur.LocateType)
@@ -592,8 +597,8 @@ func (service *GT03Service) ProcessLocate() bool {
 
 	service.CountSteps()
 
-	logging.Log(fmt.Sprintf("%d - middle: m_iAlarmStatu=%d, parsed location:  m_DateTime=%d, m_lng=%f, m_lat=%f,LocateType = %d,ret = %t,steps = %d",
-		service.imei, service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat,service.cur.LocateType,ret,service.cur.Steps))
+	logging.Log(fmt.Sprintf("%d - middle: m_iAlarmStatu=%d, parsed location:  m_DateTime=%d, m_lng=%f, m_lat=%f,LocateType = %d,ret = %t,steps = %d,service.old.DataTime = %d",
+		service.imei, service.cur.AlarmType, service.cur.DataTime, service.cur.Lng, service.cur.Lat,service.cur.LocateType,ret,service.cur.Steps,service.old.DataTime))
 
 	if ret == false ||  service.cur.LocateType == LBS_INVALID_LOCATION  || service.cur.Lng == 0 && service.cur.Lat== 0 {
 		service.needSendLocation = false
@@ -626,7 +631,7 @@ func (service *GT03Service) ProcessLocate() bool {
 		service.cur.Lng >= 73.33 &&
 		service.cur.Lng <= 135.05{
 
-		addr := service.GetAddress()
+		addr := service.reqCtx.GetAddressFunc(service.cur.Lat,service.cur.Lng)
 		service.cur.Address = addr
 	}
 
@@ -662,107 +667,6 @@ func (service *GT03Service) ProcessLocate() bool {
 	return true
 }
 
-func (service *GT03Service) GetAddress() string {
-	var address string
-	var itf interface{}
-	var itfconv interface{}
-	var weburl= "http://restapi.amap.com/v3/geocode/regeo"
-	var index uint64
-	var key,amapPos string
-	var lng string
-	var conn redis.Conn
-	conn = redisPool.Get()
-	if conn == nil {
-		return ""
-	}
-	defer conn.Close()
-	lat := strconv.FormatFloat(service.cur.Lat, 'f', -1, 64)
-	lng = strconv.FormatFloat(service.cur.Lng, 'f', -1, 64)
-	lng += ","
-	lng += lat
-	reply,errall := conn.Do("hget","latlngconv",lng)
-	if errall != nil {
-		logging.Log(fmt.Sprintf("hget latlngconv:%s",errall.Error()))
-		return ""
-	}
-	if reply != nil{
-		newlng := fmt.Sprintf("%s",reply)
-		logging.Log("lng conv:" + newlng)
-		reply,err := conn.Do("hget","imeipos",newlng)
-		if err != nil {
-			logging.Log(fmt.Sprintf("hget imeipos:%s",err.Error()))
-			return ""
-		}
-		if reply != nil{
-			address = fmt.Sprintf("%s",reply)
-		}
-		logging.Log("address conv:" + address)
-	}else {
-		var converturl = "http://restapi.amap.com/v3/assistant/coordinate/convert?"
-		var locations = "locations="
-
-
-		locations += lng
-		converturl += locations
-		converturl += "&coordsys=gps&output=json&key="
-		rand.Seed(time.Now().UnixNano())
-		index = rand.Uint64() % uint64(len(MapKey))
-		key = MapKey[index]
-		converturl += key
-		logging.Log("converturl" + converturl)
-		respconv, err := http.Get(converturl)
-		bodyconv, err := ioutil.ReadAll(respconv.Body)
-		if err != nil {
-			fmt.Println("ioutil.ReadAll errr: " + err.Error())
-			return ""
-		}
-		json.Unmarshal(bodyconv, &itfconv)
-		convdata := itfconv.(map[string]interface{})
-		if convdata == nil {
-			return ""
-		}
-		amapPos = convdata["locations"].(string)
-
-		_, err = conn.Do("hset", "latlngconv", lng,amapPos)
-		if err != nil {
-			logging.Log(fmt.Sprintf("hset latlngconv failed:%s",err.Error()))
-			return ""
-		}
-
-		rand.Seed(time.Now().UnixNano())
-		index = rand.Uint64() % uint64(len(MapKey))
-		key = MapKey[index]
-		resp, err := http.PostForm(weburl, url.Values{"output": {"json"}, "location": {amapPos}, "batch": {"true"},
-			"key":                                              {key}, "radius": {"100000"}, "extensions": {"all"}})
-		defer resp.Body.Close()
-		if err != nil {
-			logging.Log("errr: " + err.Error())
-			return ""
-		}
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			logging.Log("ioutil.ReadAll errr: " + err.Error())
-			return ""
-		}
-		json.Unmarshal(body, &itf)
-		mapdata := itf.(map[string]interface{})
-		if mapdata == nil || mapdata["regeocodes"] == nil{
-			return ""
-		}
-		for _, data := range mapdata["regeocodes"].([]interface{}) {
-			location := data.(map[string]interface{})
-			address = location["formatted_address"].(string)
-		}
-
-		_,err = conn.Do("hset","imeipos",amapPos,address)
-		if err != nil{
-			logging.Log(fmt.Sprintf("hset imeipos failed:%s",err.Error()))
-			return ""
-		}
-	}
-	return address
-}
-
 func (service *GT03Service)  NotifyAppWithNewLocation() bool  {
 	result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405")}
 	result.Locations = append(result.Locations, service.cur)
@@ -774,7 +678,7 @@ func (service *GT03Service)  NotifyAppWithNewLocation() bool  {
 }
 
 func (service *GT03Service)  NotifyAppWithNewMinichat(chat ChatInfo) bool  {
-	return NotifyAppWithNewMinichat(service.reqCtx.APNSServerBaseURL, service.imei, service.reqCtx.AppNotifyChan, chat)
+	return NotifyAppWithNewMinichat(service.reqCtx.APNSServerBaseURL, service.imei, service.reqCtx.AppNotifyChan, chat,service.reqCtx.FriendAvatar)
 }
 
 func (service *GT03Service) ProcessMicChat() bool {
@@ -802,6 +706,7 @@ func (service *GT03Service) ProcessMicChat() bool {
 	err2, _ := ExecCmd("ffmpeg",  strings.Split(args, " ")...)
 	if err2 != nil {
 		logging.Log(fmt.Sprintf("[%d] ffmpeg %s failed, %s", service.imei, args, err2.Error()))
+		return false
 	}
 
 	//通知APP有新的微聊信息。。。
@@ -975,6 +880,7 @@ func (service *GT03Service) ProcessGPSInfo(pszMsg []byte) bool {
 
 	bTrueTime := true
 	iTimeDay := uint64(0)
+	//logging.Log(fmt.Sprintf("pszMsg:%s",string(pszMsg[bufOffset: ])))
 	if pszMsg[bufOffset] == '-' {
 		bufOffset++
 		bTrueTime = false
@@ -1438,11 +1344,15 @@ func (service *GT03Service) makeJson(data *LocationData) string  {
 
 func (service *GT03Service) WatchDataUpdateDB() bool {
 	//strTime := fmt.Sprintf("20%d", service.cur.DataTime) //20170520114920
-	strTableaName := "gator3_device_location" //fmt.Sprintf("device_location_%s_%s", string(strTime[0:4]), string(strTime[4: 6]))
+	suffix := service.cur.DataTime / 100000000
+	suffixYear := suffix / 100
+	suffixMonth := suffix % 100
+	strTableaName := fmt.Sprintf("gator3_device_location_20%02d_%02d",suffixYear,suffixMonth)
+	//strTableaName := "gator3_device_location_2019_01" //fmt.Sprintf("device_location_%s_%s", string(strTime[0:4]), string(strTime[4: 6]))
 	strSQL := fmt.Sprintf("INSERT INTO %s VALUES(%d, %d, %06f, %06f, '%s'::jsonb)",
 		strTableaName, service.imei, 20000000000000 + service.cur.DataTime, service.cur.Lat, service.cur.Lng, service.makeJson(&service.cur))
 
-	logging.Log(fmt.Sprintf("SQL: %s", strSQL))
+	logging.Log(fmt.Sprintf("SQL: %s---%d", strSQL,service.cur.DataTime))
 
 	//strSQLTest := fmt.Sprintf("update %s set location_time=%d,data=jsonb_set(data,'{datatime}','%d'::jsonb,'{steps}','%d'::jsonb,'{locateType}','%d'::jsonb,true) ",
 	//	strTableaName, 20000000000000 + service.cur.DataTime, service.cur.DataTime, service.cur.Steps, service.cur.LocateType)
@@ -1550,6 +1460,46 @@ func (service *GT03Service) NotifyAlarmMsg() bool {
 
 	PushNotificationToApp(service.reqCtx.APNSServerBaseURL, service.imei, "",  ownerName,
 		service.cur.DataTime * 10000, service.cur.AlarmType, service.cur.ZoneName)
+
+	//
+	/*conn := redisPool.Get()
+	defer conn.Close()
+	alarmItem := AlarmItem{}
+	alarmItem.Time = service.cur.DataTime
+	alarmItem.FamilyPhone = ""
+	reply, err  := conn.Do("HGETALL",  service.imei) //genUUIDKey(jsonDict.UUID)))
+	if err != nil {
+		return false
+	}
+
+	array := reply.([]interface{})*/
+	//for i,item := range array{
+	//	fmt.Println("gt3 reply:",i,string(item.([]uint8)))
+	//	if i % 2 == 0{
+	//		continue
+	//	}else {
+			//data := reportJSONData{}
+			//err = json.Unmarshal([]byte(parseUint8Array(item)), &data)
+			//if err == nil {
+			//	alarmItem.Language = data.Language
+			//	pushInfo := pushJSON{service.imei, "", ownerName,
+			//						 service.cur.DataTime, service.cur.AlarmType, service.cur.ZoneName,0}
+			//	alarmItem.Alarm =  MakePushContent(data.Language, &pushInfo)
+
+				result := HeartbeatResult{Timestamp: time.Now().Format("20060102150405"),ImeiAddFriend:map[uint64][]AddFriend{},BAllData:false}
+				var alarms  = LocationData{}
+				if service.reqCtx.GetDeviceDataFunc != nil {
+					alarms = service.reqCtx.GetDeviceDataFunc(service.imei, service.reqCtx.Pgpool)
+				}
+				fmt.Println(alarms)
+				result.Alarms = append(result.Alarms,alarms)
+				service.reqCtx.AppNotifyChan<- (&AppMsgData{Cmd: CmdAlarmMsgAck,
+					Imei:service.imei,
+					Data: MakeStructToJson(result), ConnID: 0})
+			//}
+		//}
+
+	//}
 
 	return true
 }
@@ -1848,6 +1798,8 @@ func  (service *GT03Service) GetLocationByGoogle() bool  {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		//获取地图失败时定位类型设置
+		service.cur.LocateType = LBS_SMARTLOCATION
 		logging.Log(fmt.Sprintf("[%d] do request of google map api  failed,  %s", service.imei, err.Error()))
 		return false
 	}
@@ -1856,6 +1808,8 @@ func  (service *GT03Service) GetLocationByGoogle() bool  {
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		//获取地图失败时定位类型设置
+		service.cur.LocateType = LBS_SMARTLOCATION
 		logging.Log(fmt.Sprintf("[%d] google map response has err, %s", service.imei, err.Error()))
 		return false
 	}
@@ -1867,11 +1821,15 @@ func  (service *GT03Service) GetLocationByGoogle() bool  {
 	result := GooglemapResult{}
 	err = json.Unmarshal([]byte(bodyStr), &result)
 	if err != nil {
+		//获取地图失败时定位类型设置
+		service.cur.LocateType = LBS_SMARTLOCATION
 		logging.Log(fmt.Sprintf("[%d] parse google map response failed, %s", service.imei, err.Error()))
 		return false
 	}
 
 	if result.Location.Lat == 0 || result.Location.Lng == 0 {
+		//获取地图失败时定位类型设置
+		service.cur.LocateType = LBS_SMARTLOCATION
 		logging.Log(fmt.Sprintf("%d bad location :%06f, %06f", service.imei,
 			result.Location.Lat, result.Location.Lng))
 		return false
