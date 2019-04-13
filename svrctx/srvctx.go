@@ -260,17 +260,17 @@ func GetChatData(imei uint64, index int)  []proto.ChatInfo {
 	chatList, ok := proto.AppSendChatList[imei]
 	if ok {
 		if len(*chatList) > 0 {
-			logging.Log("chatList index start...")
-			for k,_ := range *chatList{
-				logging.Log(fmt.Sprintf("before chatList index:%d",(*chatList)[k].Info.FileIndex))
-			}
-			logging.Log("2 chatList index start...")
+			//logging.Log("chatList index start...")
+			//for k,_ := range *chatList{
+			//	logging.Log(fmt.Sprintf("before chatList index:%d",(*chatList)[k].Info.FileIndex))
+			//}
+			//logging.Log("2 chatList index start...")
 			proto.QuickSortEx(*chatList,0,len(*chatList) - 1)
 
-			for k,_ := range *chatList{
-				logging.Log(fmt.Sprintf("after chatList index:%d",(*chatList)[k].Info.FileIndex))
-			}
-			logging.Log("chatList index end...")
+			//for k,_ := range *chatList{
+			//	logging.Log(fmt.Sprintf("after chatList index:%d",(*chatList)[k].Info.FileIndex))
+			//}
+			//logging.Log("chatList index end...")
 
 			for i, chat := range *chatList {
 				if index == -1 ||  index == i {

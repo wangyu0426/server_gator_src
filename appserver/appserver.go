@@ -98,6 +98,7 @@ type Getdeviceinfoimei struct {
 
 var (
 	redisPool *redis.Pool
+	redisPushPool *redis.Pool
 )
 
 
@@ -114,6 +115,17 @@ func initRedisPool(redisURI string) {
 				logging.PanicLogAndExit(fmt.Sprintf("connect to redis(%s) got error: %s", redisURI, err))
 			}
 			return c, nil
+		},
+	}
+	redisPushPool = &redis.Pool{
+		MaxIdle:100,
+		MaxActive:12000,
+		Dial: func() (redis.Conn, error) {
+			c,err := redis.Dial("tcp",":6389")
+			if err != nil{
+				logging.PanicLogAndExit(fmt.Sprintf("connect to redis(:6389) got error: %s", err))
+			}
+			return c,nil
 		},
 	}
 }
@@ -513,6 +525,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 	proto.Mapimei2PhoneLock.Unlock()
 
 	if uploadType != "minichat" {
+		fmt.Println("contactAvatar:",r.FormValue(uploadType))
 		fileData, err := base64Decode([]byte(r.FormValue(uploadType)))
 		if err != nil {
 			result.ErrCode = 500
@@ -620,6 +633,7 @@ func HandleUploadFile(w http.ResponseWriter, r *http.Request) {
 
 		defer file.Close()
 		fileData, err7 := ioutil.ReadAll(file)
+		fmt.Println("contactAvatar:",fileInfo)
 		if err7 != nil {
 			result.ErrCode = 500
 			result.ErrMsg = "server failed to read the data of  the uploaded  file"
@@ -1574,7 +1588,7 @@ func getDeviceUserTable(imei uint64) map[string]bool  {
 	for rows.Next() {
 		username := ""
 		rows.Scan(&username)
-		fmt.Println(username)
+		logging.Log(fmt.Sprintf("[%d]username:%s",imei,username))
 		users[username] = true
 	}
 

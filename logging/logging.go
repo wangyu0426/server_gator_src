@@ -127,7 +127,7 @@ func PanicLogAndExit(errmsg string){
 		return
 	}
 
-	errText := fmt.Sprint("get panic: ",  errmsg, ", ", err, ", ", string(PanicTrace(128)))
+	errText := fmt.Sprint("get panic: ",  errmsg, ", ", err, ", ", string(PanicTrace(4)))
 	Log(errText)
 
 	SendMail("835280181@qq.com", "835280181@qq.com",  "Go Server Panic", errText, "",
@@ -143,7 +143,7 @@ func PanicLogAndCatch(errmsg string){
 		return
 	}
 
-	errText := fmt.Sprint("get panic: ",  errmsg, ", ", err, ", ", string(PanicTrace(128)))
+	errText := fmt.Sprint("get panic: ",  errmsg, ", ", err, ", ", string(PanicTrace(4)))
 	Log(errText)
 
 	SendMail("835280181@qq.com", "835280181@qq.com",  "Go Server Panic", errText, "",

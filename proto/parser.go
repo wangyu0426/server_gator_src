@@ -16,11 +16,9 @@ import (
 	"encoding/json"
 	"../logging"
 	"net/http"
-	"net/url"
 	"io/ioutil"
 	"net"
 	"github.com/garyburd/redigo/redis"
-	"crypto/tls"
 )
 
 const (
@@ -424,6 +422,7 @@ type HeartbeatParams struct {
 	SelectedDevice string `json:"selectedDevice"`
 	FamilyNumber string `json:"familyNumber"`
 	AlarmFlag	bool	`json:"alarm_flag"`
+	NotificationToken string `json:"notificationToken"`
 }
 
 type AddFriend struct{
@@ -433,6 +432,10 @@ type AddFriend struct{
 	FriendIMEI		uint64	`json:"friend_imei"`
 }
 
+type PushAndroidParam struct{
+	NotificationToken string 	`json:"notificationToken"`
+	Language string		`json:"language"`
+} 
 
 type HeartbeatResult struct {
 	Timestamp string `json:"timestamp"`
@@ -637,6 +640,7 @@ type DeviceAddParams struct {
 	//chenqw
 	AccountType int `json:"accountType"`	//AccountType是根据传过去的admin再传回给服务器
 	DeviceToken string `json:"deviceToken"`
+	NotificationToken	string `json:"notificationToken"`
 }
 
 type SettingParam struct {
@@ -733,6 +737,10 @@ const (
 	MAX_WATCH_ALARM_NUM = 5
 	MAX_HIDE_TIMER_NUM = 4
 	MAX_FAMILY_MEMBER_NUM = 30
+)
+
+const(
+	GET_CATCH_NUM = 5
 )
 
 var	ReloadEPOFileName 		= "epo"
@@ -869,6 +877,8 @@ var DevRecoverAck				= DevRecover + CmdAckTail
 var SetDevBuzzerAck				= SetDevBuzzer + CmdAckTail
 var DevActiveAck				= DevActive + CmdAckTail
 
+var GetRegisterCode				= "get-register-code"
+var GetRegisterCodeAck			= GetRegisterCode + CmdAckTail
 type SafeZone struct {
 	ZoneID int32
 	//ZoneName string
@@ -1135,6 +1145,7 @@ var MapAccessToLang = sync.Map{}
 var CommonLock = sync.Mutex{}
 var (
 	RedisPool *redis.Pool
+	RedisAddrPool *redis.Pool
 )
 
 func InitRedisPool(redisURI string) {
@@ -1150,6 +1161,17 @@ func InitRedisPool(redisURI string) {
 				logging.PanicLogAndExit(fmt.Sprintf("connect to redis(%s) got error: %s", redisURI, err))
 			}
 			return c, nil
+		},
+	}
+	RedisAddrPool = &redis.Pool{
+		MaxIdle:100,
+		MaxActive:12000,
+		Dial: func() (redis.Conn, error) {
+			c,err := redis.Dial("tcp",":6399")
+			if err != nil{
+				logging.PanicLogAndExit(fmt.Sprintf("connect to redis(:6399) got error: %s", err))
+			}
+			return c,nil
 		},
 	}
 }
@@ -1473,7 +1495,7 @@ func LoadEPOFromFile() error {
 
 func ReloadEPO() error {
 	if true {
-		urlRequest := "http://service.gatorcn.com/tracker/web/download36h.php?action=down36h"
+		/*urlRequest := "http://service.gatorcn.com/tracker/web/download36h.php?action=down36h"
 		//urlRequest := "http://service.gatorcn.com/download36h.php?action=down36h"
 		tr := &http.Transport{
 			TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
@@ -1483,8 +1505,10 @@ func ReloadEPO() error {
 		if err != nil {
 			logging.Log("request epo from service.gatorcn.com failed, " + err.Error())
 			return err
-		}
-
+		}*/
+		urlRequest := "http://wpepodownload.mediatek.com/EPO_GPS_3_1.DAT?" +
+			"vendor=CORETEK&project=xS6ObVXYzpo-hj8gaVK0wKvlDUyBoXanarbQ7rAho8w&device_id=mt333x"
+		resp,err := http.Get(urlRequest)
 		defer resp.Body.Close()
 
 		body, err := ioutil.ReadAll(resp.Body)
@@ -1773,7 +1797,7 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 			apn += deviceInfo.ApnSms
 			if deviceInfo.Model == DM_GT03 {
 				apn += "#000000#"
-			}else if deviceInfo.Model == DM_GTI3 {
+			}else if deviceInfo.Model == DM_GTI3 || deviceInfo.Model == DM_GT06 || deviceInfo.Model == DM_GT05{
 				apn += "#091230#"
 			}else if deviceInfo.Model == DM_GTGPS ||
 				deviceInfo.Model == DM_GT11 ||
@@ -1781,7 +1805,8 @@ func LoadDeviceInfoFromDB(dbpool *sql.DB)  bool{
 				deviceInfo.Model == DM_GT13 ||
 				deviceInfo.Model == DM_GT14{
 				apn += "#"
-				apn += Num2Str(imeiunit64 % 1000000,10)
+				strIMEI := parseUint8Array(IMEI)
+				apn += strIMEI[len(strIMEI) - 6 :]
 				apn += "#"
 			}
 			deviceInfo.ApnSms = apn

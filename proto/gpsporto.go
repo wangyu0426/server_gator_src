@@ -694,14 +694,15 @@ func  MakeSetLocatModelMsg(imei uint64,setting string) ([]byte,uint64) {
 	1：开启主动定位模式
 	Bit6
 	Bit6 ~ Bit0：主动定位模式，定位数据上传间隔，单位为秒*/
-	strModel := strings.Split(setting,"|")
+	body[20] = 0
+	/*strModel := strings.Split(setting,"|")
 	if len(strModel) == 2 {
 		body[20] = 0
 		if strModel[0] == "1" {
 			body[20] |= (1 << 7)
 		}
 		body[20] |= (byte(Str2Num(strModel[1],10)) & 0x7F)
-	}
+	}*/
 	body[21] = 0x0D
 	body[22] = 0x0A
 	id := Str2Num(strtime[4:],16)
@@ -810,7 +811,7 @@ func (service *GPSService) Dorequest(msg *MsgData) bool {
 	if deviceInfo.DevVer == "1"{
 		madeData, id := MakeSetUseDSTMsg(service.imei, 0x4424, "1")
 		logging.Log(fmt.Sprintf("[%d]gps now updating...%s",service.imei,deviceInfo.DevVer))
-		resp := &ResponseItem{CMD_GPS_SETUPDATE, service.makeReplyMsg(true, madeData, id)}
+		resp := &ResponseItem{CMD_GPS_SETUPDATE, service.makeReplyMsg(false, madeData, id)}
 		service.rspList = append(service.rspList, resp)
 		deviceInfo.DevVer = "0"
 		strSQL := fmt.Sprintf("update watchinfo set DevVer = '0' where IMEI = '%d'",service.imei)
@@ -1070,13 +1071,18 @@ func (service *GPSService) Dorequest(msg *MsgData) bool {
 				}
 
 				service.getSameWifi = true
-				return  true
+				//没有WIFI定位下才返回
+				if (clocateTag & 2) == 0 {
+					return true
+				}
 			}
 			fmt.Println(service.cur,service.lbsInfoList)
-			ret = service.GetLocation()
-			if ret == false {
-				logging.Log("gps GetLocation of LBS failed")
-				return false
+			if (clocateTag & 2) == 0 {
+				ret = service.GetLocation()
+				if ret == false {
+					logging.Log("gps GetLocation of LBS failed")
+					return false
+				}
 			}
 			service.cur.Accracy = service.accracy
 			service.cur.LocateType = LBS_JIZHAN
@@ -1116,14 +1122,15 @@ func (service *GPSService) Dorequest(msg *MsgData) bool {
 			return ret
 		}
 
-		if service.getSameWifi && service.cur.AlarmType <= 0  {
-			logging.Log(fmt.Sprintf("return with: m_bGetSameWifi && m_iAlarmStatu <= 0(%d, %d, %d)",
-				service.imei, service.cur.Lat, service.cur.Lng))
-			return ret
-		}
+		//if service.getSameWifi && service.cur.AlarmType <= 0  {
+		//	logging.Log(fmt.Sprintf("return with: m_bGetSameWifi && m_iAlarmStatu <= 0(%d, %d, %d)",
+		//		service.imei, service.cur.Lat, service.cur.Lng))
+		//	return ret
+		//}
 		//同时，把数据写入内存服务器
 		if service.cur.OrigBattery >= 3{
-			service.cur.Battery = service.cur.OrigBattery - 3
+			//电压等级为1,2,3,4,5格显示
+			service.cur.Battery = service.cur.OrigBattery - 2
 		}
 
 		//高德地图判定经纬度是否在大陆
@@ -1330,6 +1337,15 @@ func  (service *GPSService) GetLocationByAmap() bool  {
 	strReqURL := "http://apilocate.amap.com/position"
 	strRequestBody, strWifiReqParam, strLBSReqParam := "", "", ""
 
+	//add to redis cache chenqw 20190330
+	conn := RedisAddrPool.Get()
+	if conn == nil {
+		return false
+	}
+	defer conn.Close()
+	var wifiKey string
+	var lbsKey	string
+
 	for i := 0; i < int(service.wiFiNum); i++ {
 		if i==0 {
 			strWifiReqParam += fmt.Sprintf("mmac=%s,%d,%s", string(service.wifiInfoList[i].MacID[0:]),
@@ -1341,6 +1357,7 @@ func  (service *GPSService) GetLocationByAmap() bool  {
 			strWifiReqParam += fmt.Sprintf("|%s,%d,%s", string(service.wifiInfoList[i].MacID[0:]),
 				0 - service.wifiInfoList[i].Ratio, service.wifiInfoList[i].WIFIName)
 		}
+		wifiKey += string(service.wifiInfoList[i].MacID[0:])
 	}
 
 	for i := 0; i < int(service.lbsNum); i++ {
@@ -1354,7 +1371,56 @@ func  (service *GPSService) GetLocationByAmap() bool  {
 			strLBSReqParam += fmt.Sprintf("|%d,%02d,%d,%d,%d", service.lbsInfoList[i].Mcc,
 				service.lbsInfoList[i].Mnc, service.lbsInfoList[i].Lac, service.lbsInfoList[i].CellID, service.lbsInfoList[i].Signal)
 		}
+		lbsInfo := fmt.Sprintf("%d%d%d%d",service.lbsInfoList[i].CellID,
+			service.lbsInfoList[i].Mcc,service.lbsInfoList[i].Mnc,service.lbsInfoList[i].Lac)
+		lbsKey += lbsInfo
 	}
+	wifiKey += lbsKey
+
+	reply,err := conn.Do("hgetall",Num2Str(service.imei,10))
+	if err != nil{
+		return false
+	}
+	arr := reply.([]interface{})
+	for index,item := range arr{
+		if index % 2 == 0{
+			iPass := true
+			locationItem := parseUint8Array(item)
+			if len(wifiKey) != len(locationItem){
+				continue
+			}
+			logging.Log(fmt.Sprintf("[%d]trace amap locationItem:%s",service.imei,locationItem))
+			for i := 0; i < int(service.wiFiNum) ; i++ {
+				if -1 == strings.Index(locationItem,string(service.wifiInfoList[i].MacID[0:])){
+					iPass = false
+					break
+				}
+			}
+			for i := 0; i < int(service.lbsNum) ; i++ {
+				if iPass == false{
+					break
+				}
+				lbsInfo := fmt.Sprintf("%d%d%d%d",service.lbsInfoList[i].CellID,
+					service.lbsInfoList[i].Mcc,service.lbsInfoList[i].Mnc,service.lbsInfoList[i].Lac)
+				if -1 == strings.Index(locationItem,lbsInfo){
+					iPass = false
+					break
+				}
+			}
+			if iPass {
+				localItem := parseUint8Array(arr[index + 1])
+				logging.Log(fmt.Sprintf("[%d]trace amap locationItem address:%s",service.imei,localItem))
+				var curLocal CurLocal
+				json.Unmarshal([]byte(localItem),&curLocal)
+				service.cur.Accracy = curLocal.Accracy
+				service.cur.Lat = curLocal.Lat
+				service.cur.Lng = curLocal.Lng
+				return true
+			}
+		}
+	}
+
+	//end add to redis cache chenqw 20190330
 
 	if service.lbsNum == 0 {
 		strRequestBody = fmt.Sprintf("accesstype=1&imei=%d&cdma=0&", service.imei) + strWifiReqParam
@@ -1412,6 +1478,16 @@ func  (service *GPSService) GetLocationByAmap() bool  {
 	service.cur.LocateType = uint8(Str2Num(result.Result.Type, 10))
 	service.cur.Accracy = uint32(Str2Num(result.Result.Radius, 10))
 
+	if len(wifiKey) > 0 {
+		wifiLocal := CurLocal{Accracy: service.cur.Accracy, Lat: service.cur.Lat, Lng: service.cur.Lng}
+		jsonWifi, err := json.Marshal(wifiLocal)
+		if err != nil {
+			logging.Log(fmt.Sprintf("%d bad wifiLocal : %s", service.imei, err.Error()))
+			return false
+		}
+		conn.Do("HSET", Num2Str(service.imei, 10), wifiKey, string(jsonWifi))
+	}
+
 	logging.Log(fmt.Sprintf("amap TransForm location Is:%06f, %06f,locateType = %d", service.cur.Lat, service.cur.Lng,service.cur.LocateType))
 
 	return true
@@ -1421,11 +1497,13 @@ func  (service *GPSService) GetLocationByGoogle() bool  {
 	params := &GooglemapParams{}
 	params.RadioType = "gsm"
 	params.ConsiderIP = true
-
+	var wifiKey string
+	var lbsKey	string
 	for  i := 0; i < int(service.wiFiNum); i++ {
 		params.WifiAccessPoints = append(params.WifiAccessPoints, GmapWifi{string(service.wifiInfoList[i].MacID[0:]),
 																		   int(service.wifiInfoList[i].Ratio),
 		})
+		wifiKey += string(service.wifiInfoList[i].MacID[0:])
 	}
 
 	for  i := 0; i < int(service.lbsNum); i++ {
@@ -1435,7 +1513,61 @@ func  (service *GPSService) GetLocationByGoogle() bool  {
 															  int(service.lbsInfoList[i].Mnc),
 															  int(service.lbsInfoList[i].Signal),
 		})
+		lbsInfo := fmt.Sprintf("%d%d%d%d",service.lbsInfoList[i].CellID,
+			service.lbsInfoList[i].Mcc,service.lbsInfoList[i].Mnc,service.lbsInfoList[i].Lac)
+		lbsKey += lbsInfo
 	}
+	wifiKey += lbsKey
+	//add to redis cache chenqw 20190330
+	conn := RedisAddrPool.Get()
+	if conn == nil {
+		return false
+	}
+	defer conn.Close()
+
+	reply,err := conn.Do("hgetall",Num2Str(service.imei,10))
+	if err != nil{
+		return false
+	}
+	arr := reply.([]interface{})
+	for index,item := range arr{
+		if index % 2 == 0{
+			iPass := true
+			locationItem := parseUint8Array(item)
+			if len(wifiKey) != len(locationItem){
+				continue
+			}
+			logging.Log(fmt.Sprintf("[%d]trace google locationItem:%s",service.imei,locationItem))
+			for i := 0; i < int(service.wiFiNum) ; i++ {
+				if -1 == strings.Index(locationItem,string(service.wifiInfoList[i].MacID[0:])){
+					iPass = false
+					break
+				}
+			}
+			for i := 0; i < int(service.lbsNum) ; i++ {
+				if iPass == false{
+					break
+				}
+				lbsInfo := fmt.Sprintf("%d%d%d%d",service.lbsInfoList[i].CellID,
+					service.lbsInfoList[i].Mcc,service.lbsInfoList[i].Mnc,service.lbsInfoList[i].Lac)
+				if -1 == strings.Index(locationItem,lbsInfo){
+					iPass = false
+					break
+				}
+			}
+			if iPass {
+				localItem := parseUint8Array(arr[index + 1])
+				logging.Log(fmt.Sprintf("[%d]trace google locationItem address:%s",service.imei,localItem))
+				var curLocal CurLocal
+				json.Unmarshal([]byte(localItem),&curLocal)
+				service.cur.Accracy = curLocal.Accracy
+				service.cur.Lat = curLocal.Lat
+				service.cur.Lng = curLocal.Lng
+				return true
+			}
+		}
+	}
+	//end add to redis cache chenqw 20190330
 
 	jsonStr, err := json.Marshal(params)
 	if err != nil {
@@ -1443,8 +1575,11 @@ func  (service *GPSService) GetLocationByGoogle() bool  {
 		return false
 	}
 
+	//req, err := http.NewRequest("POST",
+	//	"https://www.googleapis.com/geolocation/v1/geolocate?key=AIzaSyAbvNjmCijnZv9od3cC0MwmTC6HTBG6R60",
+	//	bytes.NewBuffer(jsonStr))
 	req, err := http.NewRequest("POST",
-		"https://www.googleapis.com/geolocation/v1/geolocate?key=AIzaSyAbvNjmCijnZv9od3cC0MwmTC6HTBG6R60",
+		"https://www.googleapis.com/geolocation/v1/geolocate?key=AIzaSyCQk7miEjqioYshEGEPAQFoGiayAmX4-Bs",
 		bytes.NewBuffer(jsonStr))
 	if err != nil {
 		logging.Log(fmt.Sprintf("[%d] call google map api  failed,  %s", service.imei, err.Error()))
@@ -1487,6 +1622,16 @@ func  (service *GPSService) GetLocationByGoogle() bool  {
 	service.cur.Accracy = uint32(result.Accuracy)
 	service.cur.Lat = result.Location.Lat
 	service.cur.Lng = result.Location.Lng
+
+	if len(wifiKey) > 0 {
+		wifiLocal := CurLocal{Accracy: service.cur.Accracy, Lat: service.cur.Lat, Lng: service.cur.Lng}
+		jsonWifi, err := json.Marshal(wifiLocal)
+		if err != nil {
+			logging.Log(fmt.Sprintf("%d bad wifiLocal : %s", service.imei, err.Error()))
+			return false
+		}
+		conn.Do("HSET", Num2Str(service.imei, 10), wifiKey, string(jsonWifi))
+	}
 
 	return true
 }

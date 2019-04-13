@@ -28,6 +28,7 @@ import (
 	"image/png"
 	"image/gif"
 	"crypto/x509"
+	"reflect"
 )
 
 const (
@@ -77,11 +78,8 @@ func IsAccessTokenValid(accessToken string) (bool, []string) {
 }
 
 func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data []byte) bool {
-	//logging.Log(fmt.Sprintf("HandleAppRequest: %s\n",string(data)))
-
 	var itf interface{}
 	header := data[:6]
-
 	if string(header) == "GTS01:" {
 		ens := data[6:len(data)]
 		//logging.Log("ens: " + string(ens))
@@ -95,11 +93,6 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 
 	} else  {
 		return false
-		/*err :=json.Unmarshal(data[0:], &itf)
-		if err != nil {
-			logging.Log("AppConnReadLoop,parse recved json data failed, " + err.Error())
-			return false
-		}*/
 	}
 
 	msg:= itf.(map[string]interface{})
@@ -134,7 +127,7 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 	if ( params["accessToken"] == nil ||  params["accessToken"].(string) == "") { //没有accesstoken
 		//同时又不是注册和登录，那么认为是非法请求
 		if cmd.(string) != proto.LoginCmdName && cmd.(string) != proto.RegisterCmdName  &&
-			cmd.(string) != proto.ResetPasswordCmdName {
+			cmd.(string) != proto.ResetPasswordCmdName && cmd.(string) != proto.GetRegisterCode {
 			logging.Log("access token is bad, not login and register")
 			return false
 		}
@@ -162,13 +155,26 @@ func HandleAppRequest(connid uint64, appserverChan chan *proto.AppMsgData, data 
 		for _,mem := range params["imei"].([]interface{}){
 			_imeiList = append(_imeiList,mem.(string))
 		}
-		return LoginOut(connid,_imeiList,params["uuid"].(string))
+		notificationToken := ""
+		if params["notificationToken"] != nil {
+			notificationToken = params["notificationToken"].(string)
+		}
+		return LoginOut(connid,_imeiList,params["uuid"].(string),notificationToken)
 	case proto.RegisterCmdName:
-		return login(connid, params["username"].(string), params["password"].(string), true)
-
+		if params["RemainingData"] != nil {
+			return RegisterEx(connid, params["username"].(string), params["password"].(string), params["RemainingData"].(string))
+		}else {
+			return Register(connid, params["username"].(string), params["password"].(string))
+		}
+	case proto.GetRegisterCode:
+		return getRegisterCode(connid,params["username"].(string))
 	case proto.ResetPasswordCmdName:
-		return resetPassword(connid, params["username"].(string))
-
+		if params["imei"] == nil {
+			return resetPassword(connid, params["username"].(string), false,
+				"", "")
+		}else{
+			return resetPasswordEx(connid, params["username"].(string), params["name"].(string), params["imei"].(string))
+		}
 	case proto.ModifyPasswordCmdName:
 		return modifyPassword(connid, params["username"].(string), params["accessToken"].(string),
 			params["oldPassword"].(string), params["newPassword"].(string))
@@ -451,7 +457,16 @@ func handleHeartBeat(imeiList []string, connid uint64, params *proto.HeartbeatPa
 					params.UUID, params.AccessToken, params.Platform, params.Language)
 			}
 		}
-
+		conn := redisPushPool.Get()
+		defer conn.Close()
+		pushParam := proto.PushAndroidParam{params.NotificationToken,params.Language}
+		//NotificationToken:不同设备登录不一样,同一设备重新登录NotificationToken相同
+		if params.NotificationToken != "" {
+			_, err := conn.Do("hset", imei, params.NotificationToken, proto.MakeStructToJson(pushParam))
+			if err != nil {
+				logging.Log(fmt.Sprintf("hset imei error:%s", err.Error()))
+			}
+		}
 		/*_,ok1 := proto.ConnidUserName[imeiUint64]
 		if !ok1{
 			proto.ConnidUserName[imeiUint64] = map[string]string{}
@@ -827,15 +842,227 @@ func login(connid uint64, username, password string, isRegister bool) bool {
 	return true
 }
 
-func LoginOut(connid uint64,IMEI []string,UUID string) bool {
+func Register(connid uint64, username, password string) bool {
+	var urlRequest string
+	if !svrctx.Get().IsUseAliYun {
+		urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
+	}else {
+		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+
+	}
+	reqType := "register"
+
+	urlRequest += reqType
+
+	pool := x509.NewCertPool()
+	caCertPath := "/home/ec2-user/work/codes/https_test/watch.gatorcn.com/gd_bundle-g2-g1.crt"
+	caCrt,err := ioutil.ReadFile(caCertPath)
+	if err != nil{
+		logging.Log("ReadFile gd_bundle-g2-g1.crt failed, " + err.Error())
+		return false
+	}
+	pool.AppendCertsFromPEM(caCrt)
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{RootCAs:pool},
+	}
+
+
+	//tr := &http.Transport{
+	//	TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	//}
+	client := &http.Client{Transport: tr}
+
+
+	resp, err := client.PostForm(urlRequest, url.Values{"username": {username}, "password": {password}})
+	if err != nil {
+		logging.Log("app " + reqType + "failed, " + err.Error())
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logging.Log("response has err, " + err.Error())
+		return false
+	}
+
+	var itf interface{}
+	err = json.Unmarshal(body, &itf)
+	logging.Log(fmt.Sprintf("parse login format :%s", string(body)))
+	if err != nil {
+		logging.Log("login parse  " + reqType + " response as json failed, " + err.Error())
+		return false
+	}
+
+	loginData := itf.(map[string]interface{})
+	if loginData == nil {
+		return false
+	}
+
+	status :=  loginData["status"]
+	accessToken := loginData["accessToken"]
+	//handle wrong login password
+	if accessToken == nil {
+
+		proto.ConnidLogin[connid] += 1
+	}
+
+	logging.Log("status: " + fmt.Sprint(status))
+	logging.Log("accessToken: " + fmt.Sprint(accessToken))
+	//logging.Log("devices: " + fmt.Sprint(devices))
+	if status != nil && accessToken != nil {
+		//proto.CommonLock.Lock()
+		//proto.AccessTokenMap[fmt.Sprint(accessToken)] = username
+		proto.AccessTokenMap.Store(fmt.Sprint(accessToken),username)
+		//proto.CommonLock.Unlock()
+		AddAccessToken(accessToken.(string))
+
+		appServerChan <- (&proto.AppMsgData{Cmd: proto.RegisterAckCmdName,
+			UserName: username,
+			Data: (fmt.Sprintf("{\"user\": %s, \"location\": []}", string(body))), ConnID: connid})
+	}else{
+		var data string
+		v := reflect.ValueOf(status)
+		if v.Kind() == reflect.Float64{
+			data = fmt.Sprintf("{\"status\": %d}",int(status.(float64)))
+		}else if v.Kind() == reflect.Bool {
+			//no accesstoken
+			data = fmt.Sprintf("{\"status\": 0}", )
+		}
+		logging.Log(fmt.Sprintf("data:%s",data))
+		appServerChan <- (&proto.AppMsgData{Cmd: proto.RegisterAckCmdName,
+			UserName: username,
+			Data: data, ConnID: connid})
+	}
+
+	return true
+}
+
+func RegisterEx(connid uint64, username, password string, code string) bool {
+	var urlRequest string
+	if !svrctx.Get().IsUseAliYun {
+		urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
+	}else {
+		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+
+	}
+	reqType := "register"
+
+	urlRequest += reqType
+
+	pool := x509.NewCertPool()
+	caCertPath := "/home/ec2-user/work/codes/https_test/watch.gatorcn.com/gd_bundle-g2-g1.crt"
+	caCrt,err := ioutil.ReadFile(caCertPath)
+	if err != nil{
+		logging.Log("ReadFile gd_bundle-g2-g1.crt failed, " + err.Error())
+		return false
+	}
+	pool.AppendCertsFromPEM(caCrt)
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{RootCAs:pool},
+	}
+
+
+	//tr := &http.Transport{
+	//	TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	//}
+	client := &http.Client{Transport: tr}
+
+
+	resp, err := client.PostForm(urlRequest, url.Values{"username": {username}, "password": {password},"RemainingData" :{code}})
+	if err != nil {
+		logging.Log("app " + reqType + "failed, " + err.Error())
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logging.Log("response has err, " + err.Error())
+		return false
+	}
+
+	var itf interface{}
+	err = json.Unmarshal(body, &itf)
+	logging.Log(fmt.Sprintf("parse login format :%s", string(body)))
+	if err != nil {
+		logging.Log("login parse  " + reqType + " response as json failed, " + err.Error())
+		return false
+	}
+
+	loginData := itf.(map[string]interface{})
+	if loginData == nil {
+		return false
+	}
+
+	status :=  loginData["status"]
+	accessToken := loginData["accessToken"]
+	//handle wrong login password
+	if accessToken == nil {
+
+		proto.ConnidLogin[connid] += 1
+	}
+
+	logging.Log("status: " + fmt.Sprint(status))
+	logging.Log("accessToken: " + fmt.Sprint(accessToken))
+	//logging.Log("devices: " + fmt.Sprint(devices))
+	if status != nil && accessToken != nil {
+		//proto.CommonLock.Lock()
+		//proto.AccessTokenMap[fmt.Sprint(accessToken)] = username
+		proto.AccessTokenMap.Store(fmt.Sprint(accessToken),username)
+		//proto.CommonLock.Unlock()
+		AddAccessToken(accessToken.(string))
+
+		appServerChan <- (&proto.AppMsgData{Cmd: proto.RegisterAckCmdName,
+			UserName: username,
+			Data: (fmt.Sprintf("{\"user\": %s, \"location\": []}", string(body))), ConnID: connid})
+	}else{
+		//data := fmt.Sprintf("{\"status\": %d}",int(status.(float64)))
+		var data string
+		v := reflect.ValueOf(status)
+		if v.Kind() == reflect.Float64{
+			data = fmt.Sprintf("{\"status\": %d}",int(status.(float64)))
+		}else if v.Kind() == reflect.Bool {
+			//no accesstoken
+			data = fmt.Sprintf("{\"status\": 0}", )
+		}
+		logging.Log(fmt.Sprintf("data:%s",data))
+		appServerChan <- (&proto.AppMsgData{Cmd: proto.RegisterAckCmdName,
+			UserName: username,
+			Data: data, ConnID: connid})
+	}
+
+	return true
+}
+
+func LoginOut(connid uint64,IMEI []string,UUID string,notificationToken string) bool {
+	conn := redisPushPool.Get()
+	defer conn.Close()
 	for _,imei := range IMEI {
 		proto.DeleteDevieeToken(svrctx.Get().APNSServerApiBase,proto.Str2Num(imei,10),UUID)
+		_,err := conn.Do("HDEL",imei,notificationToken)
+		{
+			if err != nil{
+				logging.Log(fmt.Sprintf("hdel %s %s error:",imei,notificationToken,err.Error()))
+			}
+		}
 	}
+
 	return true
 }
 
 //忘记密码，通过服务器重设秘密
-func resetPassword(connid uint64, username string) bool {
+func resetPassword(connid uint64, username string,isDevice bool,name string,number string) bool {
+	strSql := fmt.Sprintf("select w.IMEI from users u join vehiclesinuser vi on u.recid=vi.UserID " +
+		"join watchinfo w on w.recid= vi.VehId where u.LoginName = '%s'",username)
+	rows,err := svrctx.Get().MySQLPool.Query(strSql)
+	defer rows.Close()
+	if err != nil{
+		logging.Log(fmt.Sprintf("[%s] query users imei  in db failed, %s", username, err.Error()))
+		return false
+	}
 	var urlRequest string
 	if !svrctx.Get().IsUseAliYun {
 		urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
@@ -875,6 +1102,140 @@ func resetPassword(connid uint64, username string) bool {
 	return true
 }
 
+func resetPasswordEx(connid uint64, username string,name string,imei_ string) bool {
+	strSql := fmt.Sprintf("select w.IMEI from users u join vehiclesinuser vi on u.recid=vi.UserID " +
+		"join watchinfo w on w.recid= vi.VehId where u.LoginName = '%s'",username)
+	rows,err := svrctx.Get().MySQLPool.Query(strSql)
+	defer rows.Close()
+	if err != nil{
+		logging.Log(fmt.Sprintf("[%s] query users imei  in db failed, %s", username, err.Error()))
+		return false
+	}
+	bPassIMEI := false
+	bPassOwerName := false
+	bEnter := false
+
+	for rows.Next(){
+		bEnter = true
+		imei := ""
+		rows.Scan(&imei)
+		fmt.Println(imei)
+		if imei == imei_ {
+			bPassIMEI = true
+			imeiNum := proto.Str2Num(imei, 10)
+			proto.DeviceInfoListLock.Lock()
+			deviceInfo, ok := (*proto.DeviceInfoList)[imeiNum]
+			if ok && deviceInfo != nil {
+				if deviceInfo.OwnerName == ""{
+					bPassOwerName = true
+					proto.DeviceInfoListLock.Unlock()
+					break
+				}
+				if deviceInfo.OwnerName == name{
+					bPassOwerName = true
+					proto.DeviceInfoListLock.Unlock()
+					break
+				}
+			}
+			proto.DeviceInfoListLock.Unlock()
+		}
+	}
+
+	//输入的号码和名字不匹配;输入有设备关注但是空账号;输入没有设备关注却有设备关注
+	if !bPassIMEI && bEnter{
+		logging.Log("imei not matched!")
+		appServerChan <- (&proto.AppMsgData{Cmd: proto.ResetPasswordAckCmdName,
+			UserName: username,
+			Data: "{\"status\":2,\"newpwd\":\"\"}", ConnID: connid})
+		return false
+	}
+	if !bPassOwerName && bEnter{
+		logging.Log("ownername not matched!")
+		appServerChan <- (&proto.AppMsgData{Cmd: proto.ResetPasswordAckCmdName,
+			UserName: username,
+			Data: "{\"status\":3,\"newpwd\":\"\"}", ConnID: connid})
+		return false
+	}
+	var urlRequest string
+	if !svrctx.Get().IsUseAliYun {
+		urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
+	}else {
+		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+	}
+	//reqType := "login"
+	reqType := "reset"
+	urlRequest += reqType
+
+
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+
+	resp, err := client.PostForm(urlRequest, url.Values{"username": {username}})
+	if err != nil {
+		logging.Log("app " + reqType + "failed, " + err.Error())
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		logging.Log("response has err, " + err.Error())
+		return false
+	}
+
+	ioutil.WriteFile("error.html",  body, 0666)
+
+	appServerChan <- (&proto.AppMsgData{Cmd: proto.ResetPasswordAckCmdName,
+		UserName: username,
+		Data: string(body), ConnID: connid})
+
+	return true
+}
+
+func getRegisterCode(connid uint64,username string) bool{
+	var urlRequest string
+	if !svrctx.Get().IsUseAliYun {
+		urlRequest = "https://watch.gatorcn.com/web/index.php?r=app/auth/"
+	}else {
+		urlRequest = "http://120.25.214.188/tracker/web/index.php?r=app/auth/"
+
+	}
+	reqType := "get-register-code"
+	urlRequest += reqType
+
+	pool := x509.NewCertPool()
+	caCertPath := "/home/ec2-user/work/codes/https_test/watch.gatorcn.com/gd_bundle-g2-g1.crt"
+	caCrt,err := ioutil.ReadFile(caCertPath)
+	if err != nil{
+		logging.Log("ReadFile gd_bundle-g2-g1.crt failed, " + err.Error())
+		return false
+	}
+	pool.AppendCertsFromPEM(caCrt)
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{RootCAs:pool},
+	}
+
+	client := &http.Client{Transport: tr}
+	resp,err := client.PostForm(urlRequest,url.Values{"username": {username}})
+	if err != nil {
+		logging.Log("app " + reqType + "failed, " + err.Error())
+		return false
+	}
+	defer resp.Body.Close()
+	body,err := ioutil.ReadAll(resp.Body)
+	ioutil.WriteFile("error.html",body,0666)
+
+	appServerChan <- (&proto.AppMsgData{Cmd: proto.GetRegisterCodeAck,
+		UserName: username,
+		Data: string(body), ConnID: connid})
+
+	return true
+}
+
+
 //有旧密码，重设新密码
 func modifyPassword(connid uint64, username, accessToken, oldPasswd, newPasswd  string) bool {
 	var requesetURL string
@@ -913,7 +1274,6 @@ func modifyPassword(connid uint64, username, accessToken, oldPasswd, newPasswd  
 
 	return true
 }
-
 
 func handleFeedback(connid uint64, username, accessToken, feedback string) bool {
 	var requesetURL string
@@ -1809,6 +2169,13 @@ func deleteDeviceByUser(connid uint64, params *proto.DeviceAddParams) bool {
 	//Clock.Unlock(&conn)
 	//end chenqw
 
+	var connPush = redisPushPool.Get()
+	defer connPush.Close()
+	_,err = connPush.Do("HDEL",params.Imei,params.NotificationToken)
+	if err != nil {
+		logging.Log(fmt.Sprintf("HDEL %s %s:%s",params.Imei,params.UserName,err.Error()))
+		return false
+	}
 	resultData, _ := json.Marshal(&result)
 	appServerChan <- (&proto.AppMsgData{Cmd: proto.DeleteDeviceAckCmdName, Imei: imei,
 		UserName: params.UserName, AccessToken:params.AccessToken,
@@ -2350,6 +2717,7 @@ func AppUpdateDeviceSetting(connid uint64, params *proto.DeviceSettingParams, is
 
 	jsonData, _ := json.Marshal(&result)
 
+	//connid 改为0,所有的手机都能收到改动通知,20190313,chenqw
 	appServerChan <- (&proto.AppMsgData{Cmd: cmdAck, Imei: imei,
 		UserName: params.UserName, AccessToken:params.AccessToken,
 		Data: string(jsonData), ConnID: connid})

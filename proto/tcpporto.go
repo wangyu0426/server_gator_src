@@ -148,6 +148,12 @@ type LocationData struct {
 	Speed	int32			`json:"speed"`
 	LocateModel	string		`json:"locate_model"`	//0:被动,1:主动
 }
+type CurLocal struct{
+	Accracy uint32		`json:"accracy"`
+	Lat float64			`json:"lat"`
+	Lng float64			`json:"lng"`
+	LocateType	uint8	`json:"locateType"`
+}
 
 const (
 	ChatFromDeviceToApp = iota
@@ -1625,11 +1631,11 @@ func makeId()  (uint64) {
 func MakeTimestampIdString()  string {
 	now := time.Now()
 	id := fmt.Sprintf("%s%d%s", now.Format("20060102150405"), now.Nanosecond(),GetRandomString(6))
-	return id[2:]
+	return id[14:]
 }
 
 func GetRandomString( length int) string{
-	var str string = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIGKLMNOPQRSTUVWXYZ"
+	var str string = "0123456789"
 	strbyte := []byte(str)
 	result := []byte{}
 	rand.Seed(time.Now().Unix())
@@ -1671,13 +1677,13 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 			return false
 		}
 	} else if cLocateTag == 'L' || cLocateTag == 'l'  {
-		if false && isDisableLBS == false {
+		//if false && isDisableLBS == false {
 			ret = service.ProcessLBSInfo(pszMsg)
-		}else{
-			service.needSendLocation = false
-			logging.Log(fmt.Sprintf("device %d, LBS location and need disable lbs", service.imei))
-			return false
-		}
+		//}else{
+			//service.needSendLocation = false
+			//logging.Log(fmt.Sprintf("device %d, LBS location and need disable lbs", service.imei))
+			//return false
+		//}
 	} else if cLocateTag == 'M' || cLocateTag == 'm'  {
 		isDisableWiFi := IsDisableWiFi(service.imei)
 		if isDisableWiFi {
@@ -1702,7 +1708,8 @@ func (service *GT06Service) ProcessLocate(pszMsg []byte, cLocateTag uint8) bool 
 
 	if ret == false ||  service.cur.LocateType == LBS_INVALID_LOCATION  || service.cur.Lng == 0 && service.cur.Lat== 0 {
 		service.needSendLocation = false
-		logging.Log(fmt.Sprintf("Error Locate(%d, %06f, %06f)", service.imei, service.cur.Lng, service.cur.Lat))
+		logging.Log(fmt.Sprintf("Error Locate(%d, %d,%06f, %06f,%d,%d)",
+			service.imei,service.cur.LocateType, service.cur.Lng, service.cur.Lat,service.accracy,service.cur.Accracy))
 		return ret
 	}
 
@@ -3454,7 +3461,7 @@ func (service *GT06Service) ProcessWifiInfo(pszMsgBuf []byte) bool {
 	//service.GetWatchDataInfo(service.imei)
 
 	if service.wifiZoneIndex >= 0 {
-		DeviceInfoListLock.Lock()
+		//DeviceInfoListLock.Lock()
 		safeZones := GetSafeZoneSettings(service.imei)
 		if safeZones != nil {
 			strLatLng := strings.Split(safeZones[service.wifiZoneIndex].Center, ",")
@@ -3465,7 +3472,7 @@ func (service *GT06Service) ProcessWifiInfo(pszMsgBuf []byte) bool {
 			logging.Log(fmt.Sprintf("Get location frome home zone by home wifi: %f, %f",
 				service.cur.Lat, service.cur.Lng))
 		}
-		DeviceInfoListLock.Unlock()
+		//DeviceInfoListLock.Unlock()
 	} else {
 		ret := service.GetLocation()
 		if ret == false {
@@ -3607,9 +3614,9 @@ func (service *GT06Service) ProcessMutilLocateInfo(pszMsgBuf []byte) bool {
 	service.cur.LocateType = LBS_WIFI
 	service.cur.Accracy = service.accracy
 
-	if service.accracy >= 2000 {
+	if service.accracy > 2000 {
 		service.cur.LocateType = LBS_INVALID_LOCATION
-	} else if service.wiFiNum >= 3 && service.accracy <= 400 {
+	} else if service.wiFiNum >= 2 && service.accracy <= 2000 {
 		service.cur.LocateType = LBS_WIFI
 	} else {
 		service.cur.LocateType = LBS_INVALID_LOCATION //LBS_JIZHAN // uint8(service.accracy / 10)  //LBS_JIZHAN
@@ -4311,11 +4318,21 @@ func  (service *GT06Service) GetLocationByGoogle() bool  {
 	params := &GooglemapParams{}
 	params.RadioType = "gsm"
 	params.ConsiderIP = true
+	var conn redis.Conn
+	conn = RedisAddrPool.Get()
+	if conn == nil {
+		return false
+	}
+	defer conn.Close()
 
+	var wifiKey string
+	var lbsKey	string
 	for  i := 0; i < int(service.wiFiNum); i++ {
 		params.WifiAccessPoints = append(params.WifiAccessPoints, GmapWifi{string(service.wifiInfoList[i].MacID[0:]),
 			int(service.wifiInfoList[i].Ratio),
 		})
+
+		wifiKey += string(service.wifiInfoList[i].MacID[0:])
 	}
 
 	for  i := 0; i < int(service.lbsNum); i++ {
@@ -4325,16 +4342,69 @@ func  (service *GT06Service) GetLocationByGoogle() bool  {
 			int(service.lbsInfoList[i].Mnc),
 			int(service.lbsInfoList[i].Signal),
 		})
+
+		lbsInfo := fmt.Sprintf("%d%d%d%d",service.lbsInfoList[i].CellID,
+			service.lbsInfoList[i].Mcc,service.lbsInfoList[i].Mnc,service.lbsInfoList[i].Lac)
+		lbsKey += lbsInfo
 	}
 
+	wifiKey += lbsKey
+	//add to redis cache chenqw 20190330
+	reply,err := conn.Do("hgetall",Num2Str(service.imei,10))
+	if err != nil{
+		return false
+	}
+	arr := reply.([]interface{})
+	for index,item := range arr{
+		if index % 2 == 0{
+			iPass := true
+			locationItem := parseUint8Array(item)
+			if len(wifiKey) != len(locationItem){
+				continue
+			}
+			logging.Log(fmt.Sprintf("[%d]google locationItem:%s",service.imei,locationItem))
+			for i := 0; i < int(service.wiFiNum) ; i++ {
+				if -1 == strings.Index(locationItem,string(service.wifiInfoList[i].MacID[0:])){
+					iPass = false
+					break
+				}
+			}
+			for i := 0; i < int(service.lbsNum) ; i++ {
+				if iPass == false{
+					break
+				}
+				lbsInfo := fmt.Sprintf("%d%d%d%d",service.lbsInfoList[i].CellID,
+					service.lbsInfoList[i].Mcc,service.lbsInfoList[i].Mnc,service.lbsInfoList[i].Lac)
+				if -1 == strings.Index(locationItem,lbsInfo){
+					iPass = false
+					break
+				}
+			}
+			if iPass {
+				localItem := parseUint8Array(arr[index + 1])
+				logging.Log(fmt.Sprintf("[%d]google locationItem address:%s",service.imei,localItem))
+				var curLocal CurLocal
+				json.Unmarshal([]byte(localItem),&curLocal)
+				service.cur.Accracy = curLocal.Accracy
+				service.cur.Lat = curLocal.Lat
+				service.cur.Lng = curLocal.Lng
+				return true
+			}
+		}
+	}
+	//end add to redis cache chenqw 20190330
+	logging.Log(fmt.Sprintf("[%d]lbsNum: %d,wifiNum %d",service.imei,service.lbsNum,service.wiFiNum))
 	jsonStr, err := json.Marshal(params)
 	if err != nil {
 		logging.Log(fmt.Sprintf("[%d] make json failed, %s", service.imei, err.Error()))
 		return false
 	}
-
+	//logging.Log(fmt.Sprintf("[%d]jsonStr:%s",service.imei,jsonStr))
+	//req, err := http.NewRequest("POST",
+	//	"https://www.googleapis.com/geolocation/v1/geolocate?key=AIzaSyAbvNjmCijnZv9od3cC0MwmTC6HTBG6R60",
+	//	bytes.NewBuffer(jsonStr))
 	req, err := http.NewRequest("POST",
-		"https://www.googleapis.com/geolocation/v1/geolocate?key=AIzaSyAbvNjmCijnZv9od3cC0MwmTC6HTBG6R60",
+		"https://www.googleapis.com/geolocation/v1/geolocate?key=AIzaSyBROH_oqzLZU0K-8p77wnyg8TNTzLUgzo8",
 		bytes.NewBuffer(jsonStr))
 	if err != nil {
 		logging.Log(fmt.Sprintf("[%d] call google map api  failed,  %s", service.imei, err.Error()))
@@ -4375,9 +4445,19 @@ func  (service *GT06Service) GetLocationByGoogle() bool  {
 	}
 
 	service.cur.Accracy = uint32(result.Accuracy)
+	service.accracy = service.cur.Accracy
 	service.cur.Lat = result.Location.Lat
 	service.cur.Lng = result.Location.Lng
 
+	if len(wifiKey) > 0 {
+		wifiLocal := CurLocal{Accracy: service.cur.Accracy, Lat: service.cur.Lat, Lng: service.cur.Lng}
+		jsonWifi, err := json.Marshal(wifiLocal)
+		if err != nil {
+			logging.Log(fmt.Sprintf("%d bad wifiLocal : %s", service.imei, err.Error()))
+			return false
+		}
+		conn.Do("HSET", Num2Str(service.imei, 10), wifiKey, string(jsonWifi))
+	}
 	return true
 }
 
@@ -4385,6 +4465,15 @@ func  (service *GT06Service) GetLocationByGoogle() bool  {
 func  (service *GT06Service) GetLocationByAmap() bool  {
 	strReqURL := "http://apilocate.amap.com/position"
 	strRequestBody, strWifiReqParam, strLBSReqParam := "", "", ""
+
+	//add to redis cache chenqw 20190330
+	conn := RedisAddrPool.Get()
+	if conn == nil {
+		return false
+	}
+	defer conn.Close()
+	var wifiKey string
+	var lbsKey	string
 
 	for i := 0; i < int(service.wiFiNum); i++ {
 		if i==0 {
@@ -4397,6 +4486,8 @@ func  (service *GT06Service) GetLocationByAmap() bool  {
 			strWifiReqParam += fmt.Sprintf("|%s,%d,%s", string(service.wifiInfoList[i].MacID[0:]),
 				0 - service.wifiInfoList[i].Ratio, service.wifiInfoList[i].WIFIName)
 		}
+
+		wifiKey += string(service.wifiInfoList[i].MacID[0:])
 	}
 
 	for i := 0; i < int(service.lbsNum); i++ {
@@ -4410,7 +4501,55 @@ func  (service *GT06Service) GetLocationByAmap() bool  {
 			strLBSReqParam += fmt.Sprintf("|%d,%02d,%d,%d,%d", service.lbsInfoList[i].Mcc,
 				service.lbsInfoList[i].Mnc, service.lbsInfoList[i].Lac, service.lbsInfoList[i].CellID, service.lbsInfoList[i].Signal)
 		}
+
+		lbsInfo := fmt.Sprintf("%d%d%d%d",service.lbsInfoList[i].CellID,
+			service.lbsInfoList[i].Mcc,service.lbsInfoList[i].Mnc,service.lbsInfoList[i].Lac)
+		lbsKey += lbsInfo
 	}
+	wifiKey += lbsKey
+	reply,err := conn.Do("hgetall",Num2Str(service.imei,10))
+	if err != nil{
+		return false
+	}
+	arr := reply.([]interface{})
+	for index,item := range arr{
+		if index % 2 == 0{
+			iPass := true
+			locationItem := parseUint8Array(item)
+			if len(wifiKey) != len(locationItem){
+				continue
+			}
+			logging.Log(fmt.Sprintf("[%d]amap locationItem:%s",service.imei,locationItem))
+			for i := 0; i < int(service.wiFiNum) ; i++ {
+				if -1 == strings.Index(locationItem,string(service.wifiInfoList[i].MacID[0:])){
+					iPass = false
+					break
+				}
+			}
+			for i := 0; i < int(service.lbsNum) ; i++ {
+				if iPass == false{
+					break
+				}
+				lbsInfo := fmt.Sprintf("%d%d%d%d",service.lbsInfoList[i].CellID,
+					service.lbsInfoList[i].Mcc,service.lbsInfoList[i].Mnc,service.lbsInfoList[i].Lac)
+				if -1 == strings.Index(locationItem,lbsInfo){
+					iPass = false
+					break
+				}
+			}
+			if iPass {
+				localItem := parseUint8Array(arr[index + 1])
+				logging.Log(fmt.Sprintf("[%d]amap locationItem address:%s",service.imei,localItem))
+				var curLocal CurLocal
+				json.Unmarshal([]byte(localItem),&curLocal)
+				service.cur.Accracy = curLocal.Accracy
+				service.cur.Lat = curLocal.Lat
+				service.cur.Lng = curLocal.Lng
+				return true
+			}
+		}
+	}
+	//end add to redis cache chenqw 20190330
 
 	if service.lbsNum == 0 {
 		strRequestBody = fmt.Sprintf("accesstype=1&imei=%d&cdma=0&", service.imei) + strWifiReqParam
@@ -4472,9 +4611,21 @@ func  (service *GT06Service) GetLocationByAmap() bool  {
 
 	gcj_To_Gps84(dLatitude, dLontiTude, &service.cur.Lat, &service.cur.Lng)
 	service.cur.LocateType = uint8(Str2Num(result.Result.Type, 10))
-	service.cur.Accracy = uint32(Str2Num(result.Result.Radius, 10))
+	service.accracy = uint32(Str2Num(result.Result.Radius, 10))
+	service.cur.Accracy = service.accracy
 
-	logging.Log(fmt.Sprintf("amap TransForm location Is:%06f, %06f,locateType = %d", service.cur.Lat, service.cur.Lng,service.cur.LocateType))
+	logging.Log(fmt.Sprintf("[%d] amap TransForm location Is:%06f, %06f,locateType = %d",
+		service.imei,service.cur.Lat, service.cur.Lng,service.cur.LocateType))
+
+	if len(wifiKey) > 0 {
+		wifiLocal := CurLocal{Accracy: service.cur.Accracy, Lat: service.cur.Lat, Lng: service.cur.Lng}
+		jsonWifi, err := json.Marshal(wifiLocal)
+		if err != nil {
+			logging.Log(fmt.Sprintf("%d bad wifiLocal : %s", service.imei, err.Error()))
+			return false
+		}
+		conn.Do("HSET", Num2Str(service.imei, 10), wifiKey, string(jsonWifi))
+	}
 
 	return true
 }
